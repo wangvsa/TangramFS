@@ -129,16 +129,17 @@ am__uninstall_files_from_dir = { \
   }
 am__installdirs = "$(DESTDIR)$(libdir)"
 LTLIBRARIES = $(lib_LTLIBRARIES)
-libbrickfs_la_LIBADD =
-am_libbrickfs_la_OBJECTS = libbrickfs_la-brickfs.lo
-libbrickfs_la_OBJECTS = $(am_libbrickfs_la_OBJECTS)
+libtangramfs_la_LIBADD =
+am_libtangramfs_la_OBJECTS = libtangramfs_la-tangramfs.lo
+libtangramfs_la_OBJECTS = $(am_libtangramfs_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
 am__v_lt_0 = --silent
 am__v_lt_1 = 
-libbrickfs_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) \
-	$(LIBTOOLFLAGS) --mode=link $(CCLD) $(libbrickfs_la_CFLAGS) \
-	$(CFLAGS) $(libbrickfs_la_LDFLAGS) $(LDFLAGS) -o $@
+libtangramfs_la_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC \
+	$(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=link $(CCLD) \
+	$(libtangramfs_la_CFLAGS) $(CFLAGS) $(libtangramfs_la_LDFLAGS) \
+	$(LDFLAGS) -o $@
 AM_V_P = $(am__v_P_@AM_V@)
 am__v_P_ = $(am__v_P_@AM_DEFAULT_V@)
 am__v_P_0 = false
@@ -173,8 +174,8 @@ AM_V_CCLD = $(am__v_CCLD_@AM_V@)
 am__v_CCLD_ = $(am__v_CCLD_@AM_DEFAULT_V@)
 am__v_CCLD_0 = @echo "  CCLD    " $@;
 am__v_CCLD_1 = 
-SOURCES = $(libbrickfs_la_SOURCES)
-DIST_SOURCES = $(libbrickfs_la_SOURCES)
+SOURCES = $(libtangramfs_la_SOURCES)
+DIST_SOURCES = $(libtangramfs_la_SOURCES)
 am__can_run_installinfo = \
   case $$AM_UPDATE_INFO_DIR in \
     n|no|NO) false;; \
@@ -322,10 +323,10 @@ target_alias = @target_alias@
 top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
-lib_LTLIBRARIES = libbrickfs.la
-libbrickfs_la_SOURCES = brickfs.c
-libbrickfs_la_CFLAGS = -I$(top_srcdir)/include -D_LARGEFILE64_SOURCE 
-libbrickfs_la_LDFLAGS = -lpthread -version-info 0:0:0
+lib_LTLIBRARIES = libtangramfs.la
+libtangramfs_la_SOURCES = tangramfs.c
+libtangramfs_la_CFLAGS = -I$(top_srcdir)/include -D_LARGEFILE64_SOURCE 
+libtangramfs_la_LDFLAGS = -lpthread -version-info 0:0:0
 all: all-am
 
 .SUFFIXES:
@@ -395,8 +396,8 @@ clean-libLTLIBRARIES:
 	  rm -f $${locs}; \
 	}
 
-libbrickfs.la: $(libbrickfs_la_OBJECTS) $(libbrickfs_la_DEPENDENCIES) $(EXTRA_libbrickfs_la_DEPENDENCIES) 
-	$(AM_V_CCLD)$(libbrickfs_la_LINK) -rpath $(libdir) $(libbrickfs_la_OBJECTS) $(libbrickfs_la_LIBADD) $(LIBS)
+libtangramfs.la: $(libtangramfs_la_OBJECTS) $(libtangramfs_la_DEPENDENCIES) $(EXTRA_libtangramfs_la_DEPENDENCIES) 
+	$(AM_V_CCLD)$(libtangramfs_la_LINK) -rpath $(libdir) $(libtangramfs_la_OBJECTS) $(libtangramfs_la_LIBADD) $(LIBS)
 
 mostlyclean-compile:
 	-rm -f *.$(OBJEXT)
@@ -404,7 +405,7 @@ mostlyclean-compile:
 distclean-compile:
 	-rm -f *.tab.c
 
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libbrickfs_la-brickfs.Plo@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libtangramfs_la-tangramfs.Plo@am__quote@
 
 .c.o:
 @am__fastdepCC_TRUE@	$(AM_V_CC)$(COMPILE) -MT $@ -MD -MP -MF $(DEPDIR)/$*.Tpo -c -o $@ $<
@@ -427,12 +428,12 @@ distclean-compile:
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LTCOMPILE) -c -o $@ $<
 
-libbrickfs_la-brickfs.lo: brickfs.c
-@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libbrickfs_la_CFLAGS) $(CFLAGS) -MT libbrickfs_la-brickfs.lo -MD -MP -MF $(DEPDIR)/libbrickfs_la-brickfs.Tpo -c -o libbrickfs_la-brickfs.lo `test -f 'brickfs.c' || echo '$(srcdir)/'`brickfs.c
-@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/libbrickfs_la-brickfs.Tpo $(DEPDIR)/libbrickfs_la-brickfs.Plo
-@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='brickfs.c' object='libbrickfs_la-brickfs.lo' libtool=yes @AMDEPBACKSLASH@
+libtangramfs_la-tangramfs.lo: tangramfs.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libtangramfs_la_CFLAGS) $(CFLAGS) -MT libtangramfs_la-tangramfs.lo -MD -MP -MF $(DEPDIR)/libtangramfs_la-tangramfs.Tpo -c -o libtangramfs_la-tangramfs.lo `test -f 'tangramfs.c' || echo '$(srcdir)/'`tangramfs.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/libtangramfs_la-tangramfs.Tpo $(DEPDIR)/libtangramfs_la-tangramfs.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='tangramfs.c' object='libtangramfs_la-tangramfs.lo' libtool=yes @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
-@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libbrickfs_la_CFLAGS) $(CFLAGS) -c -o libbrickfs_la-brickfs.lo `test -f 'brickfs.c' || echo '$(srcdir)/'`brickfs.c
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(libtangramfs_la_CFLAGS) $(CFLAGS) -c -o libtangramfs_la-tangramfs.lo `test -f 'tangramfs.c' || echo '$(srcdir)/'`tangramfs.c
 
 mostlyclean-libtool:
 	-rm -f *.lo
