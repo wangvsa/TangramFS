@@ -19,7 +19,7 @@ TFILE* tfs_open(const char* pathname, const char* mode) {
     tfs_it_init(tf->it);
 
     char filename[256];
-    sprintf(filename, "%s_tfs_tmpfile.%d", g_mount_point, g_mpi_rank);
+    sprintf(filename, "%s/_tfs_tmpfile.%d", g_mount_point, g_mpi_rank);
     tf->file = fopen(filename, mode);
     return tf;
 }
