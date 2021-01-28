@@ -11,9 +11,11 @@ void tfs_init() {
 void tfs_finalize() {
 }
 
-
 TFILE* tfs_open(const char* pathname, const char* mode) {
     TFILE* tf = malloc(sizeof(TFILE));
+    tf->it = malloc(sizeof(IntervalTree));
+    tfs_it_init(tf->it);
+
     char filename[256];
     sprintf(filename, "/tmp/tangram_tmp_file.%d", g_mpi_rank);
     tf->file = fopen(filename, mode);
@@ -21,6 +23,7 @@ TFILE* tfs_open(const char* pathname, const char* mode) {
 }
 
 void tfs_write(TFILE* tf, void* buf, size_t count, size_t offset) {
+    tfs_it_insert(tf->it, offset, count, ftell(tf->file));
     fwrite(buf, 1, count, tf->file);
 }
 
@@ -30,10 +33,15 @@ void tfs_read(TFILE* tf, void* buf, size_t count, size_t offset) {
 
 void tfs_close(TFILE* tf) {
     fclose(tf->file);
+    tfs_it_destroy(tf->it);
+
     free(tf);
     tf = NULL;
 }
 
-void tfs_notify() {
+void tfs_commit() {
+}
+
+void tfs_persist() {
 }
 
