@@ -4,8 +4,9 @@
 
 int g_mpi_size;
 int g_mpi_rank;
+char g_mount_point[256];
 
-void tfs_init();
+void tfs_init(const char* mount_point);
 void tfs_finalize();
 
 typedef struct TFILE_t {

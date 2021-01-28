@@ -5,12 +5,12 @@
 int main(int argc, char* argv[]) {
     MPI_Init(&argc, &argv);
 
-    tfs_init();
+    tfs_init("/l/ssd");
 
     printf("Hello World\n");
 
     TFILE* tf;
-    tf = tfs_open("./1.txt", "w");
+    tf = tfs_open("./test.txt", "w");
 
     char data[256];
     tfs_write(tf, data, 100, 0);
