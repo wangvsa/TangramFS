@@ -28,8 +28,10 @@ int main(int argc, char* argv[]) {
     MPI_Barrier(MPI_COMM_WORLD);
     double tend = MPI_Wtime();
 
-    if(rank == 0)
+    if(rank == 0) {
+        printf("Total write size: %d MB, elapsed time: %fs\n", size*DATA_SIZE*N/MB, (tend-tstart));
         printf("Bandwidth: %.2f MB/s\n", size*DATA_SIZE*N/MB/(tend-tstart));
+    }
 
     tfs_close(tf);
     MPI_Finalize();
