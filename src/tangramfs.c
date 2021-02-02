@@ -49,3 +49,6 @@ void tfs_commit() {
 void tfs_persist() {
 }
 
+
+void tfs_stage_out() {
+}

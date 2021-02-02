@@ -17,7 +17,8 @@ int main(int argc, char* argv[]) {
     TFILE* tf = tfs_open("./test.txt", "w");
 
     char* data = malloc(sizeof(char)*DATA_SIZE);
-    tfs_write(tf, data, DATA_SIZE, rank*DATA_SIZE);
+    for(int i = 0; i < 5; i++)
+        tfs_write(tf, data, DATA_SIZE, size*DATA_SIZE*i+rank*DATA_SIZE);
 
 
     tfs_close(tf);
