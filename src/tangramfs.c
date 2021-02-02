@@ -4,10 +4,12 @@
 #include "mpi.h"
 #include "tangramfs.h"
 
-void tfs_init(const char* mount_point) {
+void tfs_init(const char* persist_dir, const char* buffer_dir) {
     MPI_Comm_rank(MPI_COMM_WORLD, &g_mpi_rank);
     MPI_Comm_size(MPI_COMM_WORLD, &g_mpi_size);
-    strcpy(g_mount_point, mount_point);
+
+    strcpy(g_persist_dir, persist_dir);
+    strcpy(g_buffer_dir, buffer_dir);
 }
 
 void tfs_finalize() {
@@ -19,7 +21,7 @@ TFILE* tfs_open(const char* pathname, const char* mode) {
     tfs_it_init(tf->it);
 
     char filename[256];
-    sprintf(filename, "%s/_tfs_tmpfile.%d", g_mount_point, g_mpi_rank);
+    sprintf(filename, "%s/_tfs_tmpfile.%d", g_buffer_dir, g_mpi_rank);
     tf->file = fopen(filename, mode);
     return tf;
 }

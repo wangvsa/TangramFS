@@ -20,7 +20,6 @@ void tfs_it_insert(IntervalTree* it, size_t start, size_t count, size_t local_st
     interval->start = start;
     interval->count = count;
     interval->local_start = local_start;
-
     LL_PREPEND(it->head, interval);
 }
 
@@ -36,6 +35,5 @@ void tfs_it_destroy(IntervalTree *it) {
         free(elt);
     }
 }
-
 
 #endif
