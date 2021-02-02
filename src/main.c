@@ -5,6 +5,7 @@
 #define MB (1024*1024)
 
 static int DATA_SIZE = 16*MB;
+static int N = 5;
 
 int main(int argc, char* argv[]) {
     MPI_Init(&argc, &argv);
@@ -16,10 +17,19 @@ int main(int argc, char* argv[]) {
     tfs_init("./", "/tmp");
     TFILE* tf = tfs_open("./test.txt", "w");
 
+    MPI_Barrier(MPI_COMM_WORLD);
+
+    double tstart = MPI_Wtime();
     char* data = malloc(sizeof(char)*DATA_SIZE);
-    for(int i = 0; i < 5; i++)
+    int i;
+    for(i = 0; i < N; i++)
         tfs_write(tf, data, DATA_SIZE, size*DATA_SIZE*i+rank*DATA_SIZE);
 
+    MPI_Barrier(MPI_COMM_WORLD);
+    double tend = MPI_Wtime();
+
+    if(rank == 0)
+        printf("Bandwidth: %.2f MB/s\n", size*DATA_SIZE*N/MB/(tend-tstart));
 
     tfs_close(tf);
     MPI_Finalize();
