@@ -29,7 +29,7 @@ TFILE* tfs_open(const char* pathname, const char* mode) {
 void tfs_write(TFILE* tf, void* buf, size_t count, size_t offset) {
     tfs_it_insert(tf->it, offset, count, ftell(tf->file));
     fwrite(buf, 1, count, tf->file);
-    //fflush(tf->file);
+    fsync(fileno(tf->file));
 }
 
 void tfs_read(TFILE* tf, void* buf, size_t count, size_t offset) {

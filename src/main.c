@@ -13,8 +13,8 @@ int main(int argc, char* argv[]) {
     MPI_Comm_size(MPI_COMM_WORLD, &size);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
-    //tfs_init("./", "/l/ssd");
-    tfs_init("./", "/tmp");
+    tfs_init("./", "/l/ssd");
+    //tfs_init("./", "/tmp");
     TFILE* tf = tfs_open("./test.txt", "w");
 
     MPI_Barrier(MPI_COMM_WORLD);
@@ -29,8 +29,8 @@ int main(int argc, char* argv[]) {
     double tend = MPI_Wtime();
 
     if(rank == 0) {
-        printf("Total write size: %d MB, elapsed time: %fs\n", size*DATA_SIZE*N/MB, (tend-tstart));
-        printf("Bandwidth: %.2f MB/s\n", size*DATA_SIZE*N/MB/(tend-tstart));
+        printf("Total write size: %d MB, elapsed time: %fs\n", DATA_SIZE/MB*N*size, (tend-tstart));
+        printf("Bandwidth: %.2f MB/s\n", DATA_SIZE/MB*size*N/(tend-tstart));
     }
 
     tfs_close(tf);
