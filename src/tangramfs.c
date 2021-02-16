@@ -107,7 +107,7 @@ void tfs_read(TFILE* tf, void* buf, size_t count, size_t offset) {
     if(found)
         fread(buf, 1, count, tf->local_file);
     else
-        printf("Copy not exist. Not handled yet\n");
+        printf("Local copy not exist. Not handled yet\n");
 }
 
 void tfs_read_lazy(TFILE* tf, void* buf, size_t count, size_t offset) {
