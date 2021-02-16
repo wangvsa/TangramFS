@@ -4,6 +4,8 @@
 #include <unistd.h>
 #include "mpi.h"
 #include "tangramfs.h"
+#include "tangramfs-interval-tree.h"
+#include "tangramfs-meta.h"
 
 typedef struct TFSInfo_t {
     int mpi_rank;
@@ -22,6 +24,11 @@ void tfs_init(const char* persist_dir, const char* buffer_dir) {
 
     strcpy(tfs.persist_dir, persist_dir);
     strcpy(tfs.buffer_dir, buffer_dir);
+
+    if(tfs.mpi_rank == 0)
+        tfs_meta_start_server();
+    else
+        tfs_meta_start_client();
 }
 
 void tfs_finalize() {

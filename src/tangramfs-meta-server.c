@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <mercury.h>
 #include "mpi.h"
+#include "tangramfs-meta.h"
 
 static hg_class_t*     hg_class   = NULL; /* the mercury class */
 static hg_context_t*   hg_context = NULL; /* the mercury context */
@@ -13,10 +14,10 @@ static int num_rpcs = 0;
 
 hg_return_t hello_world(hg_handle_t h);
 
-int start_server(const char* init_str) {
+int tfs_meta_start_server() {
     hg_return_t ret;
 
-    hg_class = HG_Init(init_str, HG_TRUE);
+    hg_class = HG_Init("mpi+static", HG_TRUE);
     assert(hg_class != NULL);
 
     char hostname[128] = {0};
