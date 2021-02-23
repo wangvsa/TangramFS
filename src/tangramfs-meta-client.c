@@ -1,14 +1,21 @@
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <unistd.h>
+#include <pthread.h>
 #include <mercury.h>
-#include "mpi.h"
 #include "tangramfs-meta.h"
 
 static hg_class_t*     hg_class   = NULL; /* Pointer to the Mercury class */
 static hg_context_t*   hg_context = NULL; /* Pointer to the Mercury context */
+static hg_addr_t       hg_addr = NULL;    /* addr retrived from the addr lookup callback */
+
+
 static hg_id_t         hello_rpc_id;      /* ID of the RPC */
 static int completed = 0;                 /* Variable indicating if the call has completed */
+
+pthread_t client_thread;
+
 
 /*
  * This callback will be called after looking up for the server's address.
@@ -17,20 +24,10 @@ static int completed = 0;                 /* Variable indicating if the call has
  */
 hg_return_t lookup_callback(const struct hg_cb_info *callback_info);
 
-int tfs_meta_start_client()
-{
-    char* protocol = "mpi+static";
-    char* server_address = "rank#0";
+void mercury_client_init();
+void mercury_client_finalize();
 
-    hg_return_t ret;
-
-
-    hg_class = HG_Init(protocol, HG_FALSE);
-    assert(hg_class != NULL);
-
-    hg_context = HG_Context_create(hg_class);
-    assert(hg_context != NULL);
-
+void mercury_register_rpcs() {
     /* Register a RPC function.
      * The first two NULL correspond to what would be pointers to
      * serialization/deserialization functions for input and output datatypes
@@ -44,18 +41,30 @@ int tfs_meta_start_client()
      * when calling this RPC.
      */
     HG_Registered_disable_response(hg_class, hello_rpc_id, HG_TRUE);
+}
 
-    /* Lookup the address of the server, this is asynchronous and
-     * the result will be handled by lookup_callback once we start the progress loop.
-     * NULL correspond to a pointer to user data to pass to lookup_callback (we don't use
-     * any here). The 4th argument is the address of the server.
-     * The 5th argument is a pointer a variable of type hg_op_id_t, which identifies the operation.
-     * It can be useful to get this identifier if we want to be able to cancel it using
-     * HG_Cancel. Here we don't use it so we pass HG_OP_ID_IGNORE.
-     */
-    ret = HG_Addr_lookup(hg_context, lookup_callback, NULL, server_address, HG_OP_ID_IGNORE);
+void mercury_client_init() {
+    hg_class = HG_Init(MERCURY_PROTOCOL, HG_FALSE);
+    assert(hg_class != NULL);
 
-    /* Main event loop: we do some progress until completed becomes TRUE. */
+    hg_context = HG_Context_create(hg_class);
+    assert(hg_context != NULL);
+}
+
+void mercury_client_finalize() {
+    hg_return_t ret;
+    ret = HG_Context_destroy(hg_context);
+    assert(ret == HG_SUCCESS);
+
+    if(hg_addr)
+        HG_Addr_free(hg_class, hg_addr);
+
+    ret = HG_Finalize(hg_class);
+    assert(ret == HG_SUCCESS);
+}
+
+void* mercury_client_progress_loop(void* arg) {
+    hg_return_t ret;
     while(!completed)
     {
         unsigned int count;
@@ -64,32 +73,37 @@ int tfs_meta_start_client()
         } while((ret == HG_SUCCESS) && count && !completed);
         HG_Progress(hg_context, 100);
     }
-
-    ret = HG_Context_destroy(hg_context);
-    assert(ret == HG_SUCCESS);
-
-    /* Finalize the hg_class. */
-    hg_return_t err = HG_Finalize(hg_class);
-    assert(err == HG_SUCCESS);
-    return 0;
 }
 
-/*
- * This function is called when the address lookup operation has completed.
- */
-hg_return_t lookup_callback(const struct hg_cb_info *callback_info)
+void tfs_meta_client_start()
 {
+    mercury_client_init();
+
+    mercury_register_rpcs();
+
+    HG_Addr_lookup(hg_context, lookup_callback, NULL, MERCURY_SERVER_ADDR, HG_OP_ID_IGNORE);
+
+    pthread_create(&client_thread, NULL, mercury_client_progress_loop, NULL);
+    //mercury_client_progress_loop(NULL);
+}
+
+void tfs_meta_client_stop() {
+    tfs_meta_issue_rpc();
+
+    completed = 1;
+    pthread_join(client_thread, NULL);
+    mercury_client_finalize();
+}
+
+void tfs_meta_issue_rpc() {
+    while(hg_addr == NULL) {
+        sleep(1);
+    }
+
     hg_return_t ret;
-
-    /* First, check that the lookup went fine. */
-    assert(callback_info->ret == 0);
-
-    /* Get the address of the server. */
-    hg_addr_t addr = callback_info->info.lookup.addr;
-
-    /* Create a call to the hello_world RPC. */
     hg_handle_t handle;
-    ret = HG_Create(hg_context, addr, hello_rpc_id, &handle);
+
+    ret = HG_Create(hg_context, hg_addr, hello_rpc_id, &handle);
     assert(ret == HG_SUCCESS);
 
     /* Send the RPC. The first NULL correspond to the callback
@@ -103,13 +117,19 @@ hg_return_t lookup_callback(const struct hg_cb_info *callback_info)
     ret = HG_Forward(handle, NULL, NULL, NULL);
     assert(ret == HG_SUCCESS);
 
-    /* Free the handle */
+    completed = 1;
+
     ret = HG_Destroy(handle);
     assert(ret == HG_SUCCESS);
+}
 
-    /* Set completed to 1 so we terminate the loop. */
-    HG_Addr_free(hg_class, addr);
 
-    completed = 1;
+/*
+ * This function is called when the address lookup operation has completed.
+ */
+hg_return_t lookup_callback(const struct hg_cb_info *callback_info)
+{
+    assert(callback_info->ret == 0);
+    hg_addr = callback_info->info.lookup.addr;
     return HG_SUCCESS;
 }

@@ -9,13 +9,17 @@ static int DATA_SIZE = 16*MB;
 static int N = 5;
 
 int main(int argc, char* argv[]) {
-    MPI_Init(&argc, &argv);
-    int size, rank;
+    int size, rank, provided;
+    MPI_Init_thread(&argc, &argv, MPI_THREAD_MULTIPLE, &provided);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
     //tfs_init("./", "/l/ssd");
     tfs_init("./", "/tmp");
+
+    MPI_Barrier(MPI_COMM_WORLD);
+
+    /*
     TFILE* tf = tfs_open("./test.txt", "w");
 
     MPI_Barrier(MPI_COMM_WORLD);
@@ -52,6 +56,9 @@ int main(int argc, char* argv[]) {
 
 
     tfs_close(tf);
+    */
+
+    tfs_finalize();
     MPI_Finalize();
     return 0;
 }

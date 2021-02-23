@@ -1,7 +1,9 @@
 #include <stdlib.h>
 #include <stdbool.h>
 #include "utlist.h"
+#include "tangramfs-utils.h"
 #include "tangramfs-interval-tree.h"
+
 
 
 void tfs_it_init(IntervalTree *it) {
@@ -12,7 +14,7 @@ void tfs_it_destroy(IntervalTree *it) {
     Interval *elt, *tmp;
     LL_FOREACH_SAFE(it->head, elt, tmp) {
         LL_DELETE(it->head, elt);
-        free(elt);
+        tangram_free(elt, sizeof(Interval));
     }
 }
 
@@ -36,7 +38,7 @@ inline bool is_covered(Interval *i1, Interval *i2) {
 
 void tfs_it_delete(IntervalTree* it, Interval* interval) {
     LL_DELETE(it->head, interval);
-    free(interval);
+    tangram_free(interval, sizeof(Interval));
 }
 
 void tfs_it_insert(IntervalTree* it, Interval* interval) {
@@ -44,7 +46,7 @@ void tfs_it_insert(IntervalTree* it, Interval* interval) {
 }
 
 Interval* tfs_it_new(size_t offset, size_t count, size_t local_offset) {
-    Interval* interval = malloc(sizeof(Interval));
+    Interval* interval = tangram_malloc(sizeof(Interval));
     interval->offset = offset;
     interval->count = count;
     interval->local_offset = local_offset;
@@ -67,7 +69,7 @@ Interval** tfs_it_overlaps(IntervalTree* it, Interval* interval, int *res, int *
     // Do a second pass to retrive all overlaps
     // We are sure the intervals in the interval tree will have no overlaps.
     Interval *current = i2;
-    Interval **overlaps = malloc(sizeof(Interval*) * (*num_overlaps));
+    Interval **overlaps = tangram_malloc(sizeof(Interval*) * (*num_overlaps));
     int i = 0;
     LL_FOREACH(it->head, i1) {
         if(is_overlap(i1, i2))

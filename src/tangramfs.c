@@ -4,7 +4,7 @@
 #include <unistd.h>
 #include "mpi.h"
 #include "tangramfs.h"
-#include "tangramfs-interval-tree.h"
+#include "tangramfs-utils.h"
 #include "tangramfs-meta.h"
 
 typedef struct TFSInfo_t {
@@ -25,19 +25,25 @@ void tfs_init(const char* persist_dir, const char* buffer_dir) {
     strcpy(tfs.persist_dir, persist_dir);
     strcpy(tfs.buffer_dir, buffer_dir);
 
-    if(tfs.mpi_rank == 0)
-        tfs_meta_start_server();
-    else
-        tfs_meta_start_client();
+    if(tfs.mpi_rank == 0) {
+        tfs_meta_server_start();
+    } else {
+        tfs_meta_client_start();
+        //tfs_meta_issue_rpc();
+    }
 }
 
 void tfs_finalize() {
+    if(tfs.mpi_rank == 0)
+        tfs_meta_server_stop();
+    else
+        tfs_meta_client_stop();
     MPI_Comm_free(&tfs.mpi_comm);
 }
 
 TFILE* tfs_open(const char* pathname, const char* mode) {
-    TFILE* tf = malloc(sizeof(TFILE));
-    tf->it = malloc(sizeof(IntervalTree));
+    TFILE* tf = tangram_malloc(sizeof(TFILE));
+    tf->it = tangram_malloc(sizeof(IntervalTree));
     tfs_it_init(tf->it);
 
     char filename[256];
@@ -71,7 +77,7 @@ void tfs_write(TFILE* tf, void* buf, size_t count, size_t offset) {
             old = overlaps[0];
             size_t local_offset = old->local_offset+(offset - old->offset);
             fwrite(buf, 1, count, tf->local_file);
-            free(interval);
+            tangram_free(interval, sizeof(Interval));
             break;
         // 3. The new interval fully covers several old ones
         // Delete all old intervals and insert this new one
@@ -102,7 +108,7 @@ void tfs_write(TFILE* tf, void* buf, size_t count, size_t offset) {
     }
 
     if(overlaps)
-        free(overlaps);
+        tangram_free(overlaps, sizeof(Interval*)*num_overlaps);
 
     fsync(fileno(tf->local_file));
 }
@@ -128,8 +134,8 @@ void tfs_close(TFILE* tf) {
     fclose(tf->local_file);
     tfs_it_destroy(tf->it);
 
-    free(tf->it);
-    free(tf);
+    tangram_free(tf->it, sizeof(Interval));
+    tangram_free(tf, sizeof(TFILE));
     tf = NULL;
 }
 
