@@ -11,3 +11,9 @@ User-level parallel file system with tunable consistency
 2. Metadata server and Metadata client - Use mercury+pthread
 3. RCP for handle data requests from peers
 4. Provide all POSIX I/O wrappers
+
+
+### Naming Convention
+
+1. tfs_*(): APIs provided and used by users
+2. tangram_*(): Used internally
