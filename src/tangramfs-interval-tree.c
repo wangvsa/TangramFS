@@ -6,11 +6,11 @@
 
 
 
-void tfs_it_init(IntervalTree *it) {
+void tangram_it_init(IntervalTree *it) {
     it->head = NULL;
 }
 
-void tfs_it_destroy(IntervalTree *it) {
+void tangram_it_destroy(IntervalTree *it) {
     Interval *elt, *tmp;
     LL_FOREACH_SAFE(it->head, elt, tmp) {
         LL_DELETE(it->head, elt);
@@ -36,16 +36,16 @@ inline bool is_covered(Interval *i1, Interval *i2) {
     return false;
 }
 
-void tfs_it_delete(IntervalTree* it, Interval* interval) {
+void tangram_it_delete(IntervalTree* it, Interval* interval) {
     LL_DELETE(it->head, interval);
     tangram_free(interval, sizeof(Interval));
 }
 
-void tfs_it_insert(IntervalTree* it, Interval* interval) {
+void tangram_it_insert(IntervalTree* it, Interval* interval) {
     LL_PREPEND(it->head, interval);
 }
 
-Interval* tfs_it_new(size_t offset, size_t count, size_t local_offset) {
+Interval* tangram_it_new(size_t offset, size_t count, size_t local_offset) {
     Interval* interval = tangram_malloc(sizeof(Interval));
     interval->offset = offset;
     interval->count = count;
@@ -53,7 +53,7 @@ Interval* tfs_it_new(size_t offset, size_t count, size_t local_offset) {
     return interval;
 }
 
-Interval** tfs_it_overlaps(IntervalTree* it, Interval* interval, int *res, int *num_overlaps) {
+Interval** tangram_it_overlaps(IntervalTree* it, Interval* interval, int *res, int *num_overlaps) {
     *num_overlaps = 0;
     Interval *i1, *i2;
     i2 = interval;
@@ -107,7 +107,7 @@ Interval** tfs_it_overlaps(IntervalTree* it, Interval* interval, int *res, int *
     return overlaps;
 }
 
-bool tfs_it_query(IntervalTree *it, size_t offset, size_t count, size_t *local_offset) {
+bool tangram_it_query(IntervalTree *it, size_t offset, size_t count, size_t *local_offset) {
     bool found = false;
     Interval *interval;
     LL_FOREACH(it->head, interval) {

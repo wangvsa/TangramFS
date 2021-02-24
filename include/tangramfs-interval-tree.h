@@ -21,15 +21,15 @@ typedef struct IntervalTree_T {
     Interval* head;
 } IntervalTree;
 
-void tfs_it_init(IntervalTree *it);
+void tangram_it_init(IntervalTree *it);
 
-void tfs_it_destroy(IntervalTree *it);
+void tangram_it_destroy(IntervalTree *it);
 
 
 /**
  * Delete and free an interval from the tree
  */
-void tfs_it_delete(IntervalTree* it, Interval* interval);
+void tangram_it_delete(IntervalTree* it, Interval* interval);
 
 
 /**
@@ -37,24 +37,24 @@ void tfs_it_delete(IntervalTree* it, Interval* interval);
  * The call is responsible to guarantee the interval
  * is not overlapped with any existing one.
  */
-void tfs_it_insert(IntervalTree* it, Interval* interval);
+void tangram_it_insert(IntervalTree* it, Interval* interval);
 
 
 /**
  * Create a new interval
  */
-Interval* tfs_it_new(size_t offset, size_t count, size_t local_offset);
+Interval* tangram_it_new(size_t offset, size_t count, size_t local_offset);
 
 
 /**
  * Return the overlaps found in the tree
  */
-Interval** tfs_it_overlaps(IntervalTree* it, Interval* interval, int *res, int *num_overlaps);
+Interval** tangram_it_overlaps(IntervalTree* it, Interval* interval, int *res, int *num_overlaps);
 
 
 /**
  * Query an range
  */
-bool tfs_it_query(IntervalTree *it, size_t offset, size_t count, size_t *local_offset);
+bool tangram_it_query(IntervalTree *it, size_t offset, size_t count, size_t *local_offset);
 
 #endif

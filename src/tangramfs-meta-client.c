@@ -75,7 +75,7 @@ void* mercury_client_progress_loop(void* arg) {
     }
 }
 
-void tfs_meta_client_start()
+void tangram_meta_client_start()
 {
     mercury_client_init();
 
@@ -84,18 +84,15 @@ void tfs_meta_client_start()
     HG_Addr_lookup(hg_context, lookup_callback, NULL, MERCURY_SERVER_ADDR, HG_OP_ID_IGNORE);
 
     pthread_create(&client_thread, NULL, mercury_client_progress_loop, NULL);
-    //mercury_client_progress_loop(NULL);
 }
 
-void tfs_meta_client_stop() {
-    tfs_meta_issue_rpc();
-
+void tangram_meta_client_stop() {
     completed = 1;
     pthread_join(client_thread, NULL);
     mercury_client_finalize();
 }
 
-void tfs_meta_issue_rpc() {
+void tangram_meta_issue_rpc() {
     while(hg_addr == NULL) {
         sleep(1);
     }

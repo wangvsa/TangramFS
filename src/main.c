@@ -10,6 +10,7 @@ static int N = 5;
 
 int main(int argc, char* argv[]) {
     int size, rank, provided;
+    // Have to use MPI_THREAD_MULTIPLE for Mercury+pthread to work
     MPI_Init_thread(&argc, &argv, MPI_THREAD_MULTIPLE, &provided);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
@@ -17,9 +18,7 @@ int main(int argc, char* argv[]) {
     //tfs_init("./", "/l/ssd");
     tfs_init("./", "/tmp");
 
-    MPI_Barrier(MPI_COMM_WORLD);
 
-    /*
     TFILE* tf = tfs_open("./test.txt", "w");
 
     MPI_Barrier(MPI_COMM_WORLD);
@@ -52,11 +51,7 @@ int main(int argc, char* argv[]) {
         printf("Bandwidth: %.2f MB/s\n", DATA_SIZE/MB*size*N/(tend-tstart));
     }
 
-
-
-
     tfs_close(tf);
-    */
 
     tfs_finalize();
     MPI_Finalize();

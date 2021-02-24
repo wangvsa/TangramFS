@@ -26,25 +26,25 @@ void tfs_init(const char* persist_dir, const char* buffer_dir) {
     strcpy(tfs.buffer_dir, buffer_dir);
 
     if(tfs.mpi_rank == 0) {
-        tfs_meta_server_start();
+        tangram_meta_server_start();
     } else {
-        tfs_meta_client_start();
-        //tfs_meta_issue_rpc();
+        tangram_meta_client_start();
+        tangram_meta_issue_rpc();
     }
 }
 
 void tfs_finalize() {
     if(tfs.mpi_rank == 0)
-        tfs_meta_server_stop();
+        tangram_meta_server_stop();
     else
-        tfs_meta_client_stop();
+        tangram_meta_client_stop();
     MPI_Comm_free(&tfs.mpi_comm);
 }
 
 TFILE* tfs_open(const char* pathname, const char* mode) {
     TFILE* tf = tangram_malloc(sizeof(TFILE));
     tf->it = tangram_malloc(sizeof(IntervalTree));
-    tfs_it_init(tf->it);
+    tangram_it_init(tf->it);
 
     char filename[256];
     sprintf(filename, "%s/_tfs_tmpfile.%d", tfs.buffer_dir, tfs.mpi_rank);
@@ -57,8 +57,8 @@ void tfs_write(TFILE* tf, void* buf, size_t count, size_t offset) {
     int res, num_overlaps, i;
 
     fseek(tf->local_file, 0, SEEK_END);
-    Interval *interval = tfs_it_new(offset, count, ftell(tf->local_file));
-    Interval** overlaps = tfs_it_overlaps(tf->it, interval, &res, &num_overlaps);
+    Interval *interval = tangram_it_new(offset, count, ftell(tf->local_file));
+    Interval** overlaps = tangram_it_overlaps(tf->it, interval, &res, &num_overlaps);
 
     Interval *old, *start, *end;
 
@@ -67,7 +67,7 @@ void tfs_write(TFILE* tf, void* buf, size_t count, size_t offset) {
         // Write the data at the end of the local file
         // Insert the new interval
         case IT_NO_OVERLAP:
-            tfs_it_insert(tf->it, interval);
+            tangram_it_insert(tf->it, interval);
             fwrite(buf, 1, count, tf->local_file);
             break;
         // 2. Have exactly one overlap
@@ -83,8 +83,8 @@ void tfs_write(TFILE* tf, void* buf, size_t count, size_t offset) {
         // Delete all old intervals and insert this new one
         case IT_COVERS_ALL:
             for(i = 0; i < num_overlaps; i++)
-                tfs_it_delete(tf->it, overlaps[i]);
-            tfs_it_insert(tf->it, interval);
+                tangram_it_delete(tf->it, overlaps[i]);
+            tangram_it_insert(tf->it, interval);
             fwrite(buf, 1, count, tf->local_file);
             break;
         case IT_PARTIAL_COVERED:
@@ -115,7 +115,7 @@ void tfs_write(TFILE* tf, void* buf, size_t count, size_t offset) {
 
 void tfs_read(TFILE* tf, void* buf, size_t count, size_t offset) {
     size_t local_offset;
-    bool found = tfs_it_query(tf->it, offset, count, &local_offset);
+    bool found = tangram_it_query(tf->it, offset, count, &local_offset);
 
     if(found)
         fread(buf, 1, count, tf->local_file);
@@ -132,7 +132,7 @@ void tfs_notify() {
 
 void tfs_close(TFILE* tf) {
     fclose(tf->local_file);
-    tfs_it_destroy(tf->it);
+    tangram_it_destroy(tf->it);
 
     tangram_free(tf->it, sizeof(Interval));
     tangram_free(tf, sizeof(TFILE));

@@ -4,12 +4,14 @@
 #define MERCURY_PROTOCOL    "mpi+static"
 #define MERCURY_SERVER_ADDR "rank#0"
 
-void tfs_meta_server_start();
-void tfs_meta_server_stop();
+#define PRC_NAME            "hello"
 
-void tfs_meta_client_start();
-void tfs_meta_client_stop();
-void tfs_meta_issue_rpc();
+void tangram_meta_server_start();
+void tangram_meta_server_stop();
+
+void tangram_meta_client_start();
+void tangram_meta_client_stop();
+void tangram_meta_issue_rpc();
 
 
 #endif

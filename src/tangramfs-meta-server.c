@@ -19,12 +19,12 @@ void mercury_server_init();
 void* mercury_server_progress_loop(void* arg);
 
 
-void tfs_meta_server_start() {
+void tangram_meta_server_start() {
     mercury_server_init();
     pthread_create(&server_thread, NULL, mercury_server_progress_loop, NULL);
 }
 
-void tfs_meta_server_stop() {
+void tangram_meta_server_stop() {
     stop_server = 1;
     pthread_join(server_thread, NULL);
     HG_Context_destroy(hg_context);
