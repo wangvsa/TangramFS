@@ -10,3 +10,4 @@ User-level parallel file system with tunable consistency
 1. Local metadata - local interval tree
 2. Metadata server and Metadata client - Use mercury+pthread
 3. RCP for handle data requests from peers
+4. Provide all POSIX I/O wrappers
