@@ -12,16 +12,11 @@ static hg_addr_t       hg_addr = NULL;    /* addr retrived from the addr lookup 
 
 
 static hg_id_t         hello_rpc_id;      /* ID of the RPC */
-static int completed = 0;                 /* Variable indicating if the call has completed */
+static int running = 1;                   /* If we are still runing the progress loop */
 
-pthread_t client_thread;
+pthread_t progress_thread;
 
 
-/*
- * This callback will be called after looking up for the server's address.
- * This is the function that will also send the RPC to the servers, then
- * set the completed variable to 1.
- */
 hg_return_t lookup_callback(const struct hg_cb_info *callback_info);
 
 void mercury_client_init();
@@ -37,9 +32,7 @@ void mercury_register_rpcs() {
      */
     hello_rpc_id = HG_Register_name(hg_class, "hello", NULL, NULL, NULL);
 
-    /* Indicate Mercury that we shouldn't expect a response from the server
-     * when calling this RPC.
-     */
+    // Do not expect a response from the server
     HG_Registered_disable_response(hg_class, hello_rpc_id, HG_TRUE);
 }
 
@@ -65,12 +58,12 @@ void mercury_client_finalize() {
 
 void* mercury_client_progress_loop(void* arg) {
     hg_return_t ret;
-    while(!completed)
+    while(running)
     {
         unsigned int count;
         do {
             ret = HG_Trigger(hg_context, 0, 1, &count);
-        } while((ret == HG_SUCCESS) && count && !completed);
+        } while((ret == HG_SUCCESS) && count && running);
         HG_Progress(hg_context, 100);
     }
 }
@@ -83,12 +76,12 @@ void tangram_meta_client_start()
 
     HG_Addr_lookup(hg_context, lookup_callback, NULL, MERCURY_SERVER_ADDR, HG_OP_ID_IGNORE);
 
-    pthread_create(&client_thread, NULL, mercury_client_progress_loop, NULL);
+    pthread_create(&progress_thread, NULL, mercury_client_progress_loop, NULL);
 }
 
 void tangram_meta_client_stop() {
-    completed = 1;
-    pthread_join(client_thread, NULL);
+    running = 0;
+    pthread_join(progress_thread, NULL);
     mercury_client_finalize();
 }
 
@@ -114,15 +107,13 @@ void tangram_meta_issue_rpc() {
     ret = HG_Forward(handle, NULL, NULL, NULL);
     assert(ret == HG_SUCCESS);
 
-    completed = 1;
-
     ret = HG_Destroy(handle);
     assert(ret == HG_SUCCESS);
 }
 
 
 /*
- * This function is called when the address lookup operation has completed.
+ * This function is called when the address lookup operation has running.
  */
 hg_return_t lookup_callback(const struct hg_cb_info *callback_info)
 {

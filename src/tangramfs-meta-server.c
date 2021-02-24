@@ -8,9 +8,8 @@
 
 static hg_class_t*     hg_class   = NULL; /* the mercury class */
 static hg_context_t*   hg_context = NULL; /* the mercury context */
-pthread_t server_thread;
-
-static int stop_server = 0;
+pthread_t progress_thread;
+static int running = 1;
 
 
 hg_return_t hello_world(hg_handle_t h);
@@ -21,12 +20,12 @@ void* mercury_server_progress_loop(void* arg);
 
 void tangram_meta_server_start() {
     mercury_server_init();
-    pthread_create(&server_thread, NULL, mercury_server_progress_loop, NULL);
+    pthread_create(&progress_thread, NULL, mercury_server_progress_loop, NULL);
 }
 
 void tangram_meta_server_stop() {
-    stop_server = 1;
-    pthread_join(server_thread, NULL);
+    running = 0;
+    pthread_join(progress_thread, NULL);
     HG_Context_destroy(hg_context);
     HG_Finalize(hg_class);
 }
@@ -67,7 +66,7 @@ void* mercury_server_progress_loop(void* arg) {
             ret = HG_Trigger(hg_context, 0, 1, &count);
         } while((ret == HG_SUCCESS) && count);
         HG_Progress(hg_context, 100);
-    } while(!stop_server);
+    } while(running);
 }
 
 hg_return_t hello_world(hg_handle_t h)

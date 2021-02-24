@@ -76,6 +76,7 @@ void tfs_write(TFILE* tf, void* buf, size_t count, size_t offset) {
         case IT_COVERED_BY_ONE:
             old = overlaps[0];
             size_t local_offset = old->local_offset+(offset - old->offset);
+            fseek(tf->local_file, local_offset, SEEK_CUR);
             fwrite(buf, 1, count, tf->local_file);
             tangram_free(interval, sizeof(Interval));
             break;
@@ -117,10 +118,12 @@ void tfs_read(TFILE* tf, void* buf, size_t count, size_t offset) {
     size_t local_offset;
     bool found = tangram_it_query(tf->it, offset, count, &local_offset);
 
-    if(found)
+    if(found) {
+        fseek(tf->local_file, local_offset, SEEK_CUR);
         fread(buf, 1, count, tf->local_file);
-    else
+    } else {
         printf("Local copy not exist. Not handled yet\n");
+    }
 }
 
 void tfs_read_lazy(TFILE* tf, void* buf, size_t count, size_t offset) {
