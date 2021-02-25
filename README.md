@@ -12,6 +12,8 @@ User-level parallel file system with tunable consistency
 3. RCP for handle data requests from peers
 4. Provide all POSIX I/O wrappers
 
+### Limitations
+1. Mercury with MPI plugin can not have the same rank running both as server and client. So have use one dedicated rank as the server.
 
 ### Naming Convention
 
