@@ -14,6 +14,7 @@ User-level parallel file system with tunable consistency
 
 ### Limitations
 1. Mercury with MPI plugin can not have the same rank running both as server and client. So have use one dedicated rank as the server.
+2. The user application has to be initialized with MPI_Init_thread inorder for Mercury+pthread to work.
 
 ### Naming Convention
 
