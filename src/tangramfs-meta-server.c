@@ -2,33 +2,46 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <pthread.h>
-#include <mercury.h>
 #include "mpi.h"
+#include <mercury_macros.h>
 #include "tangramfs-meta.h"
 
-static hg_class_t*     hg_class   = NULL; /* the mercury class */
-static hg_context_t*   hg_context = NULL; /* the mercury context */
+static hg_class_t*     hg_class   = NULL;
+static hg_context_t*   hg_context = NULL;
+
 pthread_t progress_thread;
-static int running = 1;
+static int running;
 
 
-hg_return_t hello_world(hg_handle_t h);
+// List of RPC handlers
+hg_return_t rpc_handler_notify(hg_handle_t h);
+hg_return_t rpc_handler_query(hg_handle_t h);
 
-void mercury_server_init();
+
+void  mercury_server_init();
+void  mercury_server_finalize();
+void  mercury_server_register_rpcs();
 void* mercury_server_progress_loop(void* arg);
 
 
 void tangram_meta_server_start() {
     mercury_server_init();
+    mercury_server_register_rpcs();
+    running = 1;
     pthread_create(&progress_thread, NULL, mercury_server_progress_loop, NULL);
 }
 
 void tangram_meta_server_stop() {
     running = 0;
     pthread_join(progress_thread, NULL);
-    HG_Context_destroy(hg_context);
-    HG_Finalize(hg_class);
+    mercury_server_finalize();
 }
+
+/*
+ * ------------------------------------------
+ * Below are interal implementations
+ * ------------------------------------------
+ */
 
 void mercury_server_init() {
     hg_return_t ret;
@@ -46,16 +59,23 @@ void mercury_server_init() {
 
     hg_context = HG_Context_create(hg_class);
     assert(hg_context != NULL);
+}
 
-    /* Register the RPC by its name ("hello").
+void mercury_server_finalize() {
+    HG_Context_destroy(hg_context);
+    HG_Finalize(hg_class);
+}
+
+void mercury_server_register_rpcs() {
+    /* Register the RPC by its name
      * The two NULL arguments correspond to the functions user to
      * serialize/deserialize the input and output parameters
-     * (hello_world doesn't have parameters and doesn't return anything, hence NULL).
      */
-    hg_id_t rpc_id = HG_Register_name(hg_class, "hello", NULL, NULL, hello_world);
+    hg_id_t rpc_id_notify = MERCURY_REGISTER(hg_class, RPC_NAME_NOTIFY, rpc_query_in, void, rpc_handler_notify);
+    HG_Registered_disable_response(hg_class, rpc_id_notify, HG_TRUE);
 
-    // Tell Mercury that hello_world will not send any response back to the client.
-    HG_Registered_disable_response(hg_class, rpc_id, HG_TRUE);
+    hg_id_t rpc_id_query = MERCURY_REGISTER(hg_class, RPC_NAME_QUERY, rpc_query_in, void, rpc_handler_query);
+    HG_Registered_disable_response(hg_class, rpc_id_query, HG_TRUE);
 }
 
 void* mercury_server_progress_loop(void* arg) {
@@ -69,14 +89,36 @@ void* mercury_server_progress_loop(void* arg) {
     } while(running);
 }
 
-hg_return_t hello_world(hg_handle_t h)
+
+
+
+/*
+ * ------------------------------------------
+ * Below are RPC handlers
+ * ------------------------------------------
+ */
+
+hg_return_t rpc_handler_notify(hg_handle_t h)
 {
-    hg_return_t ret;
 
-    printf("Server received RPC call: Hello World!\n");
+    rpc_query_in arg;
+    HG_Get_input(h, &arg);
+    printf("RPC - notify: rank: %d, %d, %d\n", arg.rank, arg.offset/1024/1024, arg.count/1024/1024);
+    HG_Free_input(h, &arg);
 
-    /* We are not going to use the handle anymore, so we should destroy it. */
-    ret = HG_Destroy(h);
+
+    hg_return_t ret = HG_Destroy(h);
+    assert(ret == HG_SUCCESS);
+    return HG_SUCCESS;
+}
+
+hg_return_t rpc_handler_query(hg_handle_t h)
+{
+    rpc_query_in input;
+    HG_Get_input(h, &input);
+    printf("Server received RPC call: query!\n");
+
+    hg_return_t ret = HG_Destroy(h);
     assert(ret == HG_SUCCESS);
     return HG_SUCCESS;
 }

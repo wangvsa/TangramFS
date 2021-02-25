@@ -2,20 +2,20 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include "mpi.h"
+#include <mpi.h>
 #include "tangramfs.h"
 #include "tangramfs-utils.h"
 #include "tangramfs-meta.h"
 
-typedef struct TFSInfo_t {
+typedef struct TFS_Info_t {
     int mpi_rank;
     int mpi_size;
     MPI_Comm mpi_comm;
     char buffer_dir[128];
     char persist_dir[128];
-} TFSInfo;
+} TFS_Info;
 
-static TFSInfo tfs;
+static TFS_Info tfs;
 
 void tfs_init(const char* persist_dir, const char* buffer_dir) {
     MPI_Comm_dup(MPI_COMM_WORLD, &tfs.mpi_comm);
@@ -25,12 +25,10 @@ void tfs_init(const char* persist_dir, const char* buffer_dir) {
     strcpy(tfs.persist_dir, persist_dir);
     strcpy(tfs.buffer_dir, buffer_dir);
 
-    if(tfs.mpi_rank == 0) {
+    if(tfs.mpi_rank == 0)
         tangram_meta_server_start();
-    } else {
+    else
         tangram_meta_client_start();
-        tangram_meta_issue_rpc();
-    }
 }
 
 void tfs_finalize() {
@@ -41,8 +39,9 @@ void tfs_finalize() {
     MPI_Comm_free(&tfs.mpi_comm);
 }
 
-TFILE* tfs_open(const char* pathname, const char* mode) {
-    TFILE* tf = tangram_malloc(sizeof(TFILE));
+TFS_File* tfs_open(const char* pathname, const char* mode) {
+    TFS_File* tf = tangram_malloc(sizeof(TFS_File));
+    strcpy(tf->filename, pathname);
     tf->it = tangram_malloc(sizeof(IntervalTree));
     tangram_it_init(tf->it);
 
@@ -52,7 +51,7 @@ TFILE* tfs_open(const char* pathname, const char* mode) {
     return tf;
 }
 
-void tfs_write(TFILE* tf, void* buf, size_t count, size_t offset) {
+void tfs_write(TFS_File* tf, void* buf, size_t count, size_t offset) {
 
     int res, num_overlaps, i;
 
@@ -114,7 +113,11 @@ void tfs_write(TFILE* tf, void* buf, size_t count, size_t offset) {
     fsync(fileno(tf->local_file));
 }
 
-void tfs_read(TFILE* tf, void* buf, size_t count, size_t offset) {
+void tfs_read(TFS_File* tf, void* buf, size_t count, size_t offset) {
+    printf("Local copy not exist. Not handled yet\n");
+}
+
+void tfs_read_lazy(TFS_File* tf, void* buf, size_t count, size_t offset) {
     size_t local_offset;
     bool found = tangram_it_query(tf->it, offset, count, &local_offset);
 
@@ -122,23 +125,20 @@ void tfs_read(TFILE* tf, void* buf, size_t count, size_t offset) {
         fseek(tf->local_file, local_offset, SEEK_CUR);
         fread(buf, 1, count, tf->local_file);
     } else {
-        printf("Local copy not exist. Not handled yet\n");
+        tfs_read(tf, buf, count, offset);
     }
 }
 
-void tfs_read_lazy(TFILE* tf, void* buf, size_t count, size_t offset) {
-    fread(buf, 1, count, tf->local_file);
+void tfs_notify(TFS_File* tf, size_t offset, size_t count) {
+    tangram_meta_issue_rpc(RPC_NAME_NOTIFY, tf->filename, tfs.mpi_rank, offset, count);
 }
 
-void tfs_notify() {
-}
-
-void tfs_close(TFILE* tf) {
+void tfs_close(TFS_File* tf) {
     fclose(tf->local_file);
     tangram_it_destroy(tf->it);
 
     tangram_free(tf->it, sizeof(Interval));
-    tangram_free(tf, sizeof(TFILE));
+    tangram_free(tf, sizeof(TFS_File));
     tf = NULL;
 }
 

@@ -19,7 +19,7 @@ int main(int argc, char* argv[]) {
     tfs_init("./", "/tmp");
 
 
-    TFILE* tf = tfs_open("./test.txt", "w");
+    TFS_File* tf = tfs_open("./test.txt", "w");
 
     MPI_Barrier(MPI_COMM_WORLD);
 
@@ -27,8 +27,11 @@ int main(int argc, char* argv[]) {
     char* data = malloc(sizeof(char)*DATA_SIZE);
     double tstart = MPI_Wtime();
     int i;
-    for(i = 0; i < N; i++)
+    for(i = 0; i < N; i++) {
         tfs_write(tf, data, DATA_SIZE, size*DATA_SIZE*i+rank*DATA_SIZE);
+        if(rank != 0)
+            tfs_notify(tf, size*DATA_SIZE*i+rank*DATA_SIZE, DATA_SIZE);
+    }
 
     MPI_Barrier(MPI_COMM_WORLD);
     double tend = MPI_Wtime();
@@ -41,7 +44,7 @@ int main(int argc, char* argv[]) {
 
     tstart = MPI_Wtime();
     for(i = 0; i < N; i++)
-        tfs_read(tf, data, DATA_SIZE, size*DATA_SIZE*i+rank*DATA_SIZE);
+        tfs_read_lazy(tf, data, DATA_SIZE, size*DATA_SIZE*i+rank*DATA_SIZE);
 
     MPI_Barrier(MPI_COMM_WORLD);
     tend = MPI_Wtime();
