@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <fcntl.h>
 #include <mpi.h>
 #include "tangramfs.h"
 #include "tangramfs-utils.h"
@@ -47,16 +48,19 @@ TFS_File* tfs_open(const char* pathname, const char* mode) {
 
     char filename[256];
     sprintf(filename, "%s/_tfs_tmpfile.%d", tfs.buffer_dir, tfs.mpi_rank);
-    tf->local_file = fopen(filename, mode);
+    tf->local_fd = open(filename, O_CREAT|O_RDWR, S_IRWXU);
+    printf("open file fd: %d\n", tf->local_fd);
     return tf;
 }
 
-void tfs_write(TFS_File* tf, void* buf, size_t count, size_t offset) {
+void tfs_write(TFS_File* tf, const void* buf, size_t offset, size_t size) {
 
     int res, num_overlaps, i;
 
-    fseek(tf->local_file, 0, SEEK_END);
-    Interval *interval = tangram_it_new(offset, count, ftell(tf->local_file));
+    size_t local_offset;
+    local_offset = lseek(tf->local_fd, 0, SEEK_END);
+
+    Interval *interval = tangram_it_new(offset, size, local_offset);
     Interval** overlaps = tangram_it_overlaps(tf->it, interval, &res, &num_overlaps);
 
     Interval *old, *start, *end;
@@ -67,16 +71,15 @@ void tfs_write(TFS_File* tf, void* buf, size_t count, size_t offset) {
         // Insert the new interval
         case IT_NO_OVERLAP:
             tangram_it_insert(tf->it, interval);
-            fwrite(buf, 1, count, tf->local_file);
+            size_t res = pwrite(tf->local_fd, buf, size, local_offset);
             break;
         // 2. Have exactly one overlap
         // The old interval fully covers the new one
         // Only need to update the old content
         case IT_COVERED_BY_ONE:
             old = overlaps[0];
-            size_t local_offset = old->local_offset+(offset - old->offset);
-            fseek(tf->local_file, local_offset, SEEK_CUR);
-            fwrite(buf, 1, count, tf->local_file);
+            local_offset = old->local_offset+(offset - old->offset);
+            pwrite(tf->local_fd, buf, size, local_offset);
             tangram_free(interval, sizeof(Interval));
             break;
         // 3. The new interval fully covers several old ones
@@ -85,7 +88,7 @@ void tfs_write(TFS_File* tf, void* buf, size_t count, size_t offset) {
             for(i = 0; i < num_overlaps; i++)
                 tangram_it_delete(tf->it, overlaps[i]);
             tangram_it_insert(tf->it, interval);
-            fwrite(buf, 1, count, tf->local_file);
+            pwrite(tf->local_fd, buf, size, local_offset);
             break;
         case IT_PARTIAL_COVERED:
             printf("IT_PARTIAL_COVERED: Not handled\n");
@@ -110,31 +113,33 @@ void tfs_write(TFS_File* tf, void* buf, size_t count, size_t offset) {
     if(overlaps)
         tangram_free(overlaps, sizeof(Interval*)*num_overlaps);
 
-    fsync(fileno(tf->local_file));
+    fsync(tf->local_fd);
+    tf->offset += size;
 }
 
-void tfs_read(TFS_File* tf, void* buf, size_t count, size_t offset) {
+void tfs_read(TFS_File* tf, void* buf, size_t offset, size_t size) {
     printf("Local copy not exist. Not handled yet\n");
+    tf->offset += size;
 }
 
-void tfs_read_lazy(TFS_File* tf, void* buf, size_t count, size_t offset) {
+void tfs_read_lazy(TFS_File* tf, void* buf, size_t offset, size_t size) {
     size_t local_offset;
-    bool found = tangram_it_query(tf->it, offset, count, &local_offset);
+    bool found = tangram_it_query(tf->it, offset, size, &local_offset);
 
     if(found) {
-        fseek(tf->local_file, local_offset, SEEK_CUR);
-        fread(buf, 1, count, tf->local_file);
+        pread(tf->local_fd, buf, size, local_offset);
     } else {
-        tfs_read(tf, buf, count, offset);
+        tfs_read(tf, buf, size, offset);
     }
+    tf->offset += size;
 }
 
-void tfs_notify(TFS_File* tf, size_t offset, size_t count) {
-    tangram_meta_issue_rpc(RPC_NAME_NOTIFY, tf->filename, tfs.mpi_rank, offset, count);
+void tfs_notify(TFS_File* tf, size_t offset, size_t size) {
+    tangram_meta_issue_rpc(RPC_NAME_NOTIFY, tf->filename, tfs.mpi_rank, offset, size);
 }
 
 void tfs_close(TFS_File* tf) {
-    fclose(tf->local_file);
+    close(tf->local_fd);
     tangram_it_destroy(tf->it);
 
     tangram_free(tf->it, sizeof(Interval));

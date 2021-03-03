@@ -1,7 +1,6 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include "mpi.h"
-#include "tangramfs.h"
 
 #define MB (1024*1024)
 
@@ -9,19 +8,13 @@ static int DATA_SIZE = 16*MB;
 static int N = 5;
 
 
-int size, rank, provided;
 
 
-
-
-int main(int argc, char* argv[]) {
-    // Have to use MPI_THREAD_MULTIPLE for Mercury+pthread to work
-    MPI_Init_thread(&argc, &argv, MPI_THREAD_MULTIPLE, &provided);
-    MPI_Comm_size(MPI_COMM_WORLD, &size);
-    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-
+/*
+void test_active_mode() {
     //tfs_init("./", "/l/ssd");
     tfs_init("./", "/tmp");
+
 
     TFS_File* tf = tfs_open("./test.txt", "w");
 
@@ -59,7 +52,23 @@ int main(int argc, char* argv[]) {
     }
 
     tfs_close(tf);
+
     tfs_finalize();
+}
+*/
+
+
+int main(int argc, char* argv[]) {
+    int size, rank, provided;
+
+    // Have to use MPI_THREAD_MULTIPLE for Mercury+pthread to work
+    MPI_Init_thread(&argc, &argv, MPI_THREAD_MULTIPLE, &provided);
+    MPI_Comm_size(MPI_COMM_WORLD, &size);
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+
+    FILE* f = fopen("./test.txt", "w");
+    fclose(f);
+
     MPI_Finalize();
     return 0;
 }
