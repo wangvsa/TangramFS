@@ -27,10 +27,10 @@ void* mercury_client_progress_loop(void* arg);
 hg_return_t lookup_callback(const struct hg_cb_info *callback_info);
 
 
-void tangram_meta_client_start() {
+void tangram_meta_client_start(const char* server_addr) {
     mercury_client_init();
     mercury_register_rpcs();
-    HG_Addr_lookup(hg_context, lookup_callback, NULL, MERCURY_SERVER_ADDR, HG_OP_ID_IGNORE);
+    HG_Addr_lookup(hg_context, lookup_callback, NULL, server_addr, HG_OP_ID_IGNORE);
 
     running = 1;
     pthread_create(&progress_thread, NULL, mercury_client_progress_loop, NULL);

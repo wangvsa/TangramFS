@@ -8,8 +8,8 @@ libtangramfs_la_SOURCES = tangramfs.c tangramfs-interval-tree.c \
 						  tangramfs-meta-server.c tangramfs-meta-client.c \
 						  tangramfs-utils.c posix-wrappers.c
 
-libtangramfs_la_CFLAGS  = -I/home/wangchen/Sources/mercury-2.0.0/install/include 
-libtangramfs_la_LDFLAGS = -Wl,-rpath,/home/wangchen/Sources/mercury-2.0.0/install/lib -L/home/wangchen/Sources/mercury-2.0.0/install/lib
+libtangramfs_la_CFLAGS  = -I/home/wangchen/softwares/mercury-2.0.0/install/include 
+libtangramfs_la_LDFLAGS = -Wl,-rpath,/home/wangchen/softwares/mercury-2.0.0/install/lib -L/home/wangchen/softwares/mercury-2.0.0/install/lib
 libtangramfs_la_LDFLAGS += -lmercury -pthread -lrt -version-info 0:0:0
 
 

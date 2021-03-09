@@ -26,10 +26,15 @@ void tfs_init(const char* persist_dir, const char* buffer_dir) {
     strcpy(tfs.persist_dir, persist_dir);
     strcpy(tfs.buffer_dir, buffer_dir);
 
-    if(tfs.mpi_rank == 0)
-        tangram_meta_server_start();
-    else
-        tangram_meta_client_start();
+    char server_addr[128] = {0};
+
+    if(tfs.mpi_rank == 0) {
+        tangram_meta_server_start(server_addr);
+        MPI_Bcast(server_addr, 128, MPI_BYTE, 0, tfs.mpi_comm);
+    } else {
+        MPI_Bcast(server_addr, 128, MPI_BYTE, 0, tfs.mpi_comm);
+        tangram_meta_client_start(server_addr);
+    }
 }
 
 void tfs_finalize() {
@@ -49,7 +54,6 @@ TFS_File* tfs_open(const char* pathname, const char* mode) {
     char filename[256];
     sprintf(filename, "%s/_tfs_tmpfile.%d", tfs.buffer_dir, tfs.mpi_rank);
     tf->local_fd = open(filename, O_CREAT|O_RDWR, S_IRWXU);
-    printf("open file fd: %d\n", tf->local_fd);
     return tf;
 }
 

@@ -1,8 +1,7 @@
 #ifndef _TANGRAMFS_META
 #define _TANGRAMFS_META
 
-#define MERCURY_PROTOCOL    "mpi+static"
-#define MERCURY_SERVER_ADDR "rank#0"
+#define MERCURY_PROTOCOL    "ofi+tcp"
 
 #define RPC_NAME_NOTIFY     "tfs_meta_rpc_notify"
 #define RPC_NAME_QUERY      "tfs_meta_rpc_query"
@@ -31,10 +30,10 @@ hg_proc_rpc_query_in(hg_proc_t proc, void* data) {
 }
 
 
-void tangram_meta_server_start();
+void tangram_meta_server_start(char* server_addr);
 void tangram_meta_server_stop();
 
-void tangram_meta_client_start();
+void tangram_meta_client_start(const char* server_addr);
 void tangram_meta_client_stop();
 void tangram_meta_issue_rpc(const char* rpc_name, const char* filename, int rank, size_t offset, size_t count);
 

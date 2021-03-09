@@ -18,14 +18,14 @@ hg_return_t rpc_handler_notify(hg_handle_t h);
 hg_return_t rpc_handler_query(hg_handle_t h);
 
 
-void  mercury_server_init();
+void  mercury_server_init(char* server_addr);
 void  mercury_server_finalize();
 void  mercury_server_register_rpcs();
 void* mercury_server_progress_loop(void* arg);
 
 
-void tangram_meta_server_start() {
-    mercury_server_init();
+void tangram_meta_server_start(char* server_addr) {
+    mercury_server_init(server_addr);
     mercury_server_register_rpcs();
     running = 1;
     pthread_create(&progress_thread, NULL, mercury_server_progress_loop, NULL);
@@ -43,22 +43,22 @@ void tangram_meta_server_stop() {
  * ------------------------------------------
  */
 
-void mercury_server_init() {
+void mercury_server_init(char* server_addr) {
     hg_return_t ret;
 
     hg_class = HG_Init(MERCURY_PROTOCOL, HG_TRUE);
     assert(hg_class != NULL);
 
-    char hostname[128] = {0};
     hg_size_t hostname_size;
     hg_addr_t self_addr;
     HG_Addr_self(hg_class, &self_addr);
-    HG_Addr_to_string(hg_class, hostname, &hostname_size, self_addr);
-    printf("Server running at address %s\n", hostname);
+    HG_Addr_to_string(hg_class, server_addr, &hostname_size, self_addr);
+    printf("Server running at address %s\n", server_addr);
     HG_Addr_free(hg_class, self_addr);
 
     hg_context = HG_Context_create(hg_class);
     assert(hg_context != NULL);
+
 }
 
 void mercury_server_finalize() {
@@ -116,7 +116,7 @@ hg_return_t rpc_handler_query(hg_handle_t h)
 {
     rpc_query_in input;
     HG_Get_input(h, &input);
-    printf("Server received RPC call: query!\n");
+    printf("RPC - query!\n");
 
     hg_return_t ret = HG_Destroy(h);
     assert(ret == HG_SUCCESS);
