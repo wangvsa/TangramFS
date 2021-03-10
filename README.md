@@ -24,5 +24,5 @@ User-level parallel file system with tunable consistency
 
 ### In-situ systems for testing
 
-1. [Damaris](https://project.inria.fr/damaris/documentation/)
-2. [XImage](https://project.inria.fr/damaris/documentation/)
+1. [Damaris](https://project.inria.fr/damaris/documentation/): dedicated cores per node for aggregating I/O and send the data to Visit or ParaView.
+2. [XImage](https://project.inria.fr/damaris/documentation/): provide APIs for generating images from HDF5 during simulations.
