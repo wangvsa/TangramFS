@@ -20,3 +20,10 @@ User-level parallel file system with tunable consistency
 
 1. tfs_*(): APIs provided and used by users
 2. tangram_*(): Used internally
+
+
+### In-situ systems for testing
+
+1. [Damaris](https://project.inria.fr/damaris/documentation/): dedicated cores per node for aggregating I/O and send the data to Visit or ParaView.
+2. [XImage](https://project.inria.fr/damaris/documentation/): provide APIs for generating images from HDF5 during simulations.
+3. [SENSEI](https://sensei-insitu.org/learn-more/software.html): No disk I/O, all in-memory analysis.
