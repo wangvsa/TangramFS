@@ -9,7 +9,7 @@
 static hg_class_t*     hg_class   = NULL;
 static hg_context_t*   hg_context = NULL;
 
-pthread_t progress_thread;
+pthread_t server_progress_thread;
 static int running;
 
 
@@ -28,12 +28,12 @@ void tangram_meta_server_start(char* server_addr) {
     mercury_server_init(server_addr);
     mercury_server_register_rpcs();
     running = 1;
-    pthread_create(&progress_thread, NULL, mercury_server_progress_loop, NULL);
+    pthread_create(&server_progress_thread, NULL, mercury_server_progress_loop, NULL);
 }
 
 void tangram_meta_server_stop() {
     running = 0;
-    pthread_join(progress_thread, NULL);
+    pthread_join(server_progress_thread, NULL);
     mercury_server_finalize();
 }
 

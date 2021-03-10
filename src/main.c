@@ -33,8 +33,7 @@ int main(int argc, char* argv[]) {
     int i;
     for(i = 0; i < N; i++) {
         tfs_write(tf, data, DATA_SIZE, size*DATA_SIZE*i+rank*DATA_SIZE);
-        if(rank != 0)
-            tfs_notify(tf, size*DATA_SIZE*i+rank*DATA_SIZE, DATA_SIZE);
+        tfs_notify(tf, size*DATA_SIZE*i+rank*DATA_SIZE, DATA_SIZE);
     }
 
     MPI_Barrier(MPI_COMM_WORLD);

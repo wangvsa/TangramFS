@@ -16,7 +16,7 @@ static hg_id_t         rpc_id_query;
 
 
 static int running;                       // If we are still runing the progress loop
-pthread_t progress_thread;
+pthread_t client_progress_thread;
 
 
 
@@ -33,12 +33,12 @@ void tangram_meta_client_start(const char* server_addr) {
     HG_Addr_lookup(hg_context, lookup_callback, NULL, server_addr, HG_OP_ID_IGNORE);
 
     running = 1;
-    pthread_create(&progress_thread, NULL, mercury_client_progress_loop, NULL);
+    pthread_create(&client_progress_thread, NULL, mercury_client_progress_loop, NULL);
 }
 
 void tangram_meta_client_stop() {
     running = 0;
-    pthread_join(progress_thread, NULL);
+    pthread_join(client_progress_thread, NULL);
     mercury_client_finalize();
 }
 

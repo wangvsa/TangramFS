@@ -28,20 +28,19 @@ void tfs_init(const char* persist_dir, const char* buffer_dir) {
 
     char server_addr[128] = {0};
 
-    if(tfs.mpi_rank == 0) {
+    // Rank 0 runs the mercury server
+    // All ranks run the mercury client
+    if(tfs.mpi_rank == 0)
         tangram_meta_server_start(server_addr);
-        MPI_Bcast(server_addr, 128, MPI_BYTE, 0, tfs.mpi_comm);
-    } else {
-        MPI_Bcast(server_addr, 128, MPI_BYTE, 0, tfs.mpi_comm);
-        tangram_meta_client_start(server_addr);
-    }
+
+    MPI_Bcast(server_addr, 128, MPI_BYTE, 0, tfs.mpi_comm);
+    tangram_meta_client_start(server_addr);
 }
 
 void tfs_finalize() {
     if(tfs.mpi_rank == 0)
         tangram_meta_server_stop();
-    else
-        tangram_meta_client_stop();
+    tangram_meta_client_stop();
     MPI_Comm_free(&tfs.mpi_comm);
 }
 
