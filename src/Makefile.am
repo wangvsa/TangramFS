@@ -4,8 +4,8 @@ lib_LTLIBRARIES = libtangramfs.la
 AM_CPPFLAGS = -I$(top_srcdir)/include -Wno-unused-result -D_LARGEFILE64_SOURCE
 
 
-libtangramfs_la_SOURCES = tangramfs.c tangramfs-interval-tree.c \
-						  tangramfs-meta-server.c tangramfs-meta-client.c \
+libtangramfs_la_SOURCES = tangramfs.c tangramfs-interval-tree.c tangramfs-global-interval-tree.c\
+						  tangramfs-rpc-server.c tangramfs-rpc-client.c tangramfs-metadata.c\
 						  tangramfs-utils.c posix-wrappers.c
 
 libtangramfs_la_CFLAGS  = -I/home/wangchen/softwares/mercury-2.0.0/install/include 

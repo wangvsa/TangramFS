@@ -4,10 +4,13 @@
 #include <pthread.h>
 #include "mpi.h"
 #include <mercury_macros.h>
-#include "tangramfs-meta.h"
+#include "tangramfs-rpc.h"
+#include "tangramfs-metadata.h"
+
 
 static hg_class_t*     hg_class   = NULL;
 static hg_context_t*   hg_context = NULL;
+
 
 pthread_t server_progress_thread;
 static int running;
@@ -24,14 +27,14 @@ void  mercury_server_register_rpcs();
 void* mercury_server_progress_loop(void* arg);
 
 
-void tangram_meta_server_start(char* server_addr) {
+void tangram_rpc_server_start(char* server_addr) {
     mercury_server_init(server_addr);
     mercury_server_register_rpcs();
     running = 1;
     pthread_create(&server_progress_thread, NULL, mercury_server_progress_loop, NULL);
 }
 
-void tangram_meta_server_stop() {
+void tangram_rpc_server_stop() {
     running = 0;
     pthread_join(server_progress_thread, NULL);
     mercury_server_finalize();
@@ -100,12 +103,12 @@ void* mercury_server_progress_loop(void* arg) {
 
 hg_return_t rpc_handler_notify(hg_handle_t h)
 {
-
     rpc_query_in arg;
     HG_Get_input(h, &arg);
-    printf("RPC - notify: rank: %d, %d, %d\n", arg.rank, arg.offset/1024/1024, arg.count/1024/1024);
-    HG_Free_input(h, &arg);
+    printf("RPC - notify: rank: %d, %s %d, %d\n", arg.rank, arg.filename, arg.offset/1024/1024, arg.count/1024/1024);
+    tangram_ms_handle_notify(arg.rank, arg.filename, arg.offset, arg.count);
 
+    HG_Free_input(h, &arg);
 
     hg_return_t ret = HG_Destroy(h);
     assert(ret == HG_SUCCESS);

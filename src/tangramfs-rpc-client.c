@@ -5,7 +5,7 @@
 #include <pthread.h>
 #include <string.h>
 #include <mercury_macros.h>
-#include "tangramfs-meta.h"
+#include "tangramfs-rpc.h"
 
 static hg_class_t*     hg_class   = NULL;
 static hg_context_t*   hg_context = NULL;
@@ -27,7 +27,7 @@ void* mercury_client_progress_loop(void* arg);
 hg_return_t lookup_callback(const struct hg_cb_info *callback_info);
 
 
-void tangram_meta_client_start(const char* server_addr) {
+void tangram_rpc_client_start(const char* server_addr) {
     mercury_client_init();
     mercury_register_rpcs();
     HG_Addr_lookup(hg_context, lookup_callback, NULL, server_addr, HG_OP_ID_IGNORE);
@@ -36,7 +36,7 @@ void tangram_meta_client_start(const char* server_addr) {
     pthread_create(&client_progress_thread, NULL, mercury_client_progress_loop, NULL);
 }
 
-void tangram_meta_client_stop() {
+void tangram_rpc_client_stop() {
     running = 0;
     pthread_join(client_progress_thread, NULL);
     mercury_client_finalize();
@@ -97,7 +97,7 @@ void* mercury_client_progress_loop(void* arg) {
 }
 
 
-void tangram_meta_issue_rpc(const char* rpc_name, const char* filename, int rank, size_t offset, size_t count) {
+void tangram_rpc_issue_rpc(const char* rpc_name, char* filename, int rank, size_t offset, size_t count) {
     while(hg_addr == NULL) {
         sleep(1);
     }
@@ -125,6 +125,7 @@ void tangram_meta_issue_rpc(const char* rpc_name, const char* filename, int rank
      * use any here).
      */
     rpc_query_in arg = {
+        .filename = filename,
         .rank = rank,
         .offset = offset,
         .count = count,

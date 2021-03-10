@@ -23,7 +23,7 @@ typedef struct IntervalTree_T {
 
 void tangram_it_init(IntervalTree *it);
 
-void tangram_it_destroy(IntervalTree *it);
+void tangram_it_finalize(IntervalTree *it);
 
 
 /**
@@ -34,7 +34,7 @@ void tangram_it_delete(IntervalTree* it, Interval* interval);
 
 /**
  * Insert an interval to the tree
- * The call is responsible to guarantee the interval
+ * The caller is responsible to guarantee the interval
  * is not overlapped with any existing one.
  */
 void tangram_it_insert(IntervalTree* it, Interval* interval);

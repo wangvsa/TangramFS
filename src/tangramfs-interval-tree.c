@@ -10,7 +10,7 @@ void tangram_it_init(IntervalTree *it) {
     it->head = NULL;
 }
 
-void tangram_it_destroy(IntervalTree *it) {
+void tangram_it_finalize(IntervalTree *it) {
     Interval *elt, *tmp;
     LL_FOREACH_SAFE(it->head, elt, tmp) {
         LL_DELETE(it->head, elt);

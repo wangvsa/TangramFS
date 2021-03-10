@@ -6,7 +6,7 @@
 #include <mpi.h>
 #include "tangramfs.h"
 #include "tangramfs-utils.h"
-#include "tangramfs-meta.h"
+#include "tangramfs-rpc.h"
 
 typedef struct TFS_Info_t {
     int mpi_rank;
@@ -31,16 +31,16 @@ void tfs_init(const char* persist_dir, const char* buffer_dir) {
     // Rank 0 runs the mercury server
     // All ranks run the mercury client
     if(tfs.mpi_rank == 0)
-        tangram_meta_server_start(server_addr);
+        tangram_rpc_server_start(server_addr);
 
     MPI_Bcast(server_addr, 128, MPI_BYTE, 0, tfs.mpi_comm);
-    tangram_meta_client_start(server_addr);
+    tangram_rpc_client_start(server_addr);
 }
 
 void tfs_finalize() {
     if(tfs.mpi_rank == 0)
-        tangram_meta_server_stop();
-    tangram_meta_client_stop();
+        tangram_rpc_server_stop();
+    tangram_rpc_client_stop();
     MPI_Comm_free(&tfs.mpi_comm);
 }
 
@@ -138,12 +138,12 @@ void tfs_read_lazy(TFS_File* tf, void* buf, size_t offset, size_t size) {
 }
 
 void tfs_notify(TFS_File* tf, size_t offset, size_t size) {
-    tangram_meta_issue_rpc(RPC_NAME_NOTIFY, tf->filename, tfs.mpi_rank, offset, size);
+    tangram_rpc_issue_rpc(RPC_NAME_NOTIFY, tf->filename, tfs.mpi_rank, offset, size);
 }
 
 void tfs_close(TFS_File* tf) {
     close(tf->local_fd);
-    tangram_it_destroy(tf->it);
+    tangram_it_finalize(tf->it);
 
     tangram_free(tf->it, sizeof(Interval));
     tangram_free(tf, sizeof(TFS_File));

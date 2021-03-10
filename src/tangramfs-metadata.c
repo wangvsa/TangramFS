@@ -1,0 +1,73 @@
+#include "uthash.h"
+#include "tangramfs-utils.h"
+#include "tangramfs-metadata.h"
+#include "tangramfs-global-interval-tree.h"
+
+
+typedef struct GlobalIntervalTreeEntry_t {
+    char filename[128];
+    GlobalIntervalTree global_it;
+    UT_hash_handle hh;
+} GlobalIntervalTreeEntry;
+
+// Hash Map <filename, global interval tree>
+static GlobalIntervalTreeEntry *global_it_table;
+
+void tangram_ms_init() {
+}
+
+void tangram_ms_finalize() {
+    GlobalIntervalTreeEntry* entry, *tmp;
+    HASH_ITER(hh, global_it_table, entry, tmp) {
+        tangram_global_it_finalize(&(entry->global_it));
+        tangram_free(entry, sizeof(GlobalIntervalTreeEntry));
+    }
+}
+
+
+void tangram_ms_handle_notify(int rank, char* filename, size_t offset, size_t count) {
+    GlobalIntervalTreeEntry *entry = NULL;
+    HASH_FIND_STR(global_it_table, filename, entry);
+
+    if(entry) {
+
+    } else {
+        entry = tangram_malloc(sizeof(GlobalIntervalTreeEntry));
+        tangram_global_it_init(&(entry->global_it));
+        strcpy(entry->filename, filename);
+        HASH_ADD_STR(global_it_table, filename, entry);
+    }
+
+    GlobalInterval interval = {
+        .rank = rank,
+        .offset = offset,
+        .count = count
+    };
+    GlobalIntervalTree *global_it = &(entry->global_it);
+
+    int num_overlaps = 0;
+    GlobalInterval** overlaps = tangram_global_it_overlaps(global_it, &interval, &num_overlaps);
+    for(int i = 0; i < num_overlaps ; i++) {
+        GlobalInterval *old = overlaps[i];
+        if(rank != old->rank) {
+            // Case 1. new one fully covers the old one
+            // Delete the old one
+            if(offset <= old->offset && offset+count >= old->offset+old->count) {
+                tangram_global_it_delete(global_it, old);
+            }
+            // Case 2. new one covers the left part of the old one
+            // Increase the offset of the old one
+            else if(offset+count <= old->offset+old->count) {
+                old->offset = offset+count;
+            }
+            // Casse 3. new one covers the right part of the old one
+            // Reduce the count of the old one
+            else if(offset >= old->offset) {
+                old->count = offset - old->offset;
+            }
+        }
+    }
+}
+
+void tangram_ms_handle_query() {
+}
