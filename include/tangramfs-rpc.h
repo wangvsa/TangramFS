@@ -30,6 +30,18 @@ hg_proc_rpc_query_in(hg_proc_t proc, void* data) {
     return HG_SUCCESS;
 }
 
+typedef struct rpc_query_out_t {
+    int32_t rank;
+} rpc_query_out;
+
+/* hg_proc_[structure name] is a special name */
+static hg_return_t
+hg_proc_rpc_query_out(hg_proc_t proc, void* data) {
+    rpc_query_out *arg = (rpc_query_out*) data;
+    hg_proc_int32_t(proc, &arg->rank);
+    return HG_SUCCESS;
+}
+
 
 void tangram_rpc_server_start(char* server_addr);
 void tangram_rpc_server_stop();

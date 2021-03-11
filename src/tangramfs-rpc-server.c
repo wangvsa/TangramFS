@@ -32,12 +32,14 @@ void tangram_rpc_server_start(char* server_addr) {
     mercury_server_register_rpcs();
     running = 1;
     pthread_create(&server_progress_thread, NULL, mercury_server_progress_loop, NULL);
+    tangram_ms_init();
 }
 
 void tangram_rpc_server_stop() {
     running = 0;
     pthread_join(server_progress_thread, NULL);
     mercury_server_finalize();
+    tangram_ms_finalize();
 }
 
 /*
@@ -77,8 +79,7 @@ void mercury_server_register_rpcs() {
     hg_id_t rpc_id_notify = MERCURY_REGISTER(hg_class, RPC_NAME_NOTIFY, rpc_query_in, void, rpc_handler_notify);
     HG_Registered_disable_response(hg_class, rpc_id_notify, HG_TRUE);
 
-    hg_id_t rpc_id_query = MERCURY_REGISTER(hg_class, RPC_NAME_QUERY, rpc_query_in, void, rpc_handler_query);
-    HG_Registered_disable_response(hg_class, rpc_id_query, HG_TRUE);
+    hg_id_t rpc_id_query = MERCURY_REGISTER(hg_class, RPC_NAME_QUERY, rpc_query_in, rpc_query_out, rpc_handler_query);
 }
 
 void* mercury_server_progress_loop(void* arg) {
@@ -117,9 +118,13 @@ hg_return_t rpc_handler_notify(hg_handle_t h)
 
 hg_return_t rpc_handler_query(hg_handle_t h)
 {
-    rpc_query_in input;
-    HG_Get_input(h, &input);
-    printf("RPC - query!\n");
+    rpc_query_in in;
+    HG_Get_input(h, &in);
+
+    rpc_query_out out;
+    bool found = tangram_ms_handle_query(in.filename, in.offset, in.count, &out.rank);
+    printf("RPC - query: rank: %d, %s %d, %d, found: %d\n", in.rank, in.filename, in.offset/1024/1024, in.count/1024/1024, found);
+    HG_Respond(h, NULL, NULL, &out);
 
     hg_return_t ret = HG_Destroy(h);
     assert(ret == HG_SUCCESS);

@@ -1,5 +1,6 @@
 #include <stdlib.h>
 #include <stdbool.h>
+#include <stdio.h>
 #include "utlist.h"
 #include "tangramfs-utils.h"
 #include "tangramfs-interval-tree.h"

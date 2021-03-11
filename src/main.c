@@ -5,8 +5,8 @@
 
 #define MB (1024*1024)
 
-static int DATA_SIZE = 16*MB;
-static int N = 5;
+static int DATA_SIZE = 1*MB;
+static int N = 4;
 
 
 int size, rank, provided;
@@ -32,7 +32,7 @@ int main(int argc, char* argv[]) {
     double tstart = MPI_Wtime();
     int i;
     for(i = 0; i < N; i++) {
-        tfs_write(tf, data, DATA_SIZE, size*DATA_SIZE*i+rank*DATA_SIZE);
+        tfs_write(tf, data, size*DATA_SIZE*i+rank*DATA_SIZE, DATA_SIZE);
         tfs_notify(tf, size*DATA_SIZE*i+rank*DATA_SIZE, DATA_SIZE);
     }
 
@@ -44,10 +44,13 @@ int main(int argc, char* argv[]) {
         printf("Bandwidth: %.2f MB/s\n", DATA_SIZE/MB*size*N/(tend-tstart));
     }
 
-
     tstart = MPI_Wtime();
-    for(i = 0; i < N; i++)
-        tfs_read_lazy(tf, data, DATA_SIZE, size*DATA_SIZE*i+rank*DATA_SIZE);
+    for(i = 0; i < N; i++) {
+        // read neighbor rank's data
+        int neighbor_rank = (rank + 1) % size;
+        size_t offset = size*DATA_SIZE*i + neighbor_rank*DATA_SIZE;
+        tfs_read_lazy(tf, data, offset, DATA_SIZE);
+    }
 
     MPI_Barrier(MPI_COMM_WORLD);
     tend = MPI_Wtime();

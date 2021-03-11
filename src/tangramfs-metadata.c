@@ -1,3 +1,4 @@
+#include <stdio.h>
 #include "uthash.h"
 #include "tangramfs-utils.h"
 #include "tangramfs-metadata.h"
@@ -24,7 +25,6 @@ void tangram_ms_finalize() {
     }
 }
 
-
 void tangram_ms_handle_notify(int rank, char* filename, size_t offset, size_t count) {
     GlobalIntervalTreeEntry *entry = NULL;
     HASH_FIND_STR(global_it_table, filename, entry);
@@ -38,15 +38,11 @@ void tangram_ms_handle_notify(int rank, char* filename, size_t offset, size_t co
         HASH_ADD_STR(global_it_table, filename, entry);
     }
 
-    GlobalInterval interval = {
-        .rank = rank,
-        .offset = offset,
-        .count = count
-    };
+    GlobalInterval *new = tangram_global_it_new(offset, count, rank);
     GlobalIntervalTree *global_it = &(entry->global_it);
 
     int num_overlaps = 0;
-    GlobalInterval** overlaps = tangram_global_it_overlaps(global_it, &interval, &num_overlaps);
+    GlobalInterval** overlaps = tangram_global_it_overlaps(global_it, new, &num_overlaps);
     for(int i = 0; i < num_overlaps ; i++) {
         GlobalInterval *old = overlaps[i];
         if(rank != old->rank) {
@@ -67,7 +63,15 @@ void tangram_ms_handle_notify(int rank, char* filename, size_t offset, size_t co
             }
         }
     }
+
+    tangram_global_it_insert(global_it, new);
 }
 
-void tangram_ms_handle_query() {
+bool tangram_ms_handle_query(char* filename, size_t offset, size_t count, int *rank) {
+    GlobalIntervalTreeEntry *entry = NULL;
+    HASH_FIND_STR(global_it_table, filename, entry);
+    if(entry)
+        return tangram_global_it_query(&(entry->global_it), offset, count, rank);
+
+    return false;
 }

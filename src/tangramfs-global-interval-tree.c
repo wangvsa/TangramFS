@@ -1,5 +1,6 @@
 #include <stdlib.h>
 #include <stdbool.h>
+#include <stdio.h>
 #include "utlist.h"
 #include "tangramfs-utils.h"
 #include "tangramfs-global-interval-tree.h"
@@ -52,7 +53,6 @@ GlobalInterval* tangram_global_it_new(size_t offset, size_t count, int rank) {
     return interval;
 }
 
-// TODO: Need to lock the interval tree
 GlobalInterval** tangram_global_it_overlaps(GlobalIntervalTree* it, GlobalInterval* interval, int *num_overlaps) {
     *num_overlaps = 0;
     GlobalInterval *i1, *i2;
@@ -78,6 +78,7 @@ GlobalInterval** tangram_global_it_overlaps(GlobalIntervalTree* it, GlobalInterv
     return overlaps;
 }
 
+// TODO: Currently only return one interval that fully covers the required
 bool tangram_global_it_query(GlobalIntervalTree *it, size_t offset, size_t count, int *rank) {
     bool found = false;
     GlobalInterval *interval;

@@ -121,7 +121,7 @@ void tfs_write(TFS_File* tf, const void* buf, size_t offset, size_t size) {
 }
 
 void tfs_read(TFS_File* tf, void* buf, size_t offset, size_t size) {
-    printf("Local copy not exist. Not handled yet\n");
+    tfs_query(tf, offset, size);
     tf->offset += size;
 }
 
@@ -132,13 +132,17 @@ void tfs_read_lazy(TFS_File* tf, void* buf, size_t offset, size_t size) {
     if(found) {
         pread(tf->local_fd, buf, size, local_offset);
     } else {
-        tfs_read(tf, buf, size, offset);
+        tfs_read(tf, buf, offset, size);
     }
     tf->offset += size;
 }
 
 void tfs_notify(TFS_File* tf, size_t offset, size_t size) {
     tangram_rpc_issue_rpc(RPC_NAME_NOTIFY, tf->filename, tfs.mpi_rank, offset, size);
+}
+
+void tfs_query(TFS_File* tf, size_t offset, size_t size) {
+    tangram_rpc_issue_rpc(RPC_NAME_QUERY, tf->filename, tfs.mpi_rank, offset, size);
 }
 
 void tfs_close(TFS_File* tf) {
