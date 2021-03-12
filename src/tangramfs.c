@@ -145,13 +145,23 @@ size_t tfs_read_lazy(TFS_File* tf, void* buf, size_t size) {
     size_t local_offset;
     bool found = tangram_it_query(tf->it, tf->offset, size, &local_offset);
 
-    if(found)
+    if(found) {
         res = pread(tf->local_fd, buf, size, local_offset);
-    else
+        tf->offset += size;
+    } else {
         res = tfs_read(tf, buf, size);
+    }
 
-    tf->offset += size;
     return res;
+}
+
+size_t tfs_seek(TFS_File *tf, size_t offset, int whence) {
+    if(whence == SEEK_SET)
+        tf->offset = offset;
+    if(whence == SEEK_CUR)
+        tf->offset += offset;
+    // TODO do not support SEEK_END For now.
+    return tf->offset;
 }
 
 void tfs_notify(TFS_File* tf, size_t offset, size_t size) {

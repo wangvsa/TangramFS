@@ -175,19 +175,19 @@ void init_tfs() {
     }
 }
 
-int MPI_Init(int *argc, char ***argv) {
+int TANGRAM_WRAP(MPI_Init)(int *argc, char ***argv) {
     int res = PMPI_Init(argc, argv);
     init_tfs();
     return res;
 }
 
-int MPI_Init_thread(int *argc, char ***argv, int required, int *provided) {
+int TANGRAM_WRAP(MPI_Init_thread)(int *argc, char ***argv, int required, int *provided) {
     int res = PMPI_Init_thread(argc, argv, required, provided);
     init_tfs();
     return res;
 }
 
-int MPI_Finalize() {
+int TANGRAM_WRAP(MPI_Finalize)() {
     tfs_finalize();
     return PMPI_Finalize();
 }
