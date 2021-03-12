@@ -19,7 +19,7 @@ int main(int argc, char* argv[]) {
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
     //tfs_init("./", "/l/ssd");
-    tfs_init("./chen/", "/tmp");
+    tfs_init("./chen/", "/tmp", TANGRAM_STRONG_SEMANTICS);
 
     TFS_File* tf = tfs_open("./test.txt");
 
@@ -34,6 +34,7 @@ int main(int argc, char* argv[]) {
     tfs_seek(tf, offset, SEEK_SET);
     for(i = 0; i < N; i++)
         tfs_write(tf, data, DATA_SIZE);
+    // Notify all writes in one RPC
     tfs_notify(tf, offset, N*DATA_SIZE);
 
 

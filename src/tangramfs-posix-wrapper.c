@@ -11,6 +11,7 @@
 #include "uthash.h"
 #include "tangramfs.h"
 #include "tangramfs-posix-wrapper.h"
+#include "tangramfs-semantics-impl.h"
 
 typedef struct TFSFileMap_t {
     TFS_File *tf;
@@ -79,7 +80,7 @@ size_t TANGRAM_WRAP(fwrite)(const void *ptr, size_t size, size_t count, FILE * s
 {
     TFS_File *tf = stream2tf(stream);
     if(!tf)
-        tfs_write(tf, ptr, count*size);
+        return tangram_write_impl(tf, ptr, count*size);
 
     MAP_OR_FAIL(fwrite);
     return TANGRAM_REAL_CALL(fwrite)(ptr, size, count, stream);
@@ -89,7 +90,7 @@ size_t TANGRAM_WRAP(fread)(void * ptr, size_t size, size_t count, FILE * stream)
 {
     TFS_File *tf = stream2tf(stream);
     if(tf) 
-        return tfs_read(tf, ptr, count*size);
+        return tangram_read_impl(tf, ptr, count*size);
 
     MAP_OR_FAIL(fread);
     return TANGRAM_REAL_CALL(fread)(ptr, size, count, stream);
@@ -100,7 +101,7 @@ int TANGRAM_WRAP(fclose)(FILE * stream)
     TFSFileMap *found = NULL;
     HASH_FIND(hh, tf_map, stream, sizeof(FILE), found);
     if(found) {
-        int res = tfs_close(found->tf);
+        int res = tangram_close_impl(found->tf);
         HASH_DEL(tf_map, found);
         free(found);
         return res;
@@ -136,7 +137,7 @@ ssize_t TANGRAM_WRAP(write)(int fd, const void *buf, size_t count)
 {
     TFS_File* tf = fd2tf(fd);
     if(tf)
-        return tfs_write(tf, buf, count);
+        return tangram_write_impl(tf, buf, count);
 
     MAP_OR_FAIL(write);
     return TANGRAM_REAL_CALL(write)(fd, buf, count);
@@ -146,7 +147,7 @@ ssize_t TANGRAM_WRAP(read)(int fd, void *buf, size_t count)
 {
     TFS_File* tf = fd2tf(fd);
     if(tf)
-        return tfs_read(tf, buf, count);
+        return tangram_read_impl(tf, buf, count);
 
     MAP_OR_FAIL(read);
     return TANGRAM_REAL_CALL(read)(fd, buf, count);
@@ -156,8 +157,9 @@ int TANGRAM_WRAP(close)(int fd) {
     TFSFdMap* found = NULL;
     HASH_FIND_INT(tf_fd_map, &fd, found);
     if(found) {
-        int res = tfs_close(found->tf);
+        int res = tangram_close_impl(found->tf);
         HASH_DEL(tf_fd_map, found);
+        free(found);
         return res;
     }
 
@@ -165,15 +167,30 @@ int TANGRAM_WRAP(close)(int fd) {
     return TANGRAM_REAL_CALL(close)(fd);
 }
 
+
+
+
+
+
+
+
+
+
+
 void init_tfs() {
     const char* persist_dir = getenv("TANGRAM_PERSIST_DIR");
     const char* buffer_dir = getenv("TANGRAM_BUFFER_DIR");
+    const char* semantics_str = getenv("TANGRAM_SEMANTICS");
     if(!persist_dir || !buffer_dir) {
         printf("Please set TANGRAM_PERSIST_DIR and TANGRAM_BUFFER_DIR\n");
     } else {
-        tfs_init(persist_dir, buffer_dir);
+        int semantics = TANGRAM_STRONG_SEMANTICS;
+        if(semantics_str)
+            semantics = atoi(semantics_str);
+        tfs_init(persist_dir, buffer_dir, semantics);
     }
 }
+
 
 int TANGRAM_WRAP(MPI_Init)(int *argc, char ***argv) {
     int res = PMPI_Init(argc, argv);
