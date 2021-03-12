@@ -3,7 +3,7 @@
 
 #define MERCURY_PROTOCOL    "ofi+tcp"
 
-#define RPC_NAME_NOTIFY     "tfs_rpc_rpc_notify"
+#define RPC_NAME_POST       "tfs_rpc_rpc_post"
 #define RPC_NAME_QUERY      "tfs_rpc_rpc_query"
 
 

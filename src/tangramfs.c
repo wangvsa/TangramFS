@@ -177,15 +177,15 @@ size_t tfs_seek(TFS_File *tf, size_t offset, int whence) {
     return tf->offset;
 }
 
-void tfs_notify(TFS_File* tf, size_t offset, size_t count) {
-    tangram_rpc_issue_rpc(RPC_NAME_NOTIFY, tf->filename, tfs.mpi_rank, offset, count);
+void tfs_post(TFS_File* tf, size_t offset, size_t count) {
+    tangram_rpc_issue_rpc(RPC_NAME_POST, tf->filename, tfs.mpi_rank, offset, count);
 }
 
 void tfs_post_all(TFS_File* tf) {
     int num;
     Interval** unposted = tangram_it_unposted(tf->it, &num);
     for(int i = 0; i < num; i++) {
-        tfs_notify(tf, unposted[i]->offset, unposted[i]->count);
+        tfs_post(tf, unposted[i]->offset, unposted[i]->count);
     }
     tangram_free(unposted, num*sizeof(Interval*));
 }

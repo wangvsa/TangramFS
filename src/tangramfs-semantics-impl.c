@@ -7,7 +7,7 @@ size_t tangram_write_impl(TFS_File* tf, const void* buf, size_t count) {
     size_t res = tfs_write(tf, buf, count);
 
     if(semantics == TANGRAM_STRONG_SEMANTICS)
-        tfs_notify(tf, offset, count);
+        tfs_post(tf, offset, count);
 
     return res;
 }

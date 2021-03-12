@@ -12,7 +12,7 @@ static hg_class_t*     hg_class   = NULL;
 static hg_context_t*   hg_context = NULL;
 static hg_addr_t       hg_addr = NULL;    // addr retrived from the addr lookup callback
 
-static hg_id_t         rpc_id_notify;
+static hg_id_t         rpc_id_post;
 static hg_id_t         rpc_id_query;
 
 
@@ -29,7 +29,7 @@ void mercury_register_rpcs();
 void* mercury_client_progress_loop(void* arg);
 hg_return_t lookup_callback(const struct hg_cb_info *callback_info);
 hg_return_t rpc_query_callback(const struct hg_cb_info *info);
-hg_return_t rpc_notify_callback(const struct hg_cb_info *info);
+hg_return_t rpc_post_callback(const struct hg_cb_info *info);
 
 
 void tangram_rpc_client_start(const char* server_addr) {
@@ -81,8 +81,8 @@ void mercury_register_rpcs() {
      * The third NULL is the pointer to the function (which is on the server,
      * so NULL here on the client).
      */
-    rpc_id_notify = MERCURY_REGISTER(hg_class, RPC_NAME_NOTIFY, rpc_query_in, void, NULL);
-    HG_Registered_disable_response(hg_class, rpc_id_notify, HG_TRUE);
+    rpc_id_post = MERCURY_REGISTER(hg_class, RPC_NAME_POST, rpc_query_in, void, NULL);
+    HG_Registered_disable_response(hg_class, rpc_id_post, HG_TRUE);
 
     rpc_id_query = MERCURY_REGISTER(hg_class, RPC_NAME_QUERY, rpc_query_in, rpc_query_out, NULL);
 }
@@ -106,8 +106,8 @@ void* mercury_client_progress_loop(void* arg) {
 void tangram_rpc_issue_rpc(const char* rpc_name, char* filename, int rank, size_t offset, size_t count) {
 
     hg_id_t rpc_id;
-    if(strcmp(rpc_name, RPC_NAME_NOTIFY) == 0)
-        rpc_id = rpc_id_notify;
+    if(strcmp(rpc_name, RPC_NAME_POST) == 0)
+        rpc_id = rpc_id_post;
     if(strcmp(rpc_name, RPC_NAME_QUERY) == 0)
         rpc_id = rpc_id_query;
 
@@ -134,8 +134,8 @@ void tangram_rpc_issue_rpc(const char* rpc_name, char* filename, int rank, size_
 
     pthread_mutex_lock(&mutex);
 
-    if(strcmp(rpc_name, RPC_NAME_NOTIFY) == 0)
-        ret = HG_Forward(handle, rpc_notify_callback, NULL, &in_arg);
+    if(strcmp(rpc_name, RPC_NAME_POST) == 0)
+        ret = HG_Forward(handle, rpc_post_callback, NULL, &in_arg);
 
     if(strcmp(rpc_name, RPC_NAME_QUERY) == 0)
         ret = HG_Forward(handle, rpc_query_callback, NULL, &in_arg);
@@ -167,7 +167,7 @@ hg_return_t lookup_callback(const struct hg_cb_info *callback_info)
     return HG_SUCCESS;
 }
 
-hg_return_t rpc_notify_callback(const struct hg_cb_info *info)
+hg_return_t rpc_post_callback(const struct hg_cb_info *info)
 {
     signal_main_thread();
     return HG_SUCCESS;

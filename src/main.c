@@ -34,8 +34,8 @@ int main(int argc, char* argv[]) {
     tfs_seek(tf, offset, SEEK_SET);
     for(i = 0; i < N; i++)
         tfs_write(tf, data, DATA_SIZE);
-    // Notify all writes in one RPC
-    tfs_notify(tf, offset, N*DATA_SIZE);
+    // Post all writes in one RPC
+    tfs_post(tf, offset, N*DATA_SIZE);
 
 
     MPI_Barrier(MPI_COMM_WORLD);

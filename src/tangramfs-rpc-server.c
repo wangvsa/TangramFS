@@ -16,7 +16,7 @@ pthread_t server_progress_thread;
 static int running;
 
 // List of RPC handlers
-hg_return_t rpc_handler_notify(hg_handle_t h);
+hg_return_t rpc_handler_post(hg_handle_t h);
 hg_return_t rpc_handler_query(hg_handle_t h);
 
 void  mercury_server_init(char* server_addr);
@@ -73,8 +73,8 @@ void mercury_server_register_rpcs() {
      * The two NULL arguments correspond to the functions user to
      * serialize/deserialize the input and output parameters
      */
-    hg_id_t rpc_id_notify = MERCURY_REGISTER(hg_class, RPC_NAME_NOTIFY, rpc_query_in, void, rpc_handler_notify);
-    HG_Registered_disable_response(hg_class, rpc_id_notify, HG_TRUE);
+    hg_id_t rpc_id_post = MERCURY_REGISTER(hg_class, RPC_NAME_POST, rpc_query_in, void, rpc_handler_post);
+    HG_Registered_disable_response(hg_class, rpc_id_post, HG_TRUE);
 
     hg_id_t rpc_id_query = MERCURY_REGISTER(hg_class, RPC_NAME_QUERY, rpc_query_in, rpc_query_out, rpc_handler_query);
 }
@@ -99,12 +99,12 @@ void* mercury_server_progress_loop(void* arg) {
  * ------------------------------------------
  */
 
-hg_return_t rpc_handler_notify(hg_handle_t h)
+hg_return_t rpc_handler_post(hg_handle_t h)
 {
     rpc_query_in arg;
     HG_Get_input(h, &arg);
-    printf("RPC - notify: rank: %d, %s %d, %d\n", arg.rank, arg.filename, arg.offset/1024/1024, arg.count/1024/1024);
-    tangram_ms_handle_notify(arg.rank, arg.filename, arg.offset, arg.count);
+    printf("RPC - post: rank: %d, %s %d, %d\n", arg.rank, arg.filename, arg.offset/1024/1024, arg.count/1024/1024);
+    tangram_ms_handle_post(arg.rank, arg.filename, arg.offset, arg.count);
 
     HG_Free_input(h, &arg);
 
