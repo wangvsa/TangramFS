@@ -62,18 +62,10 @@ FILE* TANGRAM_WRAP(fopen)(const char *filename, const char *mode)
 int TANGRAM_WRAP(fseek)(FILE *stream, long int offset, int origin)
 {
     TFS_File* tf = stream2tf(stream);
-    if(!tf)
-        return TANGRAM_REAL_CALL(fseek)(stream, offset, origin);
+    if(tf)
+        return tfs_seek(tf, offset, origin);
 
-    if(origin == SEEK_SET) {
-        tf->offset = offset;
-    } else if(origin == SEEK_CUR) {
-        tf->offset += offset;
-    } else if(origin == SEEK_END) {
-        printf("Seek to the end is not supported yet");
-    }
-
-    return 0;
+    return TANGRAM_REAL_CALL(fseek)(stream, offset, origin);
 }
 
 size_t TANGRAM_WRAP(fwrite)(const void *ptr, size_t size, size_t count, FILE * stream)
@@ -131,6 +123,16 @@ int TANGRAM_WRAP(open)(const char *pathname, int flags, ...)
     } else {
         return TANGRAM_REAL_CALL(open)(pathname, flags);
     }
+}
+
+off_t TANGRAM_WRAP(lseek)(int fd, off_t offset, int whence) 
+{
+    TFS_File* tf = fd2tf(fd);
+    if(tf)
+        return tfs_seek(tf, offset, whence);
+
+    MAP_OR_FAIL(lseek);
+    return TANGRAM_REAL_CALL(lseek)(fd, offset, whence);
 }
 
 ssize_t TANGRAM_WRAP(write)(int fd, const void *buf, size_t count)

@@ -48,6 +48,7 @@ void tfs_init(const char* persist_dir, const char* buffer_dir) {
 
     MAP_OR_FAIL(open);
     MAP_OR_FAIL(close);
+    MAP_OR_FAIL(lseek); 
     
     tfs.initialized = true;
 }
@@ -86,7 +87,7 @@ size_t tfs_write(TFS_File* tf, const void* buf, size_t size) {
     int num_overlaps, i, overlap_type;
 
     size_t local_offset, res;
-    local_offset = lseek(tf->local_fd, 0, SEEK_END);
+    local_offset = TANGRAM_REAL_CALL(lseek)(tf->local_fd, 0, SEEK_END);
 
     Interval *interval = tangram_it_new(tf->offset, size, local_offset);
     Interval** overlaps = tangram_it_overlaps(tf->it, interval, &overlap_type, &num_overlaps);

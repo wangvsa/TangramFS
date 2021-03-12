@@ -18,6 +18,10 @@ void test_passive_mode() {
 
     char* data = malloc(sizeof(char)*DATA_SIZE);
     double tstart = MPI_Wtime();
+
+    size_t offset = rank * DATA_SIZE * N;
+    lseek(fd, offset, SEEK_SET);
+
     int i;
     for(i = 0; i < N; i++)
         write(fd, data, DATA_SIZE);

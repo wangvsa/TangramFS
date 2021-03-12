@@ -35,7 +35,9 @@ TANGRAM_DECL_REAL_CALL(fseek, int, (FILE *stream, long int offset, int origin));
 TANGRAM_DECL_REAL_CALL(fwrite, size_t, (const void *ptr, size_t size, size_t count, FILE* stream));
 TANGRAM_DECL_REAL_CALL(fread, size_t, (void * ptr, size_t size, size_t count, FILE* stream));
 TANGRAM_DECL_REAL_CALL(fclose, int, (FILE* stream));
+
 TANGRAM_DECL_REAL_CALL(open, int, (const char *pathname, int flags, ...));
+TANGRAM_DECL_REAL_CALL(lseek, off_t, (int fd, off_t offset, int whence));
 TANGRAM_DECL_REAL_CALL(write, ssize_t, (int fd, const void *buf, size_t count));
 TANGRAM_DECL_REAL_CALL(read, ssize_t, (int fd, void *buf, size_t count));
 TANGRAM_DECL_REAL_CALL(close, int, (int fd));
