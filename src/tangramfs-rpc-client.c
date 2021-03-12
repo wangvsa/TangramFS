@@ -179,8 +179,6 @@ hg_return_t rpc_query_callback(const struct hg_cb_info *info)
 
     rpc_query_out out;
     HG_Get_output(handle, &out);
-    printf("out from query: %d\n", out.rank);
-
     HG_Free_output(handle, &out);
 
     signal_main_thread();

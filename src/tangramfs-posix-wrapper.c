@@ -79,7 +79,7 @@ size_t TANGRAM_WRAP(fwrite)(const void *ptr, size_t size, size_t count, FILE * s
 {
     TFS_File *tf = stream2tf(stream);
     if(!tf)
-        tfs_write(tf, ptr, tf->offset, count*size);
+        tfs_write(tf, ptr, count*size);
 
     MAP_OR_FAIL(fwrite);
     return TANGRAM_REAL_CALL(fwrite)(ptr, size, count, stream);
@@ -89,7 +89,7 @@ size_t TANGRAM_WRAP(fread)(void * ptr, size_t size, size_t count, FILE * stream)
 {
     TFS_File *tf = stream2tf(stream);
     if(tf) 
-        return tfs_read(tf, ptr, tf->offset, count*size);
+        return tfs_read(tf, ptr, count*size);
 
     MAP_OR_FAIL(fread);
     return TANGRAM_REAL_CALL(fread)(ptr, size, count, stream);
@@ -136,7 +136,7 @@ ssize_t TANGRAM_WRAP(write)(int fd, const void *buf, size_t count)
 {
     TFS_File* tf = fd2tf(fd);
     if(tf)
-        return tfs_write(tf, buf, tf->offset, count);
+        return tfs_write(tf, buf, count);
 
     MAP_OR_FAIL(write);
     return TANGRAM_REAL_CALL(write)(fd, buf, count);
@@ -146,7 +146,7 @@ ssize_t TANGRAM_WRAP(read)(int fd, void *buf, size_t count)
 {
     TFS_File* tf = fd2tf(fd);
     if(tf)
-        return tfs_read(tf, buf, tf->offset, count);
+        return tfs_read(tf, buf, count);
 
     MAP_OR_FAIL(read);
     return TANGRAM_REAL_CALL(read)(fd, buf, count);
@@ -165,12 +165,11 @@ int TANGRAM_WRAP(close)(int fd) {
     return TANGRAM_REAL_CALL(close)(fd);
 }
 
-
 void init_tfs() {
-    const char* buffer_dir = getenv("TANGRAM_BUFFER_DIR");
     const char* persist_dir = getenv("TANGRAM_PERSIST_DIR");
-    if(!buffer_dir || !persist_dir) {
-        printf("Please set TANGRAM_PERSIST_DIR and TANGRAM_PERSIST_DIR\n");
+    const char* buffer_dir = getenv("TANGRAM_BUFFER_DIR");
+    if(!persist_dir || !buffer_dir) {
+        printf("Please set TANGRAM_PERSIST_DIR and TANGRAM_BUFFER_DIR\n");
     } else {
         tfs_init(persist_dir, buffer_dir);
     }

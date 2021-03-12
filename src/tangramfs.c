@@ -69,14 +69,14 @@ TFS_File* tfs_open(const char* pathname) {
     return tf;
 }
 
-size_t tfs_write(TFS_File* tf, const void* buf, size_t offset, size_t size) {
+size_t tfs_write(TFS_File* tf, const void* buf, size_t size) {
 
     int num_overlaps, i, overlap_type;
 
     size_t local_offset, res;
     local_offset = lseek(tf->local_fd, 0, SEEK_END);
 
-    Interval *interval = tangram_it_new(offset, size, local_offset);
+    Interval *interval = tangram_it_new(tf->offset, size, local_offset);
     Interval** overlaps = tangram_it_overlaps(tf->it, interval, &overlap_type, &num_overlaps);
 
     Interval *old, *start, *end;
@@ -94,7 +94,7 @@ size_t tfs_write(TFS_File* tf, const void* buf, size_t offset, size_t size) {
         // Only need to update the old content
         case IT_COVERED_BY_ONE:
             old = overlaps[0];
-            local_offset = old->local_offset+(offset - old->offset);
+            local_offset = old->local_offset+(tf->offset - old->offset);
             res = pwrite(tf->local_fd, buf, size, local_offset);
             tangram_free(interval, sizeof(Interval));
             break;
@@ -134,21 +134,21 @@ size_t tfs_write(TFS_File* tf, const void* buf, size_t offset, size_t size) {
     return res;
 }
 
-size_t tfs_read(TFS_File* tf, void* buf, size_t offset, size_t size) {
-    tfs_query(tf, offset, size);
+size_t tfs_read(TFS_File* tf, void* buf, size_t size) {
+    tfs_query(tf, tf->offset, size);
     tf->offset += size;
     return 0;
 }
 
-size_t tfs_read_lazy(TFS_File* tf, void* buf, size_t offset, size_t size) {
+size_t tfs_read_lazy(TFS_File* tf, void* buf, size_t size) {
     size_t res;
     size_t local_offset;
-    bool found = tangram_it_query(tf->it, offset, size, &local_offset);
+    bool found = tangram_it_query(tf->it, tf->offset, size, &local_offset);
 
     if(found)
         res = pread(tf->local_fd, buf, size, local_offset);
     else
-        res = tfs_read(tf, buf, offset, size);
+        res = tfs_read(tf, buf, size);
 
     tf->offset += size;
     return res;

@@ -30,7 +30,7 @@ int main(int argc, char* argv[]) {
     double tstart = MPI_Wtime();
     int i;
     for(i = 0; i < N; i++) {
-        tfs_write(tf, data, size*DATA_SIZE*i+rank*DATA_SIZE, DATA_SIZE);
+        tfs_write(tf, data, DATA_SIZE);
         tfs_notify(tf, size*DATA_SIZE*i+rank*DATA_SIZE, DATA_SIZE);
     }
 
@@ -47,7 +47,7 @@ int main(int argc, char* argv[]) {
         // read neighbor rank's data
         int neighbor_rank = (rank + 1) % size;
         size_t offset = size*DATA_SIZE*i + neighbor_rank*DATA_SIZE;
-        tfs_read_lazy(tf, data, offset, DATA_SIZE);
+        tfs_read_lazy(tf, data, DATA_SIZE);
     }
 
     MPI_Barrier(MPI_COMM_WORLD);
