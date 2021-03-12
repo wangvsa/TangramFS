@@ -21,7 +21,7 @@ int main(int argc, char* argv[]) {
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
     //tfs_init("./", "/l/ssd");
-    tfs_init("./", "/tmp");
+    tfs_init("./chen/", "/tmp");
 
     TFS_File* tf = tfs_open("./test.txt", "w");
 

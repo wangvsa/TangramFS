@@ -1,3 +1,5 @@
+#define _GNU_SOURCE
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -7,13 +9,14 @@
 #include "tangramfs.h"
 #include "tangramfs-utils.h"
 #include "tangramfs-rpc.h"
+#include "tangramfs-posix-wrapper.h"
 
 typedef struct TFS_Info_t {
     int mpi_rank;
     int mpi_size;
     MPI_Comm mpi_comm;
-    char buffer_dir[128];
-    char persist_dir[128];
+    char buffer_dir[PATH_MAX];
+    char persist_dir[PATH_MAX];
 } TFS_Info;
 
 static TFS_Info tfs;
@@ -23,8 +26,8 @@ void tfs_init(const char* persist_dir, const char* buffer_dir) {
     MPI_Comm_rank(tfs.mpi_comm, &tfs.mpi_rank);
     MPI_Comm_size(tfs.mpi_comm, &tfs.mpi_size);
 
-    strcpy(tfs.persist_dir, persist_dir);
-    strcpy(tfs.buffer_dir, buffer_dir);
+    realpath(persist_dir, tfs.persist_dir);
+    realpath(buffer_dir, tfs.buffer_dir);
 
     char server_addr[128] = {0};
 
@@ -35,6 +38,9 @@ void tfs_init(const char* persist_dir, const char* buffer_dir) {
 
     MPI_Bcast(server_addr, 128, MPI_BYTE, 0, tfs.mpi_comm);
     tangram_rpc_client_start(server_addr);
+
+    MAP_OR_FAIL(open);
+    MAP_OR_FAIL(close);
 }
 
 void tfs_finalize() {
@@ -50,31 +56,31 @@ TFS_File* tfs_open(const char* pathname, const char* mode) {
     tf->it = tangram_malloc(sizeof(IntervalTree));
     tangram_it_init(tf->it);
 
-    char filename[256];
+    char filename[PATH_MAX];
     sprintf(filename, "%s/_tfs_tmpfile.%d", tfs.buffer_dir, tfs.mpi_rank);
-    tf->local_fd = open(filename, O_CREAT|O_RDWR, S_IRWXU);
+    tf->local_fd = TANGRAM_REAL_CALL(open)(filename, O_CREAT|O_RDWR, S_IRWXU);
     return tf;
 }
 
-void tfs_write(TFS_File* tf, const void* buf, size_t offset, size_t size) {
+size_t tfs_write(TFS_File* tf, const void* buf, size_t offset, size_t size) {
 
-    int res, num_overlaps, i;
+    int num_overlaps, i, overlap_type;
 
-    size_t local_offset;
+    size_t local_offset, res;
     local_offset = lseek(tf->local_fd, 0, SEEK_END);
 
     Interval *interval = tangram_it_new(offset, size, local_offset);
-    Interval** overlaps = tangram_it_overlaps(tf->it, interval, &res, &num_overlaps);
+    Interval** overlaps = tangram_it_overlaps(tf->it, interval, &overlap_type, &num_overlaps);
 
     Interval *old, *start, *end;
 
-    switch(res) {
+    switch(overlap_type) {
         // 1. No overlap
         // Write the data at the end of the local file
         // Insert the new interval
         case IT_NO_OVERLAP:
             tangram_it_insert(tf->it, interval);
-            size_t res = pwrite(tf->local_fd, buf, size, local_offset);
+            res = pwrite(tf->local_fd, buf, size, local_offset);
             break;
         // 2. Have exactly one overlap
         // The old interval fully covers the new one
@@ -82,7 +88,7 @@ void tfs_write(TFS_File* tf, const void* buf, size_t offset, size_t size) {
         case IT_COVERED_BY_ONE:
             old = overlaps[0];
             local_offset = old->local_offset+(offset - old->offset);
-            pwrite(tf->local_fd, buf, size, local_offset);
+            res = pwrite(tf->local_fd, buf, size, local_offset);
             tangram_free(interval, sizeof(Interval));
             break;
         // 3. The new interval fully covers several old ones
@@ -91,7 +97,7 @@ void tfs_write(TFS_File* tf, const void* buf, size_t offset, size_t size) {
             for(i = 0; i < num_overlaps; i++)
                 tangram_it_delete(tf->it, overlaps[i]);
             tangram_it_insert(tf->it, interval);
-            pwrite(tf->local_fd, buf, size, local_offset);
+            res = pwrite(tf->local_fd, buf, size, local_offset);
             break;
         case IT_PARTIAL_COVERED:
             printf("IT_PARTIAL_COVERED: Not handled\n");
@@ -118,23 +124,27 @@ void tfs_write(TFS_File* tf, const void* buf, size_t offset, size_t size) {
 
     fsync(tf->local_fd);
     tf->offset += size;
+    return res;
 }
 
-void tfs_read(TFS_File* tf, void* buf, size_t offset, size_t size) {
+size_t tfs_read(TFS_File* tf, void* buf, size_t offset, size_t size) {
     tfs_query(tf, offset, size);
     tf->offset += size;
+    return 0;
 }
 
-void tfs_read_lazy(TFS_File* tf, void* buf, size_t offset, size_t size) {
+size_t tfs_read_lazy(TFS_File* tf, void* buf, size_t offset, size_t size) {
+    size_t res;
     size_t local_offset;
     bool found = tangram_it_query(tf->it, offset, size, &local_offset);
 
-    if(found) {
-        pread(tf->local_fd, buf, size, local_offset);
-    } else {
-        tfs_read(tf, buf, offset, size);
-    }
+    if(found)
+        res = pread(tf->local_fd, buf, size, local_offset);
+    else
+        res = tfs_read(tf, buf, offset, size);
+
     tf->offset += size;
+    return res;
 }
 
 void tfs_notify(TFS_File* tf, size_t offset, size_t size) {
@@ -145,13 +155,23 @@ void tfs_query(TFS_File* tf, size_t offset, size_t size) {
     tangram_rpc_issue_rpc(RPC_NAME_QUERY, tf->filename, tfs.mpi_rank, offset, size);
 }
 
-void tfs_close(TFS_File* tf) {
-    close(tf->local_fd);
+int tfs_close(TFS_File* tf) {
+    int res = TANGRAM_REAL_CALL(close)(tf->local_fd);
     tangram_it_finalize(tf->it);
 
     tangram_free(tf->it, sizeof(Interval));
     tangram_free(tf, sizeof(TFS_File));
     tf = NULL;
+
+    return res;
 }
 
+bool tangram_should_intercept(const char* filename) {
+    // Not initialized yet
+    if(strlen(tfs.persist_dir) == 0)
+        return false;
 
+    char abs_path[PATH_MAX];
+    realpath(filename, abs_path);
+    return strncmp(tfs.persist_dir, abs_path, strlen(tfs.persist_dir)) == 0;
+}
