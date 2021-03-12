@@ -9,25 +9,18 @@
 static int DATA_SIZE = 16*MB;
 static int N = 5;
 
+int size, rank;
 
-/*
-void test_active_mode() {
-    //tfs_init("./", "/l/ssd");
-    tfs_init("./", "/tmp");
-
-
-    TFS_File* tf = tfs_open("./test.txt", "w");
-
+void test_passive_mode() {
     MPI_Barrier(MPI_COMM_WORLD);
 
+    int fd = open("./chen/test.txt", O_RDWR);
 
     char* data = malloc(sizeof(char)*DATA_SIZE);
     double tstart = MPI_Wtime();
     int i;
     for(i = 0; i < N; i++) {
-        tfs_write(tf, data, DATA_SIZE, size*DATA_SIZE*i+rank*DATA_SIZE);
-        if(rank != 0)
-            tfs_notify(tf, size*DATA_SIZE*i+rank*DATA_SIZE, DATA_SIZE);
+        write(fd, data, DATA_SIZE);
     }
 
     MPI_Barrier(MPI_COMM_WORLD);
@@ -38,10 +31,9 @@ void test_active_mode() {
         printf("Bandwidth: %.2f MB/s\n", DATA_SIZE/MB*size*N/(tend-tstart));
     }
 
-
     tstart = MPI_Wtime();
     for(i = 0; i < N; i++)
-        tfs_read_lazy(tf, data, DATA_SIZE, size*DATA_SIZE*i+rank*DATA_SIZE);
+        read(fd, data, DATA_SIZE);
 
     MPI_Barrier(MPI_COMM_WORLD);
     tend = MPI_Wtime();
@@ -51,23 +43,19 @@ void test_active_mode() {
         printf("Bandwidth: %.2f MB/s\n", DATA_SIZE/MB*size*N/(tend-tstart));
     }
 
-    tfs_close(tf);
-
-    tfs_finalize();
+    close(fd);
 }
-*/
 
 
 int main(int argc, char* argv[]) {
-    int size, rank, provided;
+    int provided;
 
     // Have to use MPI_THREAD_MULTIPLE for Mercury+pthread to work
     MPI_Init_thread(&argc, &argv, MPI_THREAD_MULTIPLE, &provided);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
-    int fd = open("./chen/test.txt", O_RDWR);
-    close(fd);
+    test_passive_mode();
 
     MPI_Finalize();
     return 0;
