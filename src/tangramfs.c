@@ -17,6 +17,8 @@ typedef struct TFS_Info_t {
     MPI_Comm mpi_comm;
     char buffer_dir[PATH_MAX];
     char persist_dir[PATH_MAX];
+
+    bool initialized;
 } TFS_Info;
 
 static TFS_Info tfs;
@@ -41,9 +43,14 @@ void tfs_init(const char* persist_dir, const char* buffer_dir) {
 
     MAP_OR_FAIL(open);
     MAP_OR_FAIL(close);
+    
+    tfs.initialized = true;
 }
 
 void tfs_finalize() {
+    if(!tfs.initialized)
+        return;
+
     if(tfs.mpi_rank == 0)
         tangram_rpc_server_stop();
     tangram_rpc_client_stop();
@@ -168,8 +175,9 @@ int tfs_close(TFS_File* tf) {
 
 bool tangram_should_intercept(const char* filename) {
     // Not initialized yet
-    if(strlen(tfs.persist_dir) == 0)
+    if(!tfs.initialized) {
         return false;
+    }
 
     char abs_path[PATH_MAX];
     realpath(filename, abs_path);

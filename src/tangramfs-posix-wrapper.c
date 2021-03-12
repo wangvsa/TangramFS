@@ -7,6 +7,7 @@
 #include <stdarg.h>
 #include <fcntl.h>
 #include <linux/limits.h>
+#include <mpi.h>
 #include "uthash.h"
 #include "tangramfs.h"
 #include "tangramfs-posix-wrapper.h"
@@ -162,4 +163,32 @@ int TANGRAM_WRAP(close)(int fd) {
 
     MAP_OR_FAIL(close);
     return TANGRAM_REAL_CALL(close)(fd);
+}
+
+
+void init_tfs() {
+    const char* buffer_dir = getenv("TANGRAM_BUFFER_DIR");
+    const char* persist_dir = getenv("TANGRAM_PERSIST_DIR");
+    if(!buffer_dir || !persist_dir) {
+        printf("Please set TANGRAM_PERSIST_DIR and TANGRAM_PERSIST_DIR\n");
+    } else {
+        tfs_init(persist_dir, buffer_dir);
+    }
+}
+
+int MPI_Init(int *argc, char ***argv) {
+    int res = PMPI_Init(argc, argv);
+    init_tfs();
+    return res;
+}
+
+int MPI_Init_thread(int *argc, char ***argv, int required, int *provided) {
+    int res = PMPI_Init_thread(argc, argv, required, provided);
+    init_tfs();
+    return res;
+}
+
+int MPI_Finalize() {
+    tfs_finalize();
+    return PMPI_Finalize();
 }

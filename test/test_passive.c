@@ -1,13 +1,13 @@
 #include <stdlib.h>
 #include <stdio.h>
+#include <fcntl.h>
+#include <unistd.h>
 #include "mpi.h"
 
 #define MB (1024*1024)
 
 static int DATA_SIZE = 16*MB;
 static int N = 5;
-
-
 
 
 /*
@@ -66,8 +66,8 @@ int main(int argc, char* argv[]) {
     MPI_Comm_size(MPI_COMM_WORLD, &size);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
-    FILE* f = fopen("./test.txt", "w");
-    fclose(f);
+    int fd = open("./chen/test.txt", O_RDWR);
+    close(fd);
 
     MPI_Finalize();
     return 0;
