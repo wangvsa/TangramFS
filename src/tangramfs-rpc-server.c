@@ -15,11 +15,9 @@ static hg_context_t*   hg_context = NULL;
 pthread_t server_progress_thread;
 static int running;
 
-
 // List of RPC handlers
 hg_return_t rpc_handler_notify(hg_handle_t h);
 hg_return_t rpc_handler_query(hg_handle_t h);
-
 
 void  mercury_server_init(char* server_addr);
 void  mercury_server_finalize();
@@ -63,7 +61,6 @@ void mercury_server_init(char* server_addr) {
 
     hg_context = HG_Context_create(hg_class);
     assert(hg_context != NULL);
-
 }
 
 void mercury_server_finalize() {

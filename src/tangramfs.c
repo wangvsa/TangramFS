@@ -18,20 +18,23 @@ typedef struct TFS_Info_t {
     char buffer_dir[PATH_MAX];
     char persist_dir[PATH_MAX];
 
+    int semantics;  // Strong, Session or Commit; only needed in passive mode.
     bool initialized;
-    int semantics;  // Strong, Session, Commit, Custom
 } TFS_Info;
 
 static TFS_Info tfs;
 
-void tfs_init(const char* persist_dir, const char* buffer_dir, int semantics) {
+void tfs_init(const char* persist_dir, const char* buffer_dir) {
     MPI_Comm_dup(MPI_COMM_WORLD, &tfs.mpi_comm);
     MPI_Comm_rank(tfs.mpi_comm, &tfs.mpi_rank);
     MPI_Comm_size(tfs.mpi_comm, &tfs.mpi_size);
 
     realpath(persist_dir, tfs.persist_dir);
     realpath(buffer_dir, tfs.buffer_dir);
-    tfs.semantics = semantics;
+
+    const char* semantics_str = getenv("TANGRAM_SEMANTICS");
+    if(semantics_str)
+        tfs.semantics = atoi(semantics_str);
 
     char server_addr[128] = {0};
 

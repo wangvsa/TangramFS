@@ -17,7 +17,7 @@ typedef struct TFS_File_t {
     IntervalTree *it;
 } TFS_File;
 
-void tfs_init(const char* persist_dir, const char* buffer_dir, int semantics);
+void tfs_init(const char* persist_dir, const char* buffer_dir);
 void tfs_finalize();
 
 TFS_File* tfs_open(const char* pathname);

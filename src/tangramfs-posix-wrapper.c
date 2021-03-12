@@ -180,15 +180,10 @@ int TANGRAM_WRAP(close)(int fd) {
 void init_tfs() {
     const char* persist_dir = getenv("TANGRAM_PERSIST_DIR");
     const char* buffer_dir = getenv("TANGRAM_BUFFER_DIR");
-    const char* semantics_str = getenv("TANGRAM_SEMANTICS");
-    if(!persist_dir || !buffer_dir) {
+    if(!persist_dir || !buffer_dir)
         printf("Please set TANGRAM_PERSIST_DIR and TANGRAM_BUFFER_DIR\n");
-    } else {
-        int semantics = TANGRAM_STRONG_SEMANTICS;
-        if(semantics_str)
-            semantics = atoi(semantics_str);
-        tfs_init(persist_dir, buffer_dir, semantics);
-    }
+    else
+        tfs_init(persist_dir, buffer_dir);
 }
 
 
