@@ -2,6 +2,13 @@
 #define __TANGRAM_FS_H__
 #include "tangramfs-interval-tree.h"
 
+#define TANGRAM_STRONG_SEMANTICS        1
+#define TANGRAM_COMMIT_SEMANTICS        2
+#define TANGRAM_SESSION_SEMANTICS       3
+#define TANGRAM_CUSTOM_SEMANTICS        4
+
+
+
 typedef struct TFS_File_t {
     char filename[256]; // file name of the targeting file
     size_t offset;      // offset of the targeting file in this process
@@ -10,7 +17,7 @@ typedef struct TFS_File_t {
     IntervalTree *it;
 } TFS_File;
 
-void tfs_init(const char* persist_dir, const char* buffer_dir);
+void tfs_init(const char* persist_dir, const char* buffer_dir, int semantics);
 void tfs_finalize();
 
 TFS_File* tfs_open(const char* pathname);
@@ -22,6 +29,7 @@ size_t tfs_read_lazy(TFS_File* tf, void* buf, size_t size);
 size_t tfs_seek(TFS_File* tf, size_t offset, int whence);
 
 void tfs_notify(TFS_File* tf, size_t offset, size_t count);
+void tfs_post_all(TFS_File* tf);
 void tfs_query(TFS_File* tf, size_t offset, size_t count);
 
 /*
@@ -29,5 +37,6 @@ void tfs_query(TFS_File* tf, size_t offset, size_t count);
  * intercept the call according to the file path
  */
 bool tangram_should_intercept(const char* filename);
+int tangram_get_semantics();
 
 #endif

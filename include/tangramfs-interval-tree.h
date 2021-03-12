@@ -14,6 +14,7 @@ typedef struct Interval_t {
     size_t count;                // count of bytes
     size_t local_offset;         // offset of the local file
     struct Interval_t *next;
+    bool posted;
 } Interval;
 
 
@@ -51,6 +52,10 @@ Interval* tangram_it_new(size_t offset, size_t count, size_t local_offset);
  */
 Interval** tangram_it_overlaps(IntervalTree* it, Interval* interval, int *res, int *num_overlaps);
 
+/**
+ * Return a list of unposted intervals
+ */
+Interval** tangram_it_unposted(IntervalTree* it, int* num_unposted);
 
 /**
  * Query an range

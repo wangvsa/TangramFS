@@ -19,17 +19,19 @@ typedef struct TFS_Info_t {
     char persist_dir[PATH_MAX];
 
     bool initialized;
+    int semantics;  // Strong, Session, Commit, Custom
 } TFS_Info;
 
 static TFS_Info tfs;
 
-void tfs_init(const char* persist_dir, const char* buffer_dir) {
+void tfs_init(const char* persist_dir, const char* buffer_dir, int semantics) {
     MPI_Comm_dup(MPI_COMM_WORLD, &tfs.mpi_comm);
     MPI_Comm_rank(tfs.mpi_comm, &tfs.mpi_rank);
     MPI_Comm_size(tfs.mpi_comm, &tfs.mpi_size);
 
     realpath(persist_dir, tfs.persist_dir);
     realpath(buffer_dir, tfs.buffer_dir);
+    tfs.semantics = semantics;
 
     char server_addr[128] = {0};
 
@@ -94,6 +96,7 @@ size_t tfs_write(TFS_File* tf, const void* buf, size_t size) {
         // Only need to update the old content
         case IT_COVERED_BY_ONE:
             old = overlaps[0];
+            old->posted = false;
             local_offset = old->local_offset+(tf->offset - old->offset);
             res = pwrite(tf->local_fd, buf, size, local_offset);
             tangram_free(interval, sizeof(Interval));
@@ -164,8 +167,16 @@ size_t tfs_seek(TFS_File *tf, size_t offset, int whence) {
     return tf->offset;
 }
 
-void tfs_notify(TFS_File* tf, size_t offset, size_t size) {
-    tangram_rpc_issue_rpc(RPC_NAME_NOTIFY, tf->filename, tfs.mpi_rank, offset, size);
+void tfs_notify(TFS_File* tf, size_t offset, size_t count) {
+    tangram_rpc_issue_rpc(RPC_NAME_NOTIFY, tf->filename, tfs.mpi_rank, offset, count);
+}
+
+void tfs_post_all(TFS_File* tf) {
+    int num;
+    Interval** unposted = tangram_it_unposted(tf->it, &num);
+    for(int i = 0; i < num; i++) {
+        tfs_notify(tf, unposted[i]->offset, unposted[i]->count);
+    }
 }
 
 void tfs_query(TFS_File* tf, size_t offset, size_t size) {
@@ -192,4 +203,8 @@ bool tangram_should_intercept(const char* filename) {
     char abs_path[PATH_MAX];
     realpath(filename, abs_path);
     return strncmp(tfs.persist_dir, abs_path, strlen(tfs.persist_dir)) == 0;
+}
+
+int tangram_get_semantics() {
+    return tfs.semantics;
 }

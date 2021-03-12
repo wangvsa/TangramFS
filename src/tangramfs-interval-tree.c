@@ -51,6 +51,7 @@ Interval* tangram_it_new(size_t offset, size_t count, size_t local_offset) {
     interval->offset = offset;
     interval->count = count;
     interval->local_offset = local_offset;
+    interval->posted = false;
     return interval;
 }
 
@@ -107,6 +108,26 @@ Interval** tangram_it_overlaps(IntervalTree* it, Interval* interval, int *res, i
     *res = IT_PARTIAL_COVERED;
     return overlaps;
 }
+
+Interval** tangram_it_unposted(IntervalTree *it, int *num) {
+    int count = 0;
+    Interval* interval;
+    LL_FOREACH(it->head, interval) {
+        if(!interval->posted)
+            count++;
+    }
+
+    int i = 0;
+    *num = count;
+    Interval** unposted = tangram_malloc(sizeof(Interval*) * count);
+    LL_FOREACH(it->head, interval) {
+        if(!interval->posted)
+            unposted[i++] = interval;
+    }
+
+    return unposted;
+}
+
 
 bool tangram_it_query(IntervalTree *it, size_t offset, size_t count, size_t *local_offset) {
     bool found = false;
