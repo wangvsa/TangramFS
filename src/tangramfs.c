@@ -56,6 +56,10 @@ void tfs_finalize() {
     if(!tfs.initialized)
         return;
 
+    // Need to have a barrier here because we can not allow
+    // server stoped before all other clients
+    MPI_Barrier(tfs.mpi_comm);
+
     if(tfs.mpi_rank == 0)
         tangram_rpc_server_stop();
     tangram_rpc_client_stop();
@@ -66,11 +70,14 @@ TFS_File* tfs_open(const char* pathname) {
     TFS_File* tf = tangram_malloc(sizeof(TFS_File));
     strcpy(tf->filename, pathname);
     tf->it = tangram_malloc(sizeof(IntervalTree));
+    tf->offset = 0;
     tangram_it_init(tf->it);
+
 
     char filename[PATH_MAX+64];
     sprintf(filename, "%s/_tfs_tmpfile.%d", tfs.buffer_dir, tfs.mpi_rank);
     tf->local_fd = TANGRAM_REAL_CALL(open)(filename, O_CREAT|O_RDWR, S_IRWXU);
+
     return tf;
 }
 
@@ -180,6 +187,7 @@ void tfs_post_all(TFS_File* tf) {
     for(int i = 0; i < num; i++) {
         tfs_notify(tf, unposted[i]->offset, unposted[i]->count);
     }
+    tangram_free(unposted, num*sizeof(Interval*));
 }
 
 void tfs_query(TFS_File* tf, size_t offset, size_t size) {

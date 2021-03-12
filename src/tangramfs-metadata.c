@@ -6,7 +6,7 @@
 
 
 typedef struct GlobalIntervalTreeEntry_t {
-    char filename[128];
+    char filename[256];
     GlobalIntervalTree global_it;
     UT_hash_handle hh;
 } GlobalIntervalTreeEntry;

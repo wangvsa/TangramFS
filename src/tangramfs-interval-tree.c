@@ -121,8 +121,9 @@ Interval** tangram_it_unposted(IntervalTree *it, int *num) {
     *num = count;
     Interval** unposted = tangram_malloc(sizeof(Interval*) * count);
     LL_FOREACH(it->head, interval) {
-        if(!interval->posted)
+        if(!interval->posted) {
             unposted[i++] = interval;
+        }
     }
 
     return unposted;
