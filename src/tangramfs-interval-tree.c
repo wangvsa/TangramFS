@@ -129,7 +129,6 @@ Interval** tangram_it_unposted(IntervalTree *it, int *num) {
     return unposted;
 }
 
-
 bool tangram_it_query(IntervalTree *it, size_t offset, size_t count, size_t *local_offset) {
     bool found = false;
     Interval *interval;
@@ -144,4 +143,29 @@ bool tangram_it_query(IntervalTree *it, size_t offset, size_t count, size_t *loc
     if(found)
         *local_offset = interval->local_offset + (offset-interval->offset);
     return found;
+}
+
+
+Interval** tangram_it_covers(IntervalTree *it, size_t offset, size_t count, int *num_covered) {
+    Interval i2 = {
+        .offset = offset,
+        .count = count,
+    };
+
+    int n = 0; int i = 0;
+    Interval* i1;
+    LL_FOREACH(it->head, i1) {
+        if(is_covered(i1, &i2))
+            n++;
+    }
+
+    *num_covered = n;
+    Interval** covered = tangram_malloc(sizeof(Interval*) * n);
+
+    LL_FOREACH(it->head, i1) {
+        if(is_covered(i1, &i2))
+            covered[i++] = i1;
+    }
+
+    return covered;
 }

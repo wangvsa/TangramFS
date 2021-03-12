@@ -177,10 +177,21 @@ size_t tfs_seek(TFS_File *tf, size_t offset, int whence) {
     return tf->offset;
 }
 
+// TODO: need to check the range to make sure it is valid.
 void tfs_post(TFS_File* tf, size_t offset, size_t count) {
+    int num_covered;
+    Interval** covered = tangram_it_covers(tf->it, offset, count, &num_covered);
+
     tangram_rpc_issue_rpc(RPC_NAME_POST, tf->filename, tfs.mpi_rank, offset, count);
+
+    for(int i = 0; i < num_covered; i++)
+        covered[i]->posted = true;
+    tangram_free(covered, sizeof(Interval*)*num_covered);
+
 }
 
+// TODO: Currnet implementaion send one rpc for each interval
+// Should combine them and send only one rpc.
 void tfs_post_all(TFS_File* tf) {
     int num;
     Interval** unposted = tangram_it_unposted(tf->it, &num);

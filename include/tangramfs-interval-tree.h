@@ -59,7 +59,18 @@ Interval** tangram_it_unposted(IntervalTree* it, int* num_unposted);
 
 /**
  * Query an range
+ * Return true only if one exisitng interval covers the required range.
+ *
+ * TODO support the case where mulitple intervals consitute the required range.
  */
 bool tangram_it_query(IntervalTree *it, size_t offset, size_t count, size_t *local_offset);
 
+
+/**
+ * Query the intervals that covered by the given range
+ * This is used by tfs_post() to decide which intervals should be set to posted.
+ */
+Interval** tangram_it_covers(IntervalTree *it, size_t offset, size_t count, int *num_covered);
+
 #endif
+
