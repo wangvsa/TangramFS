@@ -13,7 +13,7 @@ typedef struct TFS_File_t {
 void tfs_init(const char* persist_dir, const char* buffer_dir);
 void tfs_finalize();
 
-TFS_File* tfs_open(const char* pathname, const char* mode);
+TFS_File* tfs_open(const char* pathname);
 int tfs_close(TFS_File* tf);
 
 size_t tfs_write(TFS_File* tf, const void* buf, size_t offset, size_t size);

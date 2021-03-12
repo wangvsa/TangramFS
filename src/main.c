@@ -12,8 +12,6 @@ static int N = 4;
 int size, rank, provided;
 
 
-
-
 int main(int argc, char* argv[]) {
     // Have to use MPI_THREAD_MULTIPLE for Mercury+pthread to work
     MPI_Init_thread(&argc, &argv, MPI_THREAD_MULTIPLE, &provided);
@@ -23,7 +21,7 @@ int main(int argc, char* argv[]) {
     //tfs_init("./", "/l/ssd");
     tfs_init("./chen/", "/tmp");
 
-    TFS_File* tf = tfs_open("./test.txt", "w");
+    TFS_File* tf = tfs_open("./test.txt");
 
     MPI_Barrier(MPI_COMM_WORLD);
 

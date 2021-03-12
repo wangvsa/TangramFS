@@ -47,7 +47,7 @@ FILE* TANGRAM_WRAP(fopen)(const char *filename, const char *mode)
 {
     if(tangram_should_intercept(filename)) {
         TFSFileMap *entry = malloc(sizeof(TFSFileMap));
-        entry->tf = tfs_open(filename, mode);
+        entry->tf = tfs_open(filename);
         HASH_ADD_KEYPTR(hh, tf_map, entry->fake_stream, sizeof(FILE), entry);
         return entry->fake_stream;
     }
@@ -113,7 +113,7 @@ int TANGRAM_WRAP(open)(const char *pathname, int flags, ...)
 {
     if(tangram_should_intercept(pathname)) {
         TFSFdMap *entry = malloc(sizeof(TFSFdMap));
-        entry->tf = tfs_open(pathname, NULL);
+        entry->tf = tfs_open(pathname);
         entry->fd = entry->tf->local_fd;
         HASH_ADD_INT(tf_fd_map, fd, entry);
         return entry->fd;

@@ -15,8 +15,8 @@ typedef struct TFS_Info_t {
     int mpi_rank;
     int mpi_size;
     MPI_Comm mpi_comm;
-    char buffer_dir[PATH_MAX];
-    char persist_dir[PATH_MAX];
+    char buffer_dir[512];
+    char persist_dir[512];
 } TFS_Info;
 
 static TFS_Info tfs;
@@ -50,7 +50,7 @@ void tfs_finalize() {
     MPI_Comm_free(&tfs.mpi_comm);
 }
 
-TFS_File* tfs_open(const char* pathname, const char* mode) {
+TFS_File* tfs_open(const char* pathname) {
     TFS_File* tf = tangram_malloc(sizeof(TFS_File));
     strcpy(tf->filename, pathname);
     tf->it = tangram_malloc(sizeof(IntervalTree));
