@@ -169,6 +169,15 @@ int TANGRAM_WRAP(close)(int fd) {
     return TANGRAM_REAL_CALL(close)(fd);
 }
 
+int TANGRAM_WRAP(__xstat)(int vers, const char *path, struct stat *buf)
+{
+    // TODO: stat() call not implemented yet.
+    if(tangram_should_intercept(path))
+        return 0;
+
+    MAP_OR_FAIL(__xstat);
+    return TANGRAM_REAL_CALL(__xstat)(vers, path, buf);
+}
 
 
 

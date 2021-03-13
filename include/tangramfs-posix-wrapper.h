@@ -25,7 +25,7 @@
 #else
     #define TANGRAM_WRAP(func) __avoid_##func
     #define TANGRAM_REAL_CALL(func) func
-    #define MAP_OR_FAIL(func) 
+    #define MAP_OR_FAIL(func)
     #define TANGRAM_DECL_REAL_CALL(name, ret, args)
 #endif
 
@@ -41,6 +41,7 @@ TANGRAM_DECL_REAL_CALL(lseek, off_t, (int fd, off_t offset, int whence));
 TANGRAM_DECL_REAL_CALL(write, ssize_t, (int fd, const void *buf, size_t count));
 TANGRAM_DECL_REAL_CALL(read, ssize_t, (int fd, void *buf, size_t count));
 TANGRAM_DECL_REAL_CALL(close, int, (int fd));
+TANGRAM_DECL_REAL_CALL(__xstat, int, (int vers, const char* path, struct stat* buf));
 
 #endif
 
