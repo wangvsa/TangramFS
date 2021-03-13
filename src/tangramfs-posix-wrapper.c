@@ -58,20 +58,20 @@ FILE* TANGRAM_WRAP(fopen)(const char *filename, const char *mode)
     return TANGRAM_REAL_CALL(fopen)(filename, mode);
 }
 
-
 int TANGRAM_WRAP(fseek)(FILE *stream, long int offset, int origin)
 {
     TFS_File* tf = stream2tf(stream);
     if(tf)
         return tfs_seek(tf, offset, origin);
 
+    MAP_OR_FAIL(fseek);
     return TANGRAM_REAL_CALL(fseek)(stream, offset, origin);
 }
 
 size_t TANGRAM_WRAP(fwrite)(const void *ptr, size_t size, size_t count, FILE * stream)
 {
     TFS_File *tf = stream2tf(stream);
-    if(!tf)
+    if(tf)
         return tangram_write_impl(tf, ptr, count*size);
 
     MAP_OR_FAIL(fwrite);
@@ -81,7 +81,7 @@ size_t TANGRAM_WRAP(fwrite)(const void *ptr, size_t size, size_t count, FILE * s
 size_t TANGRAM_WRAP(fread)(void * ptr, size_t size, size_t count, FILE * stream)
 {
     TFS_File *tf = stream2tf(stream);
-    if(tf) 
+    if(tf)
         return tangram_read_impl(tf, ptr, count*size);
 
     MAP_OR_FAIL(fread);
@@ -125,7 +125,7 @@ int TANGRAM_WRAP(open)(const char *pathname, int flags, ...)
     }
 }
 
-off_t TANGRAM_WRAP(lseek)(int fd, off_t offset, int whence) 
+off_t TANGRAM_WRAP(lseek)(int fd, off_t offset, int whence)
 {
     TFS_File* tf = fd2tf(fd);
     if(tf)
@@ -168,9 +168,6 @@ int TANGRAM_WRAP(close)(int fd) {
     MAP_OR_FAIL(close);
     return TANGRAM_REAL_CALL(close)(fd);
 }
-
-
-
 
 
 
