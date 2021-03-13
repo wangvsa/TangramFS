@@ -48,8 +48,8 @@ void tfs_init(const char* persist_dir, const char* buffer_dir) {
 
     MAP_OR_FAIL(open);
     MAP_OR_FAIL(close);
-    MAP_OR_FAIL(lseek); 
-    
+    MAP_OR_FAIL(lseek);
+
     tfs.initialized = true;
 }
 
@@ -185,7 +185,8 @@ void tfs_post(TFS_File* tf, size_t offset, size_t count) {
 
     tangram_rpc_issue_rpc(RPC_NAME_POST, tf->filename, tfs.mpi_rank, offset, count);
 
-    for(int i = 0; i < num_covered; i++)
+    int i;
+    for(i = 0; i < num_covered; i++)
         covered[i]->posted = true;
     tangram_free(covered, sizeof(Interval*)*num_covered);
 
@@ -194,9 +195,9 @@ void tfs_post(TFS_File* tf, size_t offset, size_t count) {
 // TODO: Currnet implementaion send one rpc for each interval
 // Should combine them and send only one rpc.
 void tfs_post_all(TFS_File* tf) {
-    int num;
+    int num, i;
     Interval** unposted = tangram_it_unposted(tf->it, &num);
-    for(int i = 0; i < num; i++) {
+    for(i = 0; i < num; i++) {
         tfs_post(tf, unposted[i]->offset, unposted[i]->count);
     }
     tangram_free(unposted, num*sizeof(Interval*));

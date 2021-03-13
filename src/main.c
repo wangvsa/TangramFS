@@ -37,7 +37,6 @@ int main(int argc, char* argv[]) {
     // Post all writes in one RPC
     tfs_post(tf, offset, N*DATA_SIZE);
 
-
     MPI_Barrier(MPI_COMM_WORLD);
     double tend = MPI_Wtime();
 

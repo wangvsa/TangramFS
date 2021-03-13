@@ -43,7 +43,8 @@ void tangram_ms_handle_post(int rank, char* filename, size_t offset, size_t coun
 
     int num_overlaps = 0;
     GlobalInterval** overlaps = tangram_global_it_overlaps(global_it, new, &num_overlaps);
-    for(int i = 0; i < num_overlaps ; i++) {
+    int i;
+    for(i = 0; i < num_overlaps ; i++) {
         GlobalInterval *old = overlaps[i];
         if(rank != old->rank) {
             // Case 1. new one fully covers the old one
