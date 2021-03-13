@@ -169,6 +169,17 @@ int TANGRAM_WRAP(close)(int fd) {
     return TANGRAM_REAL_CALL(close)(fd);
 }
 
+int TANGRAM_WRAP(fsync)(int fd) {
+    TFS_File* tf = fd2tf(fd);
+    if(tf)
+        return tangram_commit_impl(tf);
+
+    MAP_OR_FAIL(fsync);
+    return TANGRAM_REAL_CALL(fsync)(fd);
+}
+
+
+
 int TANGRAM_WRAP(__xstat)(int vers, const char *path, struct stat *buf)
 {
     // TODO: stat() call not implemented yet.

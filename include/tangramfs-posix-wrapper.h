@@ -41,6 +41,7 @@ TANGRAM_DECL_REAL_CALL(lseek, off_t, (int fd, off_t offset, int whence));
 TANGRAM_DECL_REAL_CALL(write, ssize_t, (int fd, const void *buf, size_t count));
 TANGRAM_DECL_REAL_CALL(read, ssize_t, (int fd, void *buf, size_t count));
 TANGRAM_DECL_REAL_CALL(close, int, (int fd));
+TANGRAM_DECL_REAL_CALL(fsync, int, (int fd));
 TANGRAM_DECL_REAL_CALL(__xstat, int, (int vers, const char* path, struct stat* buf));
 
 #endif
