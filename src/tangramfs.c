@@ -35,7 +35,6 @@ void tfs_init(const char* persist_dir, const char* buffer_dir) {
     const char* semantics_str = getenv("TANGRAM_SEMANTICS");
     if(semantics_str)
         tfs.semantics = atoi(semantics_str);
-
     char server_addr[128] = {0};
 
     // Rank 0 runs the mercury server

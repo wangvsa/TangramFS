@@ -79,7 +79,9 @@ static inline hg_return_t hg_proc_rpc_post_in(hg_proc_t proc, void* data)
                 tmp  = prev->next;
                 free(prev);
             }
+            break;
     }
+
     ret = HG_SUCCESS;
     return ret;
 }

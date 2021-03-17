@@ -35,8 +35,8 @@ int main(int argc, char* argv[]) {
     for(i = 0; i < N; i++)
         tfs_write(tf, data, DATA_SIZE);
     // Post all writes in one RPC
-    //tfs_post(tf, offset, N*DATA_SIZE);
-    tfs_post_all(tf);
+    tfs_post(tf, offset, N*DATA_SIZE);
+    //tfs_post_all(tf);
     double tend = MPI_Wtime();
 
     double min_tstart, max_tend;

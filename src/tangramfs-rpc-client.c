@@ -104,6 +104,7 @@ void* mercury_client_progress_loop(void* arg) {
 // The main thread calls this and wait for
 // the client progress thread to finish or receive the respond.
 void tangram_rpc_issue_rpc(const char* rpc_name, char* filename, int rank, size_t *offsets, size_t *counts, int len) {
+    if(len <= 0) return;
 
     hg_id_t rpc_id;
     if(strcmp(rpc_name, RPC_NAME_POST) == 0)

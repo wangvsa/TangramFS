@@ -108,7 +108,6 @@ hg_return_t rpc_handler_post(hg_handle_t h)
     tmp = arg;
     char* filename = tmp->filename;
     int rank = tmp->rank;
-
     while(tmp) {
         tangram_ms_handle_post(rank, filename, tmp->offset, tmp->count);
         tmp = tmp->next;
@@ -118,6 +117,7 @@ hg_return_t rpc_handler_post(hg_handle_t h)
 
     hg_return_t ret = HG_Destroy(h);
     assert(ret == HG_SUCCESS);
+
     return HG_SUCCESS;
 }
 
