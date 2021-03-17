@@ -81,7 +81,7 @@ void mercury_register_rpcs() {
      * The third NULL is the pointer to the function (which is on the server,
      * so NULL here on the client).
      */
-    rpc_id_post = MERCURY_REGISTER(hg_class, RPC_NAME_POST, rpc_query_in, void, NULL);
+    rpc_id_post = MERCURY_REGISTER(hg_class, RPC_NAME_POST, rpc_post_in, void, NULL);
     HG_Registered_disable_response(hg_class, rpc_id_post, HG_TRUE);
 
     rpc_id_query = MERCURY_REGISTER(hg_class, RPC_NAME_QUERY, rpc_query_in, rpc_query_out, NULL);
@@ -101,9 +101,9 @@ void* mercury_client_progress_loop(void* arg) {
 }
 
 
-// The main thread calls this and wait for 
+// The main thread calls this and wait for
 // the client progress thread to finish or receive the respond.
-void tangram_rpc_issue_rpc(const char* rpc_name, char* filename, int rank, size_t offset, size_t count) {
+void tangram_rpc_issue_rpc(const char* rpc_name, char* filename, int rank, size_t *offsets, size_t *counts, int len) {
 
     hg_id_t rpc_id;
     if(strcmp(rpc_name, RPC_NAME_POST) == 0)
@@ -117,28 +117,40 @@ void tangram_rpc_issue_rpc(const char* rpc_name, char* filename, int rank, size_
     ret = HG_Create(hg_context, hg_addr, rpc_id, &handle);
     assert(ret == HG_SUCCESS);
 
-    /* Send the RPC. The first NULL correspond to the callback
-     * function to call when receiving the response from the server
-     * (we don't expect a response, hence NULL here).
-     * The second NULL is a pointer to user-specified data that will
-     * be passed to the response callback.
-     * The third NULL is a pointer to the RPC's argument (we don't
-     * use any here).
-     */
-    rpc_query_in in_arg = {
-        .filename = filename,
-        .rank = rank,
-        .offset = offset,
-        .count = count,
-    };
-
     pthread_mutex_lock(&mutex);
 
-    if(strcmp(rpc_name, RPC_NAME_POST) == 0)
-        ret = HG_Forward(handle, rpc_post_callback, NULL, &in_arg);
+    if(strcmp(rpc_name, RPC_NAME_POST) == 0) {
 
-    if(strcmp(rpc_name, RPC_NAME_QUERY) == 0)
+        rpc_post_in arg, tmp[len];
+        int i;
+        for(i = 0; i < len; i++) {
+            tmp[i] = malloc(sizeof(struct rpc_post_in_t));
+            tmp[i]->offset = offsets[i];
+            tmp[i]->count = counts[i];
+            tmp[i]->next = NULL;
+        }
+        for(i = 0; i < len - 1; i++)
+            tmp[i]->next = tmp[i+1];
+
+        arg = tmp[0];
+        arg->filename = filename;
+        arg->rank = rank;
+
+        ret = HG_Forward(handle, rpc_post_callback, NULL, &arg);
+
+        for(i = 0; i < len; i++)
+            free(tmp[i]);
+    }
+
+    if(strcmp(rpc_name, RPC_NAME_QUERY) == 0) {
+        rpc_query_in in_arg = {
+            .filename = filename,
+            .rank = rank,
+            .offset = offsets[0],
+            .count = counts[0],
+        };
         ret = HG_Forward(handle, rpc_query_callback, NULL, &in_arg);
+    }
 
     pthread_cond_wait(&cond, &mutex);
     pthread_mutex_unlock(&mutex);

@@ -48,6 +48,7 @@ void tfs_init(const char* persist_dir, const char* buffer_dir) {
 
     MAP_OR_FAIL(open);
     MAP_OR_FAIL(close);
+    MAP_OR_FAIL(fsync);
     MAP_OR_FAIL(lseek);
 
     tfs.initialized = true;
@@ -143,7 +144,7 @@ size_t tfs_write(TFS_File* tf, const void* buf, size_t size) {
     if(overlaps)
         tangram_free(overlaps, sizeof(Interval*)*num_overlaps);
 
-    fsync(tf->local_fd);
+    TANGRAM_REAL_CALL(fsync)(tf->local_fd);
     tf->offset += size;
     return res;
 }
@@ -183,7 +184,7 @@ void tfs_post(TFS_File* tf, size_t offset, size_t count) {
     int num_covered;
     Interval** covered = tangram_it_covers(tf->it, offset, count, &num_covered);
 
-    tangram_rpc_issue_rpc(RPC_NAME_POST, tf->filename, tfs.mpi_rank, offset, count);
+    tangram_rpc_issue_rpc(RPC_NAME_POST, tf->filename, tfs.mpi_rank, &offset, &count, 1);
 
     int i;
     for(i = 0; i < num_covered; i++)
@@ -197,14 +198,20 @@ void tfs_post(TFS_File* tf, size_t offset, size_t count) {
 void tfs_post_all(TFS_File* tf) {
     int num, i;
     Interval** unposted = tangram_it_unposted(tf->it, &num);
+
+    size_t offsets[num];
+    size_t counts[num];
     for(i = 0; i < num; i++) {
-        tfs_post(tf, unposted[i]->offset, unposted[i]->count);
+        offsets[i] = unposted[i]->offset;
+        counts[i] = unposted[i]->count;
     }
+
     tangram_free(unposted, num*sizeof(Interval*));
+    tangram_rpc_issue_rpc(RPC_NAME_POST, tf->filename, tfs.mpi_rank, offsets, counts, num);
 }
 
 void tfs_query(TFS_File* tf, size_t offset, size_t size) {
-    tangram_rpc_issue_rpc(RPC_NAME_QUERY, tf->filename, tfs.mpi_rank, offset, size);
+    tangram_rpc_issue_rpc(RPC_NAME_QUERY, tf->filename, tfs.mpi_rank, &offset, &size, 1);
 }
 
 int tfs_close(TFS_File* tf) {

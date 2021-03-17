@@ -18,8 +18,8 @@ int main(int argc, char* argv[]) {
     MPI_Comm_size(MPI_COMM_WORLD, &size);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
-    tfs_init("./", "/l/ssd");
-    //tfs_init("./chen/", "/tmp");
+    //tfs_init("./", "/l/ssd");
+    tfs_init("./chen/", "/tmp");
 
     TFS_File* tf = tfs_open("./test.txt");
 
@@ -35,7 +35,8 @@ int main(int argc, char* argv[]) {
     for(i = 0; i < N; i++)
         tfs_write(tf, data, DATA_SIZE);
     // Post all writes in one RPC
-    tfs_post(tf, offset, N*DATA_SIZE);
+    //tfs_post(tf, offset, N*DATA_SIZE);
+    tfs_post_all(tf);
     double tend = MPI_Wtime();
 
     double min_tstart, max_tend;

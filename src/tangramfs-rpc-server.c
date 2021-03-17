@@ -73,7 +73,7 @@ void mercury_server_register_rpcs() {
      * The two NULL arguments correspond to the functions user to
      * serialize/deserialize the input and output parameters
      */
-    hg_id_t rpc_id_post = MERCURY_REGISTER(hg_class, RPC_NAME_POST, rpc_query_in, void, rpc_handler_post);
+    hg_id_t rpc_id_post = MERCURY_REGISTER(hg_class, RPC_NAME_POST, rpc_post_in, void, rpc_handler_post);
     HG_Registered_disable_response(hg_class, rpc_id_post, HG_TRUE);
 
     hg_id_t rpc_id_query = MERCURY_REGISTER(hg_class, RPC_NAME_QUERY, rpc_query_in, rpc_query_out, rpc_handler_query);
@@ -101,10 +101,18 @@ void* mercury_server_progress_loop(void* arg) {
 
 hg_return_t rpc_handler_post(hg_handle_t h)
 {
-    rpc_query_in arg;
+    rpc_post_in arg, tmp;
     HG_Get_input(h, &arg);
     // printf("RPC - post: rank: %d, %s %d, %d\n", arg.rank, arg.filename, arg.offset/1024/1024, arg.count/1024/1024);
-    tangram_ms_handle_post(arg.rank, arg.filename, arg.offset, arg.count);
+
+    tmp = arg;
+    char* filename = tmp->filename;
+    int rank = tmp->rank;
+
+    while(tmp) {
+        tangram_ms_handle_post(rank, filename, tmp->offset, tmp->count);
+        tmp = tmp->next;
+    }
 
     HG_Free_input(h, &arg);
 
