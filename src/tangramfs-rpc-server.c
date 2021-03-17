@@ -103,7 +103,7 @@ hg_return_t rpc_handler_post(hg_handle_t h)
 {
     rpc_query_in arg;
     HG_Get_input(h, &arg);
-    printf("RPC - post: rank: %d, %s %d, %d\n", arg.rank, arg.filename, arg.offset/1024/1024, arg.count/1024/1024);
+    // printf("RPC - post: rank: %d, %s %d, %d\n", arg.rank, arg.filename, arg.offset/1024/1024, arg.count/1024/1024);
     tangram_ms_handle_post(arg.rank, arg.filename, arg.offset, arg.count);
 
     HG_Free_input(h, &arg);
@@ -120,7 +120,7 @@ hg_return_t rpc_handler_query(hg_handle_t h)
 
     rpc_query_out out;
     bool found = tangram_ms_handle_query(in.filename, in.offset, in.count, &out.rank);
-    printf("RPC - query: rank: %d, %s %d, %d, found: %d\n", in.rank, in.filename, in.offset/1024/1024, in.count/1024/1024, found);
+    // printf("RPC - query: rank: %d, %s %d, %d, found: %d\n", in.rank, in.filename, in.offset/1024/1024, in.count/1024/1024, found);
     HG_Respond(h, NULL, NULL, &out);
 
     hg_return_t ret = HG_Destroy(h);
