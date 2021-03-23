@@ -18,6 +18,7 @@ static int running;
 // List of RPC handlers
 hg_return_t rpc_handler_post(hg_handle_t h);
 hg_return_t rpc_handler_query(hg_handle_t h);
+hg_return_t rpc_handler_transfer(hg_handle_t h);
 
 void  mercury_server_init(char* server_addr);
 void  mercury_server_finalize();
@@ -77,6 +78,8 @@ void mercury_server_register_rpcs() {
     HG_Registered_disable_response(hg_class, rpc_id_post, HG_TRUE);
 
     hg_id_t rpc_id_query = MERCURY_REGISTER(hg_class, RPC_NAME_QUERY, rpc_query_in, rpc_query_out, rpc_handler_query);
+
+    hg_id_t rpc_id_transfer = MERCURY_REGISTER(hg_class, RPC_NAME_TRANSFER, rpc_transfer_in, rpc_transfer_out, rpc_handler_transfer);
 }
 
 void* mercury_server_progress_loop(void* arg) {
@@ -89,7 +92,6 @@ void* mercury_server_progress_loop(void* arg) {
         HG_Progress(hg_context, 100);
     } while(running);
 }
-
 
 
 
@@ -128,6 +130,19 @@ hg_return_t rpc_handler_query(hg_handle_t h)
 
     rpc_query_out out;
     bool found = tangram_ms_handle_query(in.filename, in.offset, in.count, &out.rank);
+    HG_Respond(h, NULL, NULL, &out);
+
+    hg_return_t ret = HG_Destroy(h);
+    assert(ret == HG_SUCCESS);
+    return HG_SUCCESS;
+}
+
+hg_return_t rpc_handler_transfer(hg_handle_t h)
+{
+    rpc_transfer_in in;
+    HG_Get_input(h, &in);
+
+    rpc_transfer_out out;
     HG_Respond(h, NULL, NULL, &out);
 
     hg_return_t ret = HG_Destroy(h);

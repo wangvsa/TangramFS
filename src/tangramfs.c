@@ -164,6 +164,8 @@ size_t tfs_read(TFS_File* tf, void* buf, size_t size) {
     int owner_rank;
     tfs_query(tf, tf->offset, size, &owner_rank);
     tf->offset += size;
+
+    tangram_rpc_onetime_transfer(buf);
     return 0;
 }
 

@@ -5,10 +5,13 @@
 
 #define RPC_NAME_POST       "tfs_rpc_rpc_post"
 #define RPC_NAME_QUERY      "tfs_rpc_rpc_query"
+#define RPC_NAME_TRANSFER   "tfs_rpc_rpc_transfer"
 
 #include <mercury.h>
+#include <mercury_bulk.h>
 #include <mercury_proc.h>
 #include <mercury_proc_string.h>
+
 
 
 typedef struct rpc_post_in_t {
@@ -87,16 +90,12 @@ static inline hg_return_t hg_proc_rpc_post_in(hg_proc_t proc, void* data)
 }
 
 
-
-
-
 typedef struct rpc_query_in_t {
     char* filename;
     int32_t rank;
     uint32_t offset;
     uint32_t count;
 } rpc_query_in;
-
 
 /* hg_proc_[structure name] is a special name */
 static hg_return_t
@@ -106,6 +105,38 @@ hg_proc_rpc_query_in(hg_proc_t proc, void* data) {
     hg_proc_int32_t(proc, &arg->rank);
     hg_proc_uint32_t(proc, &arg->offset);
     hg_proc_uint32_t(proc, &arg->count);
+    return HG_SUCCESS;
+}
+
+typedef struct rpc_transfer_in_t {
+    char* filename;
+    int32_t rank;
+    uint32_t offset;
+    uint32_t count;
+    hg_bulk_t bulk_handle;
+} rpc_transfer_in;
+
+static hg_return_t
+hg_proc_rpc_transfer_in(hg_proc_t proc, void* data) {
+    rpc_transfer_in *arg = (rpc_transfer_in*) data;
+    hg_proc_hg_const_string_t(proc, &arg->filename);
+    hg_proc_int32_t(proc, &arg->rank);
+    hg_proc_uint32_t(proc, &arg->offset);
+    hg_proc_uint32_t(proc, &arg->count);
+    hg_proc_uint32_t(proc, &arg->bulk_handle); // TODO a matching function for hg_bulk_t?
+    return HG_SUCCESS;
+}
+
+typedef struct rpc_transfer_out_t {
+    int32_t rank;
+} rpc_transfer_out;
+
+
+/* hg_proc_[structure name] is a special name */
+static hg_return_t
+hg_proc_rpc_transfer_out(hg_proc_t proc, void* data) {
+    rpc_transfer_out *arg = (rpc_transfer_out*) data;
+    hg_proc_int32_t(proc, &arg->rank);
     return HG_SUCCESS;
 }
 
@@ -134,5 +165,6 @@ rpc_query_out tangram_rpc_query_result();
 
 void tangram_rpc_onetime_start(const char* server_addr);
 void tangram_rpc_onetime_stop();
+void tangram_rpc_onetime_transfer(void* buf);
 
 #endif
