@@ -1,7 +1,7 @@
 bin_PROGRAMS = main.out
 lib_LTLIBRARIES = libtangramfs.la
 
-AM_CPPFLAGS = -I$(top_srcdir)/include -Wno-unused-result -D_LARGEFILE64_SOURCE -DTANGRAM_PRELOAD
+AM_CPPFLAGS = -I$(top_srcdir)/include -Wno-unused-result -D_LARGEFILE64_SOURCE -DTANGRAM_PRELOADHH
 
 
 
