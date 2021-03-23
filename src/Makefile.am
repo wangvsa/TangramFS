@@ -7,12 +7,12 @@ AM_CPPFLAGS = -I$(top_srcdir)/include -Wno-unused-result -D_LARGEFILE64_SOURCE -
 
 libtangramfs_la_SOURCES = tangramfs.c tangramfs-interval-tree.c tangramfs-global-interval-tree.c\
 						  tangramfs-rpc-server.c tangramfs-rpc-client.c tangramfs-metadata.c\
+						  tangramfs-rpc-onetime.c \
 						  tangramfs-utils.c tangramfs-posix-wrapper.c tangramfs-semantics-impl.c
-
+ 
 libtangramfs_la_CFLAGS  = -I${MERCURY_DIR}/include
 libtangramfs_la_LDFLAGS = -Wl,-rpath,${MERCURY_DIR}/lib -L${MERCURY_DIR}/lib
 libtangramfs_la_LDFLAGS += -lmercury -pthread -lrt -version-info 0:0:0
-
 
 main_out_SOURCES = main.c
 main_out_LDADD = libtangramfs.la

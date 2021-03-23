@@ -20,6 +20,8 @@ typedef struct TFS_Info_t {
 
     int semantics;  // Strong, Session or Commit; only needed in passive mode.
     bool initialized;
+
+    char *server_addrs;
 } TFS_Info;
 
 static TFS_Info tfs;
@@ -35,15 +37,21 @@ void tfs_init(const char* persist_dir, const char* buffer_dir) {
     const char* semantics_str = getenv("TANGRAM_SEMANTICS");
     if(semantics_str)
         tfs.semantics = atoi(semantics_str);
-    char server_addr[128] = {0};
+
+    tfs.server_addrs = tangram_malloc(sizeof(char)*128*tfs.mpi_size);
 
     // Rank 0 runs the mercury server
     // All ranks run the mercury client
-    if(tfs.mpi_rank == 0)
-        tangram_rpc_server_start(server_addr);
+    //if(tfs.mpi_rank == 0)
+    char self_server_addr[128];
+    tangram_rpc_server_start(self_server_addr);
 
-    MPI_Bcast(server_addr, 128, MPI_BYTE, 0, tfs.mpi_comm);
+    MPI_Allgather(self_server_addr, 128, MPI_BYTE, tfs.server_addrs, 128, MPI_BYTE, tfs.mpi_comm);
+
+    char server_addr[128];
+    memcpy(server_addr, tfs.server_addrs, 128);
     tangram_rpc_client_start(server_addr);
+    tangram_rpc_onetime_start(server_addr);
 
     MAP_OR_FAIL(open);
     MAP_OR_FAIL(close);
@@ -61,10 +69,14 @@ void tfs_finalize() {
     // server stoped before all other clients
     MPI_Barrier(tfs.mpi_comm);
 
-    if(tfs.mpi_rank == 0)
-        tangram_rpc_server_stop();
+    //if(tfs.mpi_rank == 0)
+
+    tangram_rpc_server_stop();
     tangram_rpc_client_stop();
+    tangram_rpc_onetime_stop();
     MPI_Comm_free(&tfs.mpi_comm);
+
+    tangram_free(tfs.server_addrs, sizeof(char)*128*tfs.mpi_size);
 }
 
 TFS_File* tfs_open(const char* pathname) {
@@ -149,7 +161,8 @@ size_t tfs_write(TFS_File* tf, const void* buf, size_t size) {
 }
 
 size_t tfs_read(TFS_File* tf, void* buf, size_t size) {
-    tfs_query(tf, tf->offset, size);
+    int owner_rank;
+    tfs_query(tf, tf->offset, size, &owner_rank);
     tf->offset += size;
     return 0;
 }
@@ -209,8 +222,10 @@ void tfs_post_all(TFS_File* tf) {
     tangram_rpc_issue_rpc(RPC_NAME_POST, tf->filename, tfs.mpi_rank, offsets, counts, num);
 }
 
-void tfs_query(TFS_File* tf, size_t offset, size_t size) {
+void tfs_query(TFS_File* tf, size_t offset, size_t size, int *out_rank) {
     tangram_rpc_issue_rpc(RPC_NAME_QUERY, tf->filename, tfs.mpi_rank, &offset, &size, 1);
+    rpc_query_out res = tangram_rpc_query_result();
+    *out_rank = res.rank;
 }
 
 int tfs_close(TFS_File* tf) {

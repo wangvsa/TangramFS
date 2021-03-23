@@ -10,7 +10,7 @@
 
 static hg_class_t*     hg_class   = NULL;
 static hg_context_t*   hg_context = NULL;
-static hg_addr_t       hg_addr = NULL;    // addr retrived from the addr lookup callback
+static hg_addr_t       hg_addr = NULL;
 
 static hg_id_t         rpc_id_post;
 static hg_id_t         rpc_id_query;
@@ -22,20 +22,21 @@ pthread_t client_progress_thread;
 pthread_cond_t cond =  PTHREAD_COND_INITIALIZER;
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
+rpc_query_out query_result;
+
 
 void mercury_client_init();
 void mercury_client_finalize();
-void mercury_register_rpcs();
+void mercury_client_register_rpcs();
 void* mercury_client_progress_loop(void* arg);
-hg_return_t lookup_callback(const struct hg_cb_info *callback_info);
 hg_return_t rpc_query_callback(const struct hg_cb_info *info);
 hg_return_t rpc_post_callback(const struct hg_cb_info *info);
 
 
 void tangram_rpc_client_start(const char* server_addr) {
     mercury_client_init();
-    mercury_register_rpcs();
-    HG_Addr_lookup(hg_context, lookup_callback, NULL, server_addr, HG_OP_ID_IGNORE);
+    mercury_client_register_rpcs();
+    HG_Addr_lookup2(hg_class, server_addr, &hg_addr);
 
     running = true;
     pthread_create(&client_progress_thread, NULL, mercury_client_progress_loop, NULL);
@@ -73,7 +74,7 @@ void mercury_client_finalize() {
     assert(ret == HG_SUCCESS);
 }
 
-void mercury_register_rpcs() {
+void mercury_client_register_rpcs() {
     /* Register a RPC function.
      * The first two NULL correspond to what would be pointers to
      * serialization/deserialization functions for input and output datatypes
@@ -168,18 +169,6 @@ void signal_main_thread() {
     pthread_mutex_unlock(&mutex);
 }
 
-/*
- * This function is called when the address lookup operation has running.
- */
-hg_return_t lookup_callback(const struct hg_cb_info *callback_info)
-{
-    assert(callback_info->ret == 0);
-    hg_addr = callback_info->info.lookup.addr;
-
-    signal_main_thread();
-    return HG_SUCCESS;
-}
-
 hg_return_t rpc_post_callback(const struct hg_cb_info *info)
 {
     signal_main_thread();
@@ -192,9 +181,14 @@ hg_return_t rpc_query_callback(const struct hg_cb_info *info)
 
     rpc_query_out out;
     HG_Get_output(handle, &out);
+
+    query_result.rank = out.rank;
     HG_Free_output(handle, &out);
 
     signal_main_thread();
     return HG_SUCCESS;
 }
 
+rpc_query_out tangram_rpc_query_result() {
+    return query_result;
+}

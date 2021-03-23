@@ -30,10 +30,10 @@ size_t tfs_seek(TFS_File* tf, size_t offset, int whence);
 
 void tfs_post(TFS_File* tf, size_t offset, size_t count);
 void tfs_post_all(TFS_File* tf);
-void tfs_query(TFS_File* tf, size_t offset, size_t count);
+void tfs_query(TFS_File* tf, size_t offset, size_t count, int* rank);
 
 /*
- * Used by POSIX wrappers, tell if we should 
+ * Used by POSIX wrappers, tell if we should
  * intercept the call according to the file path
  */
 bool tangram_should_intercept(const char* filename);

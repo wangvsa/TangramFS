@@ -113,6 +113,7 @@ typedef struct rpc_query_out_t {
     int32_t rank;
 } rpc_query_out;
 
+
 /* hg_proc_[structure name] is a special name */
 static hg_return_t
 hg_proc_rpc_query_out(hg_proc_t proc, void* data) {
@@ -128,7 +129,10 @@ void tangram_rpc_server_stop();
 void tangram_rpc_client_start(const char* server_addr);
 void tangram_rpc_client_stop();
 void tangram_rpc_issue_rpc(const char* rpc_name, char* filename, int rank, size_t *offsets, size_t *counts, int len);
+rpc_query_out tangram_rpc_query_result();
 
 
+void tangram_rpc_onetime_start(const char* server_addr);
+void tangram_rpc_onetime_stop();
 
 #endif
