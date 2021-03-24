@@ -199,7 +199,7 @@ size_t tfs_read(TFS_File* tf, void* buf, size_t size) {
     char server_addr[128];
     memcpy(server_addr, tfs.server_addrs+128*owner_rank, 128);
     tangram_rpc_onetime_start(server_addr);
-    tangram_rpc_onetime_transfer(tf->filename, owner_rank, tf->offset, size, buf);
+    tangram_rpc_onetime_transfer(tf->filename, tfs.mpi_rank, tf->offset, size, buf);
     tangram_rpc_onetime_stop();
 
     tf->offset += size;
