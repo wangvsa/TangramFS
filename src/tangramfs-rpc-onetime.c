@@ -6,6 +6,7 @@
 #include <string.h>
 #include <mercury_macros.h>
 #include "tangramfs-rpc.h"
+#include "tangramfs-utils.h"
 
 static hg_class_t*     hg_class   = NULL;
 static hg_context_t*   hg_context = NULL;
@@ -70,33 +71,38 @@ void mercury_onetime_progress_loop() {
     }
 }
 
-void tangram_rpc_onetime_transfer(void* buf) {
 
-    hg_id_t rpc_id = rpc_id_transfer;
+typedef struct BulkTransferInfo_t {
+    void* buf;
+    size_t count;
+    hg_bulk_t bulk_handle;
+} BulkTransferInfo;
+
+// Note!!
+// void* buf [out] passed to HG_Bulk_create must be
+// allocated on heap. Otherwise, mercury will crash.
+void tangram_rpc_onetime_transfer(char* filename, int rank, size_t offset, size_t count, void* buf) {
     hg_return_t ret;
     hg_handle_t handle;
 
-    ret = HG_Create(hg_context, hg_addr, rpc_id, &handle);
+    BulkTransferInfo *bt_info = tangram_malloc(sizeof(BulkTransferInfo));
+    bt_info->buf = buf;
+    bt_info->count = count;
+
+    ret = HG_Create(hg_context, hg_addr, rpc_id_transfer, &handle);
     assert(ret == HG_SUCCESS);
 
     rpc_transfer_in in_arg = {
-        //.filename = filename,
-        //.rank = rank,
-        //.offset = offsets[0],
-        //.count = counts[0],
+        .filename = filename,
+        .rank = rank,
+        .offset = offset,
+        .count = count,
     };
+    ret = HG_Bulk_create(hg_class, 1, &buf, &count, HG_BULK_READWRITE, &in_arg.bulk_handle);
+    assert(ret == HG_SUCCESS);
+    bt_info->bulk_handle = in_arg.bulk_handle;
 
-
-    /*
-    size_t size = 10;
-    ret = HG_Bulk_create(hgi->hg_class, 1, buf, size, HG_BULK_READ_ONLY, &in.bulk_handle);
-
-    my_rpc_state_p->bulk_handle = in.bulk_handle;
-    assert(ret == 0);
-    */
-
-    ret = HG_Forward(handle, rpc_transfer_callback, NULL, &in_arg);
-
+    ret = HG_Forward(handle, rpc_transfer_callback, bt_info, &in_arg);
     mercury_onetime_progress_loop();
 
     ret = HG_Destroy(handle);
@@ -104,10 +110,17 @@ void tangram_rpc_onetime_transfer(void* buf) {
 }
 
 hg_return_t rpc_transfer_callback(const struct hg_cb_info *info) {
+    // Server will not send back the respond until the RDMA has finished,
+    // So we are sure that once we get here, the data will be ready.
     hg_handle_t handle = info->info.forward.handle;
+
+    BulkTransferInfo *bt_info = info->arg;
+    HG_Bulk_free(bt_info->bulk_handle);
+
+    tangram_free(bt_info, sizeof(BulkTransferInfo));
+
     rpc_transfer_out out;
     HG_Get_output(handle, &out);
-
     HG_Free_output(handle, &out);
     return HG_SUCCESS;
 }

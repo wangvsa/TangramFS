@@ -20,6 +20,7 @@ void tangram_ms_init() {
 void tangram_ms_finalize() {
     GlobalIntervalTreeEntry* entry, *tmp;
     HASH_ITER(hh, global_it_table, entry, tmp) {
+        HASH_DEL(global_it_table, entry);
         tangram_global_it_finalize(&(entry->global_it));
         tangram_free(entry, sizeof(GlobalIntervalTreeEntry));
     }

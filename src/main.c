@@ -48,6 +48,7 @@ int main(int argc, char* argv[]) {
         printf("Bandwidth: %.2f MB/s\n", DATA_SIZE/MB*size*N/(max_tend-min_tstart));
     }
 
+    MPI_Barrier(MPI_COMM_WORLD);
     // read neighbor rank's data
     int neighbor_rank = (rank + 1) % size;
     offset = neighbor_rank * DATA_SIZE * N;

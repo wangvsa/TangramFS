@@ -2,9 +2,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <pthread.h>
+#include <unistd.h>
 #include "mpi.h"
 #include <mercury_macros.h>
+#include "tangramfs.h"
 #include "tangramfs-rpc.h"
+#include "tangramfs-utils.h"
 #include "tangramfs-metadata.h"
 
 
@@ -19,6 +22,8 @@ static int running;
 hg_return_t rpc_handler_post(hg_handle_t h);
 hg_return_t rpc_handler_query(hg_handle_t h);
 hg_return_t rpc_handler_transfer(hg_handle_t h);
+
+hg_return_t rpc_handler_transfer_callback(const struct hg_cb_info *info);
 
 void  mercury_server_init(char* server_addr);
 void  mercury_server_finalize();
@@ -137,15 +142,63 @@ hg_return_t rpc_handler_query(hg_handle_t h)
     return HG_SUCCESS;
 }
 
+typedef struct BulkTransferInfo_t {
+    hg_handle_t handle;
+    hg_bulk_t bulk_handle;
+    void* buf;
+    hg_size_t count;
+} BulkTransferInfo;
+
 hg_return_t rpc_handler_transfer(hg_handle_t h)
 {
+    hg_return_t ret;
+    const struct hg_info *hgi = HG_Get_info(h);
+
     rpc_transfer_in in;
     HG_Get_input(h, &in);
 
-    rpc_transfer_out out;
-    HG_Respond(h, NULL, NULL, &out);
+    // Find out the location of the required data
+    // TODO This is assumed that we have it
+    size_t local_offset;
+    TFS_File* tf = tangram_get_tfs_file(in.filename);
+    assert(tf != NULL);
+    bool exist = tangram_it_query(tf->it, in.offset, in.count, &local_offset);
+    assert(exist);
+    //printf("%d %d %d %ld\n", in.rank, in.offset, in.count, local_offset);
 
-    hg_return_t ret = HG_Destroy(h);
+    BulkTransferInfo *bt_info = tangram_malloc(sizeof(BulkTransferInfo));
+    bt_info->handle = h;
+    bt_info->count = in.count;
+    bt_info->buf = tangram_malloc(bt_info->count);
+    pread(tf->local_fd, bt_info->buf, in.count, local_offset);
+
+
+    ret = HG_Bulk_create(hgi->hg_class, 1, &bt_info->buf, &bt_info->count, HG_BULK_READWRITE, &bt_info->bulk_handle);
     assert(ret == HG_SUCCESS);
+
+    ret = HG_Bulk_transfer(hgi->context, rpc_handler_transfer_callback, bt_info, HG_BULK_PUSH,
+                            hgi->addr, in.bulk_handle, 0, bt_info->bulk_handle, 0, bt_info->count, HG_OP_ID_IGNORE);
+    assert(ret == HG_SUCCESS);
+
     return HG_SUCCESS;
 }
+
+hg_return_t rpc_handler_transfer_callback(const struct hg_cb_info *info)
+{
+    hg_return_t ret;
+    BulkTransferInfo *bt_info = info->arg;
+
+    rpc_transfer_out out;
+    HG_Respond(bt_info->handle, NULL, NULL, &out);
+
+    HG_Bulk_free(bt_info->bulk_handle);
+    ret = HG_Destroy(bt_info->handle);
+    assert(ret == HG_SUCCESS);
+
+    tangram_free(bt_info->buf, bt_info->count);
+    tangram_free(bt_info, sizeof(BulkTransferInfo));
+
+
+    return HG_SUCCESS;
+}
+

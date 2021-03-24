@@ -140,8 +140,9 @@ bool tangram_it_query(IntervalTree *it, size_t offset, size_t count, size_t *loc
         }
     }
 
-    if(found)
+    if(found) {
         *local_offset = interval->local_offset + (offset-interval->offset);
+    }
     return found;
 }
 

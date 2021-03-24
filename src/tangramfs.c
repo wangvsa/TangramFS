@@ -10,6 +10,8 @@
 #include "tangramfs-utils.h"
 #include "tangramfs-rpc.h"
 #include "tangramfs-posix-wrapper.h"
+#include "uthash.h"
+
 
 typedef struct TFS_Info_t {
     int mpi_rank;
@@ -24,7 +26,19 @@ typedef struct TFS_Info_t {
     char *server_addrs;
 } TFS_Info;
 
+
+typedef struct TFS_File_Table_t {
+    char filename[256];
+    TFS_File *tf;
+    UT_hash_handle hh;
+} TFS_File_Table;
+
+
+static TFS_File_Table *tfs_files;   // hash map of currently opened files
+
 static TFS_Info tfs;
+
+
 
 void tfs_init(const char* persist_dir, const char* buffer_dir) {
     MPI_Comm_dup(MPI_COMM_WORLD, &tfs.mpi_comm);
@@ -51,7 +65,6 @@ void tfs_init(const char* persist_dir, const char* buffer_dir) {
     char server_addr[128];
     memcpy(server_addr, tfs.server_addrs, 128);
     tangram_rpc_client_start(server_addr);
-    tangram_rpc_onetime_start(server_addr);
 
     MAP_OR_FAIL(open);
     MAP_OR_FAIL(close);
@@ -73,7 +86,6 @@ void tfs_finalize() {
 
     tangram_rpc_server_stop();
     tangram_rpc_client_stop();
-    tangram_rpc_onetime_stop();
     MPI_Comm_free(&tfs.mpi_comm);
 
     tangram_free(tfs.server_addrs, sizeof(char)*128*tfs.mpi_size);
@@ -89,7 +101,14 @@ TFS_File* tfs_open(const char* pathname) {
 
     char filename[PATH_MAX+64];
     sprintf(filename, "%s/_tfs_tmpfile.%d", tfs.buffer_dir, tfs.mpi_rank);
+    remove(filename);   // delete the file first
     tf->local_fd = TANGRAM_REAL_CALL(open)(filename, O_CREAT|O_RDWR, S_IRWXU);
+
+    // TODO Check existence before adding one more.
+    TFS_File_Table *entry = tangram_malloc(sizeof(TFS_File_Table));
+    entry->tf = tf;
+    strcpy(entry->filename, tf->filename);
+    HASH_ADD_STR(tfs_files, filename, entry);
 
     return tf;
 }
@@ -163,9 +182,14 @@ size_t tfs_write(TFS_File* tf, const void* buf, size_t size) {
 size_t tfs_read(TFS_File* tf, void* buf, size_t size) {
     int owner_rank;
     tfs_query(tf, tf->offset, size, &owner_rank);
-    tf->offset += size;
 
-    tangram_rpc_onetime_transfer(buf);
+    char server_addr[128];
+    memcpy(server_addr, tfs.server_addrs+128*owner_rank, 128);
+    tangram_rpc_onetime_start(server_addr);
+    tangram_rpc_onetime_transfer(tf->filename, owner_rank, tf->offset, size, buf);
+    tangram_rpc_onetime_stop();
+
+    tf->offset += size;
     return 0;
 }
 
@@ -234,10 +258,16 @@ int tfs_close(TFS_File* tf) {
     int res = TANGRAM_REAL_CALL(close)(tf->local_fd);
     tangram_it_finalize(tf->it);
 
+    TFS_File_Table *entry = NULL;
+    HASH_FIND_STR(tfs_files, tf->filename, entry);
+    if(entry) {
+        HASH_DEL(tfs_files, entry);
+        tangram_free(entry, sizeof(TFS_File_Table));
+    }
+
     tangram_free(tf->it, sizeof(Interval));
     tangram_free(tf, sizeof(TFS_File));
     tf = NULL;
-
     return res;
 }
 
@@ -254,4 +284,13 @@ bool tangram_should_intercept(const char* filename) {
 
 int tangram_get_semantics() {
     return tfs.semantics;
+}
+
+TFS_File* tangram_get_tfs_file(const char* filename) {
+    TFS_File_Table *entry = NULL;
+    HASH_FIND_STR(tfs_files, filename, entry);
+    if(entry)
+        return entry->tf;
+
+    return NULL;
 }

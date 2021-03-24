@@ -8,9 +8,8 @@
 #define RPC_NAME_TRANSFER   "tfs_rpc_rpc_transfer"
 
 #include <mercury.h>
-#include <mercury_bulk.h>
-#include <mercury_proc.h>
 #include <mercury_proc_string.h>
+#include <mercury_proc_bulk.h>
 
 
 
@@ -108,7 +107,7 @@ hg_proc_rpc_query_in(hg_proc_t proc, void* data) {
     return HG_SUCCESS;
 }
 
-typedef struct rpc_transfer_in_t {
+typedef struct rpc_transfer_in_thhh {
     char* filename;
     int32_t rank;
     uint32_t offset;
@@ -116,14 +115,15 @@ typedef struct rpc_transfer_in_t {
     hg_bulk_t bulk_handle;
 } rpc_transfer_in;
 
-static hg_return_t
-hg_proc_rpc_transfer_in(hg_proc_t proc, void* data) {
+static HG_INLINE hg_return_t
+hg_proc_rpc_transfer_in(hg_proc_t proc, void* data)
+{
     rpc_transfer_in *arg = (rpc_transfer_in*) data;
     hg_proc_hg_const_string_t(proc, &arg->filename);
     hg_proc_int32_t(proc, &arg->rank);
     hg_proc_uint32_t(proc, &arg->offset);
     hg_proc_uint32_t(proc, &arg->count);
-    hg_proc_uint32_t(proc, &arg->bulk_handle); // TODO a matching function for hg_bulk_t?
+    hg_proc_hg_bulk_t(proc, &arg->bulk_handle); // TODO a matching function for hg_bulk_t?
     return HG_SUCCESS;
 }
 
@@ -165,6 +165,7 @@ rpc_query_out tangram_rpc_query_result();
 
 void tangram_rpc_onetime_start(const char* server_addr);
 void tangram_rpc_onetime_stop();
-void tangram_rpc_onetime_transfer(void* buf);
+void tangram_rpc_onetime_transfer(char* filename, int rank, size_t offset, size_t count, void* local_buf);
+
 
 #endif
