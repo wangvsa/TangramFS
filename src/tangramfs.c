@@ -31,7 +31,6 @@ static TFS_File *tfs_files;   // hash map of currently opened files
 static TFS_Info tfs;
 
 
-
 void tfs_init(const char* persist_dir, const char* buffer_dir) {
     MPI_Comm_dup(MPI_COMM_WORLD, &tfs.mpi_comm);
     MPI_Comm_rank(tfs.mpi_comm, &tfs.mpi_rank);
@@ -74,14 +73,22 @@ void tfs_finalize() {
     // server stoped before all other clients
     MPI_Barrier(tfs.mpi_comm);
 
-    //if(tfs.mpi_rank == 0)
-
     tangram_rpc_server_stop();
     tangram_rpc_client_stop();
     MPI_Comm_free(&tfs.mpi_comm);
 
     tangram_free(tfs.server_addrs, sizeof(char)*128*tfs.mpi_size);
+
+    // Clear all resources
+    TFS_File *tf, *tmp;
+    HASH_ITER(hh, tfs_files, tf, tmp) {
+        HASH_DEL(tfs_files, tf);
+        tangram_it_finalize(tf->it);
+        tangram_free(tf->it, sizeof(IntervalTree));
+        tangram_free(tf, sizeof(TFS_File));
+    }
 }
+
 
 TFS_File* tfs_open(const char* pathname) {
     TFS_File *tf = NULL;
@@ -252,21 +259,11 @@ void tfs_query(TFS_File* tf, size_t offset, size_t size, int *out_rank) {
 int tfs_close(TFS_File* tf) {
     int res = TANGRAM_REAL_CALL(close)(tf->local_fd);
 
-    /*
-    tangram_it_finalize(tf->it);
-
-    TFS_File_Table *entry = NULL;
-    HASH_FIND_STR(tfs_files, tf->filename, entry);
-    if(entry) {
-        HASH_DEL(tfs_files, entry);
-        tangram_free(entry, sizeof(TFS_File_Table));
-    }
-
-    tangram_free(tf->it, sizeof(Interval));
-    tangram_free(tf, sizeof(TFS_File));
-    tf = NULL;
-    */
-    // TODO do not release resources for IOR test
+    // The TFS_File and its interval tree is not released
+    // just like Linux page cache won't be cleared at close point
+    // because the the same might be opened later for read.
+    // We clean all resources at tfs_finalize();
+    // TODO this assumes we have enough buffer space.
     return res;
 }
 
