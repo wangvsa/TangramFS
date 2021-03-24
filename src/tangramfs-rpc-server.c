@@ -170,7 +170,7 @@ hg_return_t rpc_handler_transfer(hg_handle_t h)
     bt_info->handle = h;
     bt_info->count = in.count;
     bt_info->buf = tangram_malloc(bt_info->count);
-    pread(tf->local_fd, bt_info->buf, in.count, local_offset);
+    ssize_t res = pread(tf->local_fd, bt_info->buf, in.count, local_offset);
 
 
     ret = HG_Bulk_create(hgi->hg_class, 1, &bt_info->buf, &bt_info->count, HG_BULK_READWRITE, &bt_info->bulk_handle);

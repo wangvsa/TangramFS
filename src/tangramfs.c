@@ -86,6 +86,9 @@ void tfs_finalize() {
 TFS_File* tfs_open(const char* pathname) {
     TFS_File *tf = NULL;
 
+    char abs_filename[PATH_MAX+64];
+    sprintf(abs_filename, "%s/_tfs_tmpfile.%d", tfs.buffer_dir, tfs.mpi_rank);
+
     HASH_FIND_STR(tfs_files, pathname, tf);
     if(tf) {
     } else {
@@ -95,13 +98,11 @@ TFS_File* tfs_open(const char* pathname) {
         tf->offset = 0;
         tangram_it_init(tf->it);
 
+        remove(abs_filename);   // delete the file first
         HASH_ADD_STR(tfs_files, filename, tf);
     }
 
     // open local file as buffer
-    char abs_filename[PATH_MAX+64];
-    sprintf(abs_filename, "%s/_tfs_tmpfile.%d", tfs.buffer_dir, tfs.mpi_rank);
-    // remove(abs_filename);   // delete the file first
     tf->local_fd = TANGRAM_REAL_CALL(open)(abs_filename, O_CREAT|O_RDWR, S_IRWXU);
 
     return tf;
@@ -184,7 +185,7 @@ size_t tfs_read(TFS_File* tf, void* buf, size_t size) {
     tangram_rpc_onetime_stop();
 
     tf->offset += size;
-    return 0;
+    return size;
 }
 
 size_t tfs_read_lazy(TFS_File* tf, void* buf, size_t size) {
