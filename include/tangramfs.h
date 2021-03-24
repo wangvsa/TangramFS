@@ -1,6 +1,7 @@
 #ifndef __TANGRAM_FS_H__
 #define __TANGRAM_FS_H__
 #include "tangramfs-interval-tree.h"
+#include "uthash.h"
 
 #define TANGRAM_STRONG_SEMANTICS        1
 #define TANGRAM_COMMIT_SEMANTICS        2
@@ -15,6 +16,8 @@ typedef struct TFS_File_t {
 
     int local_fd;
     IntervalTree *it;
+
+    UT_hash_handle hh;
 } TFS_File;
 
 void tfs_init(const char* persist_dir, const char* buffer_dir);

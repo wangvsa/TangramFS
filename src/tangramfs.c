@@ -10,7 +10,6 @@
 #include "tangramfs-utils.h"
 #include "tangramfs-rpc.h"
 #include "tangramfs-posix-wrapper.h"
-#include "uthash.h"
 
 
 typedef struct TFS_Info_t {
@@ -27,14 +26,7 @@ typedef struct TFS_Info_t {
 } TFS_Info;
 
 
-typedef struct TFS_File_Table_t {
-    char filename[256];
-    TFS_File *tf;
-    UT_hash_handle hh;
-} TFS_File_Table;
-
-
-static TFS_File_Table *tfs_files;   // hash map of currently opened files
+static TFS_File *tfs_files;   // hash map of currently opened files
 
 static TFS_Info tfs;
 
@@ -92,23 +84,25 @@ void tfs_finalize() {
 }
 
 TFS_File* tfs_open(const char* pathname) {
-    TFS_File* tf = tangram_malloc(sizeof(TFS_File));
-    strcpy(tf->filename, pathname);
-    tf->it = tangram_malloc(sizeof(IntervalTree));
-    tf->offset = 0;
-    tangram_it_init(tf->it);
+    TFS_File *tf = NULL;
 
+    HASH_FIND_STR(tfs_files, pathname, tf);
+    if(tf) {
+    } else {
+        tf = tangram_malloc(sizeof(TFS_File));
+        strcpy(tf->filename, pathname);
+        tf->it = tangram_malloc(sizeof(IntervalTree));
+        tf->offset = 0;
+        tangram_it_init(tf->it);
 
-    char filename[PATH_MAX+64];
-    sprintf(filename, "%s/_tfs_tmpfile.%d", tfs.buffer_dir, tfs.mpi_rank);
-    remove(filename);   // delete the file first
-    tf->local_fd = TANGRAM_REAL_CALL(open)(filename, O_CREAT|O_RDWR, S_IRWXU);
+        HASH_ADD_STR(tfs_files, filename, tf);
+    }
 
-    // TODO Check existence before adding one more.
-    TFS_File_Table *entry = tangram_malloc(sizeof(TFS_File_Table));
-    entry->tf = tf;
-    strcpy(entry->filename, tf->filename);
-    HASH_ADD_STR(tfs_files, filename, entry);
+    // open local file as buffer
+    char abs_filename[PATH_MAX+64];
+    sprintf(abs_filename, "%s/_tfs_tmpfile.%d", tfs.buffer_dir, tfs.mpi_rank);
+    // remove(abs_filename);   // delete the file first
+    tf->local_fd = TANGRAM_REAL_CALL(open)(abs_filename, O_CREAT|O_RDWR, S_IRWXU);
 
     return tf;
 }
@@ -256,6 +250,8 @@ void tfs_query(TFS_File* tf, size_t offset, size_t size, int *out_rank) {
 
 int tfs_close(TFS_File* tf) {
     int res = TANGRAM_REAL_CALL(close)(tf->local_fd);
+
+    /*
     tangram_it_finalize(tf->it);
 
     TFS_File_Table *entry = NULL;
@@ -268,6 +264,8 @@ int tfs_close(TFS_File* tf) {
     tangram_free(tf->it, sizeof(Interval));
     tangram_free(tf, sizeof(TFS_File));
     tf = NULL;
+    */
+    // TODO do not release resources for IOR test
     return res;
 }
 
