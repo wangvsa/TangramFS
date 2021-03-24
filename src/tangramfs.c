@@ -285,10 +285,7 @@ int tangram_get_semantics() {
 }
 
 TFS_File* tangram_get_tfs_file(const char* filename) {
-    TFS_File_Table *entry = NULL;
-    HASH_FIND_STR(tfs_files, filename, entry);
-    if(entry)
-        return entry->tf;
-
-    return NULL;
+    TFS_File *tf= NULL;
+    HASH_FIND_STR(tfs_files, filename, tf);
+    return tf;
 }
