@@ -185,6 +185,17 @@ size_t tfs_read(TFS_File* tf, void* buf, size_t size) {
     int owner_rank;
     tfs_query(tf, tf->offset, size, &owner_rank);
 
+    // If it turns out that myself has the latest data,
+    // just read it locally.
+    if(owner_rank == tfs.mpi_rank) {
+        size_t local_offset;
+        bool found = tangram_it_query(tf->it, tf->offset, size, &local_offset);
+        assert(found);
+        pread(tf->local_fd, buf, size, local_offset);
+        tf->offset += size;
+        return size;
+    }
+
     char server_addr[128];
     memcpy(server_addr, tfs.server_addrs+128*owner_rank, 128);
     tangram_rpc_onetime_start(server_addr);
