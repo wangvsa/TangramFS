@@ -14,6 +14,7 @@ static hg_addr_t       hg_addr = NULL;
 
 static hg_id_t         rpc_id_post;
 static hg_id_t         rpc_id_query;
+static hg_id_t         rpc_id_transfer;
 
 
 static bool running;                       // If we are still runing the progress loop
@@ -31,6 +32,7 @@ void mercury_client_register_rpcs();
 void* mercury_client_progress_loop(void* arg);
 hg_return_t rpc_query_callback(const struct hg_cb_info *info);
 hg_return_t rpc_post_callback(const struct hg_cb_info *info);
+hg_return_t rpc_transfer_callback(const struct hg_cb_info *info);
 
 
 void tangram_rpc_client_start(const char* server_addr) {
@@ -86,6 +88,8 @@ void mercury_client_register_rpcs() {
     HG_Registered_disable_response(hg_class, rpc_id_post, HG_TRUE);
 
     rpc_id_query = MERCURY_REGISTER(hg_class, RPC_NAME_QUERY, rpc_query_in, rpc_query_out, NULL);
+
+    rpc_id_transfer = MERCURY_REGISTER(hg_class, RPC_NAME_TRANSFER, rpc_transfer_in, rpc_transfer_out, NULL);
 }
 
 void* mercury_client_progress_loop(void* arg) {
@@ -168,6 +172,47 @@ void signal_main_thread() {
     pthread_cond_signal(&cond);
     pthread_mutex_unlock(&mutex);
 }
+
+/*
+void tangram_rpc_onetime_transfer(char* filename, int rank, size_t offset, size_t count, void* buf) {
+    hg_return_t ret;
+    hg_handle_t handle;
+
+    ret = HG_Create(hg_context, hg_addr, rpc_id_transfer, &handle);
+    assert(ret == HG_SUCCESS);
+
+    rpc_transfer_in in_arg = {
+        .filename = filename,
+        .rank = rank,
+        .offset = offset,
+        .count = count,
+    };
+    ret = HG_Bulk_create(hg_class, 1, &buf, &count, HG_BULK_READWRITE, &in_arg.bulk_handle);
+    assert(ret == HG_SUCCESS);
+
+    ret = HG_Forward(handle, rpc_transfer_callback, NULL, &in_arg);
+    assert(ret == HG_SUCCESS);
+
+    pthread_cond_wait(&cond, &mutex);
+    pthread_mutex_unlock(&mutex);
+
+    HG_Bulk_free(in_arg.bulk_handle);
+    ret = HG_Destroy(handle);
+    assert(ret == HG_SUCCESS);
+}
+
+hg_return_t rpc_transfer_callback(const struct hg_cb_info *info) {
+    // Server will not send back the respond until the RDMA has finished,
+    // So we are sure that once we get here, the data will be ready.
+    hg_handle_t handle = info->info.forward.handle;
+    rpc_transfer_out out;
+    HG_Get_output(handle, &out);
+    HG_Free_output(handle, &out);
+
+    signal_main_thread();
+    return HG_SUCCESS;
+}
+*/
 
 hg_return_t rpc_post_callback(const struct hg_cb_info *info)
 {

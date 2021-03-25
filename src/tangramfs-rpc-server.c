@@ -137,6 +137,7 @@ hg_return_t rpc_handler_query(hg_handle_t h)
     bool found = tangram_ms_handle_query(in.filename, in.offset, in.count, &out.rank);
     HG_Respond(h, NULL, NULL, &out);
 
+    HG_Free_input(h, &in);
     hg_return_t ret = HG_Destroy(h);
     assert(ret == HG_SUCCESS);
     return HG_SUCCESS;
@@ -147,6 +148,9 @@ typedef struct BulkTransferInfo_t {
     hg_bulk_t bulk_handle;
     void* buf;
     hg_size_t count;
+
+    int rank;
+    size_t offset;
 } BulkTransferInfo;
 
 hg_return_t rpc_handler_transfer(hg_handle_t h)
@@ -156,6 +160,7 @@ hg_return_t rpc_handler_transfer(hg_handle_t h)
 
     rpc_transfer_in in;
     HG_Get_input(h, &in);
+    // printf("%d %dMB %dMB\n", in.rank, in.offset/1024/1024, in.count/1024/1024);
 
     // Find out the location of the required data
     // TODO This is assumed that we have it
@@ -164,20 +169,24 @@ hg_return_t rpc_handler_transfer(hg_handle_t h)
     assert(tf != NULL);
     bool exist = tangram_it_query(tf->it, in.offset, in.count, &local_offset);
     assert(exist);
-    //printf("%d %d %d %ld\n", in.rank, in.offset, in.count, local_offset);
 
     BulkTransferInfo *bt_info = tangram_malloc(sizeof(BulkTransferInfo));
     bt_info->handle = h;
     bt_info->count = in.count;
     bt_info->buf = tangram_malloc(bt_info->count);
-    ssize_t res = pread(tf->local_fd, bt_info->buf, in.count, local_offset);
+    bt_info->rank = in.rank;
+    bt_info->offset = in.offset;
 
+    ssize_t res = pread(tf->local_fd, bt_info->buf, in.count, local_offset);
 
     ret = HG_Bulk_create(hgi->hg_class, 1, &bt_info->buf, &bt_info->count, HG_BULK_READWRITE, &bt_info->bulk_handle);
     assert(ret == HG_SUCCESS);
 
     ret = HG_Bulk_transfer(hgi->context, rpc_handler_transfer_callback, bt_info, HG_BULK_PUSH,
                             hgi->addr, in.bulk_handle, 0, bt_info->bulk_handle, 0, bt_info->count, HG_OP_ID_IGNORE);
+    assert(ret == HG_SUCCESS);
+
+    HG_Free_input(h, &in);
     assert(ret == HG_SUCCESS);
 
     return HG_SUCCESS;
@@ -195,9 +204,9 @@ hg_return_t rpc_handler_transfer_callback(const struct hg_cb_info *info)
     ret = HG_Destroy(bt_info->handle);
     assert(ret == HG_SUCCESS);
 
+    //printf("%d %ldMB %ldMB - Finish \n", bt_info->rank, bt_info->offset/1024/1024, bt_info->count/1024/1024);
     tangram_free(bt_info->buf, bt_info->count);
     tangram_free(bt_info, sizeof(BulkTransferInfo));
-
 
     return HG_SUCCESS;
 }

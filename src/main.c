@@ -36,6 +36,7 @@ void write_phase() {
         printf("Total write size: %d MB, elapsed time: %fs\n", DATA_SIZE/MB*N*size, (max_tend-min_tstart));
         printf("Bandwidth: %.2f MB/s\n", DATA_SIZE/MB*size*N/(max_tend-min_tstart));
     }
+    free(data);
     tfs_close(tf);
 }
 
@@ -49,8 +50,10 @@ void read_phase() {
     size_t offset = neighbor_rank * DATA_SIZE * N;
     tfs_seek(tf, offset, SEEK_SET);
     double tstart = MPI_Wtime();
-    for(int i = 0; i < N; i++)
-        tfs_read_lazy(tf, data, DATA_SIZE);
+    for(int i = 0; i < N; i++) {
+        //tfs_read_lazy(tf, data, DATA_SIZE);
+        tfs_read(tf, data, DATA_SIZE);
+    }
 
 
     MPI_Barrier(MPI_COMM_WORLD);
@@ -60,22 +63,26 @@ void read_phase() {
         printf("Total read size: %d MB, elapsed time: %fs\n", DATA_SIZE/MB*N*size, (tend-tstart));
         printf("Bandwidth: %.2f MB/s\n", DATA_SIZE/MB*size*N/(tend-tstart));
     }
+    free(data);
     tfs_close(tf);
 }
 
 int main(int argc, char* argv[]) {
     // Have to use MPI_THREAD_MULTIPLE for Mercury+pthread to work
-    MPI_Init_thread(&argc, &argv, MPI_THREAD_MULTIPLE, &provided);
+    //MPI_Init_thread(&argc, &argv, MPI_THREAD_MULTIPLE, &provided);
+    MPI_Init(&argc, &argv);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
     //tfs_init("./", "/l/ssd");
     tfs_init("./chen/", "/tmp");
 
-    for(int i = 0; i < 10; i++) {
+    for(int i = 0; i < 1; i++) {
         MPI_Barrier(MPI_COMM_WORLD);
         write_phase();
+    }
 
+    for(int i = 0; i < 5; i++) {
         MPI_Barrier(MPI_COMM_WORLD);
         read_phase();
     }
