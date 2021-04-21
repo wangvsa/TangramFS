@@ -15,6 +15,6 @@ libtangramfs_la_CFLAGS  = -I${MERCURY_DIR}/include -g3
 libtangramfs_la_LDFLAGS = -Wl,-rpath,${MERCURY_DIR}/lib -L${MERCURY_DIR}/lib
 libtangramfs_la_LDFLAGS += -lmercury -pthread -lrt -version-info 0:0:0
 
-main_out_CFLAGS = -g3
+main_out_CFLAGS = -g3 -std=c99
 main_out_SOURCES = main.c
 main_out_LDADD = libtangramfs.la
