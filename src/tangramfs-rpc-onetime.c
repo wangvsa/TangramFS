@@ -96,6 +96,7 @@ void tangram_rpc_onetime_transfer(char* filename, int rank, size_t offset, size_
         .count = count,
     };
 
+    /*
     ret = HG_Bulk_create(hg_class, 1, &buf, &count, HG_BULK_READWRITE, &in_arg.bulk_handle);
     assert(ret == HG_SUCCESS);
 
@@ -105,14 +106,16 @@ void tangram_rpc_onetime_transfer(char* filename, int rank, size_t offset, size_
 
     ret = HG_Forward(handle, rpc_transfer_callback, bt_info, &in_arg);
     assert(ret == HG_SUCCESS);
+    */
 
+    ret = HG_Forward(handle, rpc_transfer_callback, NULL, &in_arg);
     mercury_onetime_progress_loop();
 }
 
 hg_return_t rpc_transfer_callback(const struct hg_cb_info *info) {
     // Server will not send back the respond until the RDMA has finished,
     // So we are sure that once we get here, the data will be ready.
-
+    /*
     BulkTransferInfo *bt_info = info->arg;
 
     rpc_transfer_out out;
@@ -124,6 +127,12 @@ hg_return_t rpc_transfer_callback(const struct hg_cb_info *info) {
     assert(ret == HG_SUCCESS);
 
     tangram_free(bt_info, sizeof(BulkTransferInfo));
+    */
+    hg_handle_t handle = info->info.forward.handle;
+    rpc_transfer_out out;
+    HG_Get_output(handle, &out);
+    HG_Free_output(handle, &out);
+    HG_Destroy(handle);
 
     return HG_SUCCESS;
 }

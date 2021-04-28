@@ -185,7 +185,7 @@ size_t tfs_read(TFS_File* tf, void* buf, size_t size) {
     int owner_rank;
     tfs_query(tf, tf->offset, size, &owner_rank);
 
-    // If it turns out that myself has the latest data,
+    // Turns out that myself has the latest data,
     // just read it locally.
     if(owner_rank == tfs.mpi_rank) {
         size_t local_offset;
@@ -241,7 +241,6 @@ void tfs_post(TFS_File* tf, size_t offset, size_t count) {
     for(i = 0; i < num_covered; i++)
         covered[i]->posted = true;
     tangram_free(covered, sizeof(Interval*)*num_covered);
-
 }
 
 // TODO: Currnet implementaion send one rpc for each interval

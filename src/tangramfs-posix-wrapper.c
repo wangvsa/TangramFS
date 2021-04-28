@@ -82,8 +82,9 @@ size_t TANGRAM_WRAP(fwrite)(const void *ptr, size_t size, size_t count, FILE * s
 size_t TANGRAM_WRAP(fread)(void * ptr, size_t size, size_t count, FILE * stream)
 {
     TFS_File *tf = stream2tf(stream);
-    if(tf)
+    if(tf) {
         return tangram_read_impl(tf, ptr, count*size);
+    }
 
     MAP_OR_FAIL(fread);
     return TANGRAM_REAL_CALL(fread)(ptr, size, count, stream);
@@ -149,8 +150,9 @@ ssize_t TANGRAM_WRAP(write)(int fd, const void *buf, size_t count)
 ssize_t TANGRAM_WRAP(read)(int fd, void *buf, size_t count)
 {
     TFS_File* tf = fd2tf(fd);
-    if(tf)
+    if(tf) {
         return tangram_read_impl(tf, buf, count);
+    }
 
     MAP_OR_FAIL(read);
     return TANGRAM_REAL_CALL(read)(fd, buf, count);

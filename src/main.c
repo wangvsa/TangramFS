@@ -53,8 +53,8 @@ void read_phase() {
     for(int i = 0; i < N; i++) {
         //tfs_read_lazy(tf, data, DATA_SIZE);
         tfs_read(tf, data, DATA_SIZE);
+        MPI_Barrier(MPI_COMM_WORLD);
     }
-
 
     MPI_Barrier(MPI_COMM_WORLD);
     double tend = MPI_Wtime();
@@ -69,12 +69,12 @@ void read_phase() {
 
 int main(int argc, char* argv[]) {
     // Have to use MPI_THREAD_MULTIPLE for Mercury+pthread to work
-    //MPI_Init_thread(&argc, &argv, MPI_THREAD_MULTIPLE, &provided);
-    MPI_Init(&argc, &argv);
+    MPI_Init_thread(&argc, &argv, MPI_THREAD_MULTIPLE, &provided);
+    //MPI_Init(&argc, &argv);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
-    //tfs_init("./", "/l/ssd");
+    //tfs_init("./chen/", "/l/ssd");
     tfs_init("./chen/", "/tmp");
 
     for(int i = 0; i < 1; i++) {
