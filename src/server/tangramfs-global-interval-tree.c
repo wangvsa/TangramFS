@@ -18,7 +18,7 @@ void tangram_global_it_finalize(GlobalIntervalTree *it) {
     }
 }
 
-inline bool is_overlap(GlobalInterval *i1, GlobalInterval *i2) {
+bool is_overlap(GlobalInterval *i1, GlobalInterval *i2) {
     if((i1->offset+i1->count > i2->offset) &&
             (i1->offset <= i2->offset))
         return true;

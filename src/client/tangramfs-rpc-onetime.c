@@ -14,7 +14,6 @@ static hg_addr_t       hg_addr = NULL;    // addr retrived from the addr lookup 
 
 static hg_id_t         rpc_id_transfer;
 
-
 void mercury_onetime_init();
 void mercury_onetime_finalize();
 void mercury_onetime_register_rpcs();

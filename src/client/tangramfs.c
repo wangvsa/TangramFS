@@ -11,7 +11,6 @@
 #include "tangramfs-rpc.h"
 #include "tangramfs-posix-wrapper.h"
 
-
 typedef struct TFS_Info_t {
     int mpi_rank;
     int mpi_size;
@@ -44,17 +43,14 @@ void tfs_init(const char* persist_dir, const char* buffer_dir) {
         tfs.semantics = atoi(semantics_str);
 
     tfs.server_addrs = tangram_malloc(sizeof(char)*128*tfs.mpi_size);
-
-    // Rank 0 runs the mercury server
-    // All ranks run the mercury client
-    //if(tfs.mpi_rank == 0)
+    /*
     char self_server_addr[128];
     tangram_rpc_server_start(self_server_addr);
-
     MPI_Allgather(self_server_addr, 128, MPI_BYTE, tfs.server_addrs, 128, MPI_BYTE, tfs.mpi_comm);
+    */
 
     char server_addr[128];
-    memcpy(server_addr, tfs.server_addrs, 128);
+    tangram_read_server_addr(server_addr);
     tangram_rpc_client_start(server_addr);
 
     MAP_OR_FAIL(open);
@@ -73,7 +69,7 @@ void tfs_finalize() {
     // server stoped before all other clients
     MPI_Barrier(tfs.mpi_comm);
 
-    tangram_rpc_server_stop();
+    //tangram_rpc_server_stop();
     tangram_rpc_client_stop();
     MPI_Comm_free(&tfs.mpi_comm);
 
@@ -196,11 +192,13 @@ size_t tfs_read(TFS_File* tf, void* buf, size_t size) {
         return size;
     }
 
+    /*
     char server_addr[128];
     memcpy(server_addr, tfs.server_addrs+128*owner_rank, 128);
     tangram_rpc_onetime_start(server_addr);
     tangram_rpc_onetime_transfer(tf->filename, tfs.mpi_rank, tf->offset, size, buf);
     tangram_rpc_onetime_stop();
+    */
 
     tf->offset += size;
     return size;

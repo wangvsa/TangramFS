@@ -5,12 +5,12 @@
 
 #define RPC_NAME_POST       "tfs_rpc_rpc_post"
 #define RPC_NAME_QUERY      "tfs_rpc_rpc_query"
+#define RPC_NAME_STOP       "tfs_rpc_rpc_stop"
 #define RPC_NAME_TRANSFER   "tfs_rpc_rpc_transfer"
 
 #include <mercury.h>
 #include <mercury_proc_string.h>
 #include <mercury_proc_bulk.h>
-
 
 
 typedef struct rpc_post_in_t {
@@ -88,7 +88,6 @@ static inline hg_return_t hg_proc_rpc_post_in(hg_proc_t proc, void* data)
     return ret;
 }
 
-
 typedef struct rpc_query_in_t {
     char* filename;
     int32_t rank;
@@ -107,7 +106,7 @@ hg_proc_rpc_query_in(hg_proc_t proc, void* data) {
     return HG_SUCCESS;
 }
 
-typedef struct rpc_transfer_in_thhh {
+typedef struct rpc_transfer_in_t {
     char* filename;
     int32_t rank;
     uint32_t offset;
@@ -153,19 +152,18 @@ hg_proc_rpc_query_out(hg_proc_t proc, void* data) {
     return HG_SUCCESS;
 }
 
-
-void tangram_rpc_server_start(char* server_addr);
-void tangram_rpc_server_stop();
+void tangram_server_start(char* server_addr);
+void tangram_server_stop();
 
 void tangram_rpc_client_start(const char* server_addr);
 void tangram_rpc_client_stop();
 void tangram_rpc_issue_rpc(const char* rpc_name, char* filename, int rank, size_t *offsets, size_t *counts, int len);
 rpc_query_out tangram_rpc_query_result();
 
-
+/*
 void tangram_rpc_onetime_start(const char* server_addr);
 void tangram_rpc_onetime_stop();
 void tangram_rpc_onetime_transfer(char* filename, int rank, size_t offset, size_t count, void* local_buf);
-
+*/
 
 #endif

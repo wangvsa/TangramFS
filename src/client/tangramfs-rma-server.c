@@ -10,12 +10,8 @@
 #include "tangramfs-utils.h"
 #include "tangramfs-metadata.h"
 
-
 static hg_class_t*     hg_class   = NULL;
 static hg_context_t*   hg_context = NULL;
-
-
-pthread_t server_progress_thread;
 static int running;
 
 // List of RPC handlers
@@ -94,7 +90,7 @@ void* mercury_server_progress_loop(void* arg) {
         do {
             ret = HG_Trigger(hg_context, 0, 1, &count);
         } while((ret == HG_SUCCESS) && count);
-        HG_Progress(hg_context, 10);
+        HG_Progress(hg_context, 100);
     } while(running);
 }
 
@@ -234,5 +230,10 @@ hg_return_t rpc_handler_transfer_callback(const struct hg_cb_info *info)
     tangram_free(bt_info, sizeof(BulkTransferInfo));
 
     return HG_SUCCESS;
+}
+
+
+int main(int argc, char argv[]) {
+    return 0;
 }
 

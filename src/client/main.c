@@ -1,12 +1,19 @@
 #include <stdlib.h>
 #include <stdio.h>
+
+#include <execinfo.h>
+#include <signal.h>
+#include <unistd.h>
+
+
 #include "mpi.h"
 #include "tangramfs.h"
+
 
 #define MB (1024*1024)
 
 static int DATA_SIZE = 4*MB;
-static int N = 1;
+static int N = 2;
 
 
 int size, rank, provided;
@@ -67,7 +74,17 @@ void read_phase() {
     tfs_close(tf);
 }
 
+void error_handler(int sig) {
+   void *array[30];
+   size_t size;
+   size = backtrace(array, 30); //get the void pointers for all of the entries
+   backtrace_symbols_fd(array, size, STDERR_FILENO);
+   exit(1);
+}
+
 int main(int argc, char* argv[]) {
+    signal(SIGSEGV, error_handler);
+
     // Have to use MPI_THREAD_MULTIPLE for Mercury+pthread to work
     MPI_Init_thread(&argc, &argv, MPI_THREAD_MULTIPLE, &provided);
     //MPI_Init(&argc, &argv);

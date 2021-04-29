@@ -5,8 +5,6 @@
 #include "tangramfs-utils.h"
 #include "tangramfs-interval-tree.h"
 
-
-
 void tangram_it_init(IntervalTree *it) {
     it->head = NULL;
 }
@@ -19,7 +17,7 @@ void tangram_it_finalize(IntervalTree *it) {
     }
 }
 
-inline bool is_overlap(Interval *i1, Interval *i2) {
+bool is_overlap(Interval *i1, Interval *i2) {
     if((i1->offset+i1->count > i2->offset) &&
             (i1->offset <= i2->offset))
         return true;
@@ -30,7 +28,7 @@ inline bool is_overlap(Interval *i1, Interval *i2) {
 }
 
 // Return if i1 is fully covered by i2
-inline bool is_covered(Interval *i1, Interval *i2) {
+bool is_covered(Interval *i1, Interval *i2) {
     if((i2->offset <= i1->offset) &&
         (i2->offset+i2->count >= i1->offset+i1->count) )
         return true;
