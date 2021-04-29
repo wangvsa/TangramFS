@@ -92,7 +92,7 @@ int main(int argc, char* argv[]) {
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
     //tfs_init("./chen/", "/l/ssd");
-    tfs_init("./chen/", "/tmp");
+    tfs_init(argv[1], "/tmp");
 
     for(int i = 0; i < 1; i++) {
         MPI_Barrier(MPI_COMM_WORLD);

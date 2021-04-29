@@ -67,22 +67,23 @@ void tangram_server_stop(char* server_addr) {
 }
 
 void print_help_msg() {
-    printf("Usage: ./server start|stop\n");
+    printf("Usage:\n");
+    printf("\t./server start|stop /path/to/persist/directory\n");
 }
 
 int main(int argc, char* argv[]) {
     char server_addr[128];
     char* cmd = argv[1];
 
-    if(argc != 2) {
+    if(argc != 3) {
         print_help_msg();
         return 0;
     }
 
     if( strcmp(argv[1], "start") == 0 ) {
-        tangram_server_start(server_addr);
+        tangram_server_start(argv[2], server_addr);
     } else if( strcmp(argv[1], "stop") == 0 ) {
-        tangram_read_server_addr(server_addr);
+        tangram_read_server_addr(argv[2], server_addr);
         printf("Server addr: %s\n", server_addr);
 
         tangram_server_stop(server_addr);

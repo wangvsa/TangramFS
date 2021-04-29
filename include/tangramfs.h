@@ -20,7 +20,7 @@ typedef struct TFS_File_t {
     UT_hash_handle hh;
 } TFS_File;
 
-void tfs_init(const char* persist_dir, const char* buffer_dir);
+void tfs_init(const char* persist_dir, const char* tfs_dir);
 void tfs_finalize();
 
 TFS_File* tfs_open(const char* pathname);

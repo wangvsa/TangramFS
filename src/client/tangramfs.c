@@ -15,7 +15,7 @@ typedef struct TFS_Info_t {
     int mpi_rank;
     int mpi_size;
     MPI_Comm mpi_comm;
-    char buffer_dir[PATH_MAX];
+    char tfs_dir[PATH_MAX];
     char persist_dir[PATH_MAX];
 
     int semantics;  // Strong, Session or Commit; only needed in passive mode.
@@ -30,13 +30,13 @@ static TFS_File *tfs_files;   // hash map of currently opened files
 static TFS_Info tfs;
 
 
-void tfs_init(const char* persist_dir, const char* buffer_dir) {
+void tfs_init(const char* persist_dir, const char* tfs_dir) {
     MPI_Comm_dup(MPI_COMM_WORLD, &tfs.mpi_comm);
     MPI_Comm_rank(tfs.mpi_comm, &tfs.mpi_rank);
     MPI_Comm_size(tfs.mpi_comm, &tfs.mpi_size);
 
     realpath(persist_dir, tfs.persist_dir);
-    realpath(buffer_dir, tfs.buffer_dir);
+    realpath(tfs_dir, tfs.tfs_dir);
 
     const char* semantics_str = getenv("TANGRAM_SEMANTICS");
     if(semantics_str)
@@ -49,7 +49,7 @@ void tfs_init(const char* persist_dir, const char* buffer_dir) {
     MPI_Allgather(rma_server_addr, 128, MPI_BYTE, tfs.rma_server_addrs, 128, MPI_BYTE, tfs.mpi_comm);
 
     char server_addr[128];
-    tangram_read_server_addr(server_addr);
+    tangram_read_server_addr(tfs.persist_dir, server_addr);
     tangram_rpc_client_start(server_addr);
 
     MAP_OR_FAIL(open);
@@ -89,7 +89,7 @@ TFS_File* tfs_open(const char* pathname) {
     TFS_File *tf = NULL;
 
     char abs_filename[PATH_MAX+64];
-    sprintf(abs_filename, "%s/_tfs_tmpfile.%d", tfs.buffer_dir, tfs.mpi_rank);
+    sprintf(abs_filename, "%s/_tfs_tmpfile.%d", tfs.tfs_dir, tfs.mpi_rank);
 
     HASH_FIND_STR(tfs_files, pathname, tf);
     if(tf) {

@@ -30,6 +30,7 @@
 *.exe
 *.out
 *.app
+*.cfg
 
 
 # Autotools files
