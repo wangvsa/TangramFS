@@ -159,7 +159,7 @@ hg_proc_rpc_query_out(hg_proc_t proc, void* data) {
  * The server program is a seperate program.
  * under ./src/server
  */
-void tangram_server_start(char* tfs_dir, char* server_addr);
+void tangram_server_start(char* persist_dir, char* server_addr);
 void tangram_server_stop();
 
 

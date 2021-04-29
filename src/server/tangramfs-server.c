@@ -55,7 +55,7 @@ void tangram_server_stop(char* server_addr) {
     // progress loop
     while(1) {
         unsigned int count = 0;
-        HG_Progress(hg_context, 1000);
+        HG_Progress(hg_context, 100);
         ret = HG_Trigger(hg_context, 0, 1, &count);
         if (ret == HG_SUCCESS && count)
             break;

@@ -23,13 +23,13 @@ void  mercury_server_register_rpcs();
 void mercury_server_progress_loop();
 
 // Only this one funciton is used by outsiders
-void tangram_server_start(char* tfs_dir, char* server_addr) {
+void tangram_server_start(char* persist_dir, char* server_addr) {
     mercury_server_init(server_addr);
     mercury_server_register_rpcs();
     running = 1;
     tangram_ms_init();
 
-    tangram_write_server_addr(tfs_dir, server_addr);
+    tangram_write_server_addr(persist_dir, server_addr);
     mercury_server_progress_loop();
 }
 
