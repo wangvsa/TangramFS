@@ -8,17 +8,14 @@
 #include "tangramfs.h"
 #include "tangramfs-rpc.h"
 #include "tangramfs-utils.h"
-#include "tangramfs-metadata.h"
 
 static hg_class_t*     hg_class   = NULL;
 static hg_context_t*   hg_context = NULL;
 static int running;
+static pthread_t server_progress_thread;
 
-// List of RPC handlers
-hg_return_t rpc_handler_post(hg_handle_t h);
-hg_return_t rpc_handler_query(hg_handle_t h);
+
 hg_return_t rpc_handler_transfer(hg_handle_t h);
-
 hg_return_t rpc_handler_transfer_callback(const struct hg_cb_info *info);
 
 void  mercury_server_init(char* server_addr);
@@ -27,19 +24,17 @@ void  mercury_server_register_rpcs();
 void* mercury_server_progress_loop(void* arg);
 
 
-void tangram_rpc_server_start(char* server_addr) {
+void tangram_rma_server_start(char* server_addr) {
     mercury_server_init(server_addr);
     mercury_server_register_rpcs();
     running = 1;
     pthread_create(&server_progress_thread, NULL, mercury_server_progress_loop, NULL);
-    tangram_ms_init();
 }
 
-void tangram_rpc_server_stop() {
+void tangram_rma_server_stop() {
     running = 0;
     pthread_join(server_progress_thread, NULL);
     mercury_server_finalize();
-    tangram_ms_finalize();
 }
 
 /*
@@ -71,15 +66,6 @@ void mercury_server_finalize() {
 }
 
 void mercury_server_register_rpcs() {
-    /* Register the RPC by its name
-     * The two NULL arguments correspond to the functions user to
-     * serialize/deserialize the input and output parameters
-     */
-    hg_id_t rpc_id_post = MERCURY_REGISTER(hg_class, RPC_NAME_POST, rpc_post_in, void, rpc_handler_post);
-    HG_Registered_disable_response(hg_class, rpc_id_post, HG_TRUE);
-
-    hg_id_t rpc_id_query = MERCURY_REGISTER(hg_class, RPC_NAME_QUERY, rpc_query_in, rpc_query_out, rpc_handler_query);
-
     hg_id_t rpc_id_transfer = MERCURY_REGISTER(hg_class, RPC_NAME_TRANSFER, rpc_transfer_in, rpc_transfer_out, rpc_handler_transfer);
 }
 
@@ -95,50 +81,11 @@ void* mercury_server_progress_loop(void* arg) {
 }
 
 
-
 /*
  * ------------------------------------------
  * Below are RPC handlers
  * ------------------------------------------
  */
-
-hg_return_t rpc_handler_post(hg_handle_t h)
-{
-    rpc_post_in arg, tmp;
-    HG_Get_input(h, &arg);
-    // printf("RPC - post: rank: %d, %s %d, %d\n", arg.rank, arg.filename, arg.offset/1024/1024, arg.count/1024/1024);
-
-    tmp = arg;
-    char* filename = tmp->filename;
-    int rank = tmp->rank;
-    while(tmp) {
-        tangram_ms_handle_post(rank, filename, tmp->offset, tmp->count);
-        tmp = tmp->next;
-    }
-
-    HG_Free_input(h, &arg);
-
-    hg_return_t ret = HG_Destroy(h);
-    assert(ret == HG_SUCCESS);
-
-    return HG_SUCCESS;
-}
-
-hg_return_t rpc_handler_query(hg_handle_t h)
-{
-    rpc_query_in in;
-    HG_Get_input(h, &in);
-
-    rpc_query_out out;
-    bool found = tangram_ms_handle_query(in.filename, in.offset, in.count, &out.rank);
-    HG_Respond(h, NULL, NULL, &out);
-
-    HG_Free_input(h, &in);
-    hg_return_t ret = HG_Destroy(h);
-    assert(ret == HG_SUCCESS);
-    return HG_SUCCESS;
-}
-
 typedef struct BulkTransferInfo_t {
     hg_handle_t handle;
     hg_bulk_t bulk_handle;
@@ -189,7 +136,6 @@ hg_return_t rpc_handler_transfer(hg_handle_t h)
     assert(ret == HG_SUCCESS);
     */
 
-
     // TODO remove below code after test
     // ---------------------------
     rpc_transfer_out out;
@@ -231,9 +177,3 @@ hg_return_t rpc_handler_transfer_callback(const struct hg_cb_info *info)
 
     return HG_SUCCESS;
 }
-
-
-int main(int argc, char argv[]) {
-    return 0;
-}
-

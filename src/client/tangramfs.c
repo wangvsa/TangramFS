@@ -21,7 +21,7 @@ typedef struct TFS_Info_t {
     int semantics;  // Strong, Session or Commit; only needed in passive mode.
     bool initialized;
 
-    char *server_addrs;
+    char *rma_server_addrs;
 } TFS_Info;
 
 
@@ -42,12 +42,11 @@ void tfs_init(const char* persist_dir, const char* buffer_dir) {
     if(semantics_str)
         tfs.semantics = atoi(semantics_str);
 
-    tfs.server_addrs = tangram_malloc(sizeof(char)*128*tfs.mpi_size);
-    /*
-    char self_server_addr[128];
-    tangram_rpc_server_start(self_server_addr);
-    MPI_Allgather(self_server_addr, 128, MPI_BYTE, tfs.server_addrs, 128, MPI_BYTE, tfs.mpi_comm);
-    */
+    tfs.rma_server_addrs = tangram_malloc(sizeof(char)*128*tfs.mpi_size);
+
+    char rma_server_addr[128];
+    tangram_rma_server_start(rma_server_addr);
+    MPI_Allgather(rma_server_addr, 128, MPI_BYTE, tfs.rma_server_addrs, 128, MPI_BYTE, tfs.mpi_comm);
 
     char server_addr[128];
     tangram_read_server_addr(server_addr);
@@ -69,11 +68,11 @@ void tfs_finalize() {
     // server stoped before all other clients
     MPI_Barrier(tfs.mpi_comm);
 
-    //tangram_rpc_server_stop();
+    tangram_rma_server_stop();
     tangram_rpc_client_stop();
     MPI_Comm_free(&tfs.mpi_comm);
 
-    tangram_free(tfs.server_addrs, sizeof(char)*128*tfs.mpi_size);
+    tangram_free(tfs.rma_server_addrs, sizeof(char)*128*tfs.mpi_size);
 
     // Clear all resources
     TFS_File *tf, *tmp;
@@ -192,13 +191,11 @@ size_t tfs_read(TFS_File* tf, void* buf, size_t size) {
         return size;
     }
 
-    /*
     char server_addr[128];
-    memcpy(server_addr, tfs.server_addrs+128*owner_rank, 128);
-    tangram_rpc_onetime_start(server_addr);
-    tangram_rpc_onetime_transfer(tf->filename, tfs.mpi_rank, tf->offset, size, buf);
-    tangram_rpc_onetime_stop();
-    */
+    memcpy(server_addr, tfs.rma_server_addrs+128*owner_rank, 128);
+    tangram_rma_client_start(server_addr);
+    tangram_rma_client_transfer(tf->filename, tfs.mpi_rank, tf->offset, size, buf);
+    tangram_rma_client_stop();
 
     tf->offset += size;
     return size;

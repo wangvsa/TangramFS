@@ -152,18 +152,45 @@ hg_proc_rpc_query_out(hg_proc_t proc, void* data) {
     return HG_SUCCESS;
 }
 
+/**
+ * Mercury server for handling metadata operations,
+ * incluing POST and QUERY
+ *
+ * The server program is a seperate program.
+ * under ./src/server
+ */
 void tangram_server_start(char* server_addr);
 void tangram_server_stop();
 
+
+/**
+ * Each client process spaws a pthread to run
+ * a Mercury client that is connected with
+ * the Mercury server.
+ */
 void tangram_rpc_client_start(const char* server_addr);
 void tangram_rpc_client_stop();
 void tangram_rpc_issue_rpc(const char* rpc_name, char* filename, int rank, size_t *offsets, size_t *counts, int len);
 rpc_query_out tangram_rpc_query_result();
 
-/*
-void tangram_rpc_onetime_start(const char* server_addr);
-void tangram_rpc_onetime_stop();
-void tangram_rpc_onetime_transfer(char* filename, int rank, size_t offset, size_t count, void* local_buf);
-*/
+
+/**
+ * Each client process spawns a pthread to run
+ * a Mercury server for RMA
+ */
+void tangram_rma_server_start(char* server_addr);
+void tangram_rma_server_stop();
+
+
+/**
+ * The Mercury client for RMA, however, is started
+ * only when the transfer is required. It will connect
+ * to the server that has the data. It is run by the
+ * main thread.
+ */
+void tangram_rma_client_start(const char* server_addr);
+void tangram_rma_client_stop();
+void tangram_rma_client_transfer(char* filename, int rank, size_t offset, size_t count, void* local_buf);
+
 
 #endif

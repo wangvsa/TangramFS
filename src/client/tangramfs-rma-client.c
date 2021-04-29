@@ -14,31 +14,30 @@ static hg_addr_t       hg_addr = NULL;    // addr retrived from the addr lookup 
 
 static hg_id_t         rpc_id_transfer;
 
-void mercury_onetime_init();
-void mercury_onetime_finalize();
-void mercury_onetime_register_rpcs();
-void mercury_onetime_progress_loop();
+void mercury_rma_init();
+void mercury_rma_finalize();
+void mercury_rma_register_rpcs();
+void mercury_rma_progress_loop();
 hg_return_t rpc_transfer_callback(const struct hg_cb_info *info);
 
 
-void tangram_rpc_onetime_start(const char* server_addr) {
-    mercury_onetime_init();
-    mercury_onetime_register_rpcs();
+void tangram_rma_client_start(const char* server_addr) {
+    mercury_rma_init();
+    mercury_rma_register_rpcs();
     HG_Addr_lookup2(hg_class, server_addr, &hg_addr);
     assert(hg_addr != NULL);
 }
 
-void tangram_rpc_onetime_stop() {
-    mercury_onetime_finalize();
+void tangram_rma_client_stop() {
+    mercury_rma_finalize();
 }
-
 
 /*
  * -----------------------------------
  * Internally Used Below
  * -----------------------------------
  */
-void mercury_onetime_init() {
+void mercury_rma_init() {
     hg_class = HG_Init(MERCURY_PROTOCOL, HG_FALSE);
     assert(hg_class != NULL);
 
@@ -46,7 +45,7 @@ void mercury_onetime_init() {
     assert(hg_context != NULL);
 }
 
-void mercury_onetime_finalize() {
+void mercury_rma_finalize() {
     hg_return_t ret;
     ret = HG_Context_destroy(hg_context);
     assert(ret == HG_SUCCESS);
@@ -57,11 +56,11 @@ void mercury_onetime_finalize() {
     assert(ret == HG_SUCCESS);
 }
 
-void mercury_onetime_register_rpcs() {
+void mercury_rma_register_rpcs() {
     rpc_id_transfer = MERCURY_REGISTER(hg_class, RPC_NAME_TRANSFER, rpc_transfer_in, rpc_transfer_out, NULL);
 }
 
-void mercury_onetime_progress_loop() {
+void mercury_rma_progress_loop() {
     hg_return_t ret;
     while(1) {
         unsigned int count = 0;
@@ -81,7 +80,7 @@ typedef struct BulkTransferInfo_t {
 // Note!!
 // void* buf [out] passed to HG_Bulk_create must be
 // allocated on heap. Otherwise, mercury will crash.
-void tangram_rpc_onetime_transfer(char* filename, int rank, size_t offset, size_t count, void* buf) {
+void tangram_rma_client_transfer(char* filename, int rank, size_t offset, size_t count, void* buf) {
     hg_return_t ret;
     hg_handle_t handle;
 
@@ -108,7 +107,7 @@ void tangram_rpc_onetime_transfer(char* filename, int rank, size_t offset, size_
     */
 
     ret = HG_Forward(handle, rpc_transfer_callback, NULL, &in_arg);
-    mercury_onetime_progress_loop();
+    mercury_rma_progress_loop();
 }
 
 hg_return_t rpc_transfer_callback(const struct hg_cb_info *info) {
