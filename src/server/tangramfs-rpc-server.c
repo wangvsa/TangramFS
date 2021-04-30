@@ -48,6 +48,9 @@ void mercury_server_init(char* server_addr) {
     hg_size_t hostname_size;
     hg_addr_t self_addr;
     HG_Addr_self(hg_class, &self_addr);
+    // TODO: HG_Addr_to_string has to be called twice to
+    // get the correct server address, not sure why.
+    HG_Addr_to_string(hg_class, NULL, &hostname_size, self_addr);
     HG_Addr_to_string(hg_class, server_addr, &hostname_size, self_addr);
     printf("Server running at address %s\n", server_addr);
     HG_Addr_free(hg_class, self_addr);

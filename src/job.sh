@@ -2,7 +2,7 @@
 #SBATCH -N 1
 #SBATCH -n 16
 #SBATCH -t 00:10:00
-#SBATCH -p pbatch
+#SBATCH -p pdebug
 #SBATCH --job-name="hello"
 
 # note: -e fsync() after write; -w write onley, default is write and read;
@@ -25,7 +25,7 @@ echo "CHEN" $nodes "nodes"
 mpirun -np 1 ./server/server.out start ./ &
 sleep 2
 
-mpirun -np 4 ./client/main.out ./
+mpirun -np 8 ./client/main.out ./
 
 mpirun -np 1 ./server/server.out stop ./
 
