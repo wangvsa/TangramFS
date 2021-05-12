@@ -1,5 +1,6 @@
 #include <stdlib.h>
 #include <stdio.h>
+#include "tangramfs-utils.h"
 
 static size_t memory_usage = 0;
 

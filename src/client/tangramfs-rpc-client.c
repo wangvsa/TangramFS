@@ -14,7 +14,6 @@ static hg_addr_t       hg_addr = NULL;
 
 static hg_id_t         rpc_id_post;
 static hg_id_t         rpc_id_query;
-static hg_id_t         rpc_id_transfer;
 
 
 static bool running;                       // If we are still runing the progress loop
@@ -25,14 +24,12 @@ pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
 rpc_query_out query_result;
 
-
 void mercury_client_init();
 void mercury_client_finalize();
 void mercury_client_register_rpcs();
 void* mercury_client_progress_loop(void* arg);
 hg_return_t rpc_query_callback(const struct hg_cb_info *info);
 hg_return_t rpc_post_callback(const struct hg_cb_info *info);
-hg_return_t rpc_transfer_callback(const struct hg_cb_info *info);
 
 
 void tangram_rpc_client_start(const char* server_addr) {
@@ -88,8 +85,6 @@ void mercury_client_register_rpcs() {
     HG_Registered_disable_response(hg_class, rpc_id_post, HG_TRUE);
 
     rpc_id_query = MERCURY_REGISTER(hg_class, RPC_NAME_QUERY, rpc_query_in, rpc_query_out, NULL);
-
-    rpc_id_transfer = MERCURY_REGISTER(hg_class, RPC_NAME_TRANSFER, rpc_transfer_in, rpc_transfer_out, NULL);
 }
 
 void* mercury_client_progress_loop(void* arg) {
@@ -160,8 +155,6 @@ void tangram_rpc_issue_rpc(const char* rpc_name, char* filename, int rank, size_
 
     pthread_cond_wait(&cond, &mutex);
     pthread_mutex_unlock(&mutex);
-
-    assert(ret == HG_SUCCESS);
 
     ret = HG_Destroy(handle);
     assert(ret == HG_SUCCESS);

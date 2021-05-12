@@ -86,13 +86,13 @@ mercury_rma_server_progress_loop(void* arg) {
     do {
         unsigned int count = 0;
         do {
-            ret = HG_Trigger(hg_context, 1000, 1, &count);
+            ret = HG_Trigger(hg_context, 0, 1, &count);
         } while((ret == HG_SUCCESS) && count);
 
         if (hg_atomic_get32(&running)==0)
             break;
 
-        ret = HG_Progress(hg_context, 1000);
+        ret = HG_Progress(hg_context, 500);
     } while(ret==HG_SUCCESS || ret == HG_TIMEOUT);
 
     return 0;

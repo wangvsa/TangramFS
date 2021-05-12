@@ -5,7 +5,6 @@
 #include <signal.h>
 #include <unistd.h>
 
-
 #include "mpi.h"
 #include "tangramfs.h"
 

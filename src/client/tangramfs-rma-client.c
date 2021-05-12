@@ -3,41 +3,56 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <stdbool.h>
+#include <pthread.h>
 #include <string.h>
 #include <mercury_macros.h>
 #include "tangramfs-rpc.h"
-#include "tangramfs-utils.h"
 
 static hg_class_t*     hg_class   = NULL;
 static hg_context_t*   hg_context = NULL;
-static hg_addr_t       hg_addr = NULL;    // addr retrived from the addr lookup callback
+static hg_addr_t       hg_addr = NULL;
 
+static hg_id_t         rpc_id_post;
+static hg_id_t         rpc_id_query;
 static hg_id_t         rpc_id_transfer;
 
-void mercury_rma_init();
-void mercury_rma_finalize();
-void mercury_rma_register_rpcs();
-void mercury_rma_progress_loop();
+
+static bool running;                       // If we are still runing the progress loop
+pthread_t rma_client_progress_thread;
+
+pthread_cond_t cond2 =  PTHREAD_COND_INITIALIZER;
+pthread_mutex_t mutex2 = PTHREAD_MUTEX_INITIALIZER;
+
+
+void mercury_rma_client_init();
+void mercury_rma_client_finalize();
+void mercury_rma_client_register_rpcs();
+void* mercury_rma_client_progress_loop(void* arg);
 hg_return_t rpc_transfer_callback(const struct hg_cb_info *info);
 
 
 void tangram_rma_client_start(const char* server_addr) {
-    mercury_rma_init();
-    mercury_rma_register_rpcs();
+    mercury_rma_client_init();
+    mercury_rma_client_register_rpcs();
     HG_Addr_lookup2(hg_class, server_addr, &hg_addr);
-    assert(hg_addr != NULL);
+
+    running = true;
+    pthread_create(&rma_client_progress_thread, NULL, mercury_rma_client_progress_loop, NULL);
 }
 
 void tangram_rma_client_stop() {
-    mercury_rma_finalize();
+    running = false;
+    pthread_join(rma_client_progress_thread, NULL);
+    mercury_rma_client_finalize();
 }
+
 
 /*
  * -----------------------------------
  * Internally Used Below
  * -----------------------------------
  */
-void mercury_rma_init() {
+void mercury_rma_client_init() {
     hg_class = HG_Init(MERCURY_PROTOCOL, HG_FALSE);
     assert(hg_class != NULL);
 
@@ -45,7 +60,7 @@ void mercury_rma_init() {
     assert(hg_context != NULL);
 }
 
-void mercury_rma_finalize() {
+void mercury_rma_client_finalize() {
     hg_return_t ret;
     ret = HG_Context_destroy(hg_context);
     assert(ret == HG_SUCCESS);
@@ -56,33 +71,38 @@ void mercury_rma_finalize() {
     assert(ret == HG_SUCCESS);
 }
 
-void mercury_rma_register_rpcs() {
-    //rpc_id_transfer = MERCURY_REGISTER(hg_class, RPC_NAME_TRANSFER, rpc_transfer_in, rpc_transfer_out, NULL);
+void mercury_rma_client_register_rpcs() {
+    /* Register a RPC function.
+     * The first two NULL correspond to what would be pointers to
+     * serialization/deserialization functions for input and output datatypes
+     * (not used in this example).
+     * The third NULL is the pointer to the function (which is on the server,
+     * so NULL here on the client).
+     */
     rpc_id_transfer = MERCURY_REGISTER(hg_class, RPC_NAME_TRANSFER, void, void, NULL);
     HG_Registered_disable_response(hg_class, rpc_id_transfer, HG_TRUE);
 }
 
-void mercury_rma_progress_loop() {
+void* mercury_rma_client_progress_loop(void* arg) {
     hg_return_t ret;
-    while(1) {
-        unsigned int count = 0;
-        ret = HG_Trigger(hg_context, 0, 1, &count);
-        //if (ret == HG_SUCCESS && count)
-        if (count)
-            break;
-        HG_Progress(hg_context, 500);
-    }
+    do {
+        unsigned int count;
+        do {
+            ret = HG_Trigger(hg_context, 0, 1, &count);
+        } while((ret == HG_SUCCESS) && count);
+        HG_Progress(hg_context, 1000);
+    } while(running);
+
+    return NULL;
 }
 
 
-typedef struct BulkTransferInfo_t {
-    hg_bulk_t bulk_handle;
-    hg_handle_t handle;
-} BulkTransferInfo;
+void signal_main_thread2() {
+    pthread_mutex_lock(&mutex2);
+    pthread_cond_signal(&cond2);
+    pthread_mutex_unlock(&mutex2);
+}
 
-// Note!!
-// void* buf [out] passed to HG_Bulk_create must be
-// allocated on heap. Otherwise, mercury will crash.
 void tangram_rma_client_transfer(char* filename, int rank, size_t offset, size_t count, void* buf) {
     hg_return_t ret;
     hg_handle_t handle;
@@ -97,48 +117,17 @@ void tangram_rma_client_transfer(char* filename, int rank, size_t offset, size_t
         .count = count,
     };
 
-    /*
-    ret = HG_Bulk_create(hg_class, 1, &buf, &count, HG_BULK_READWRITE, &in_arg.bulk_handle);
+    ret = HG_Forward(handle, rpc_transfer_callback, NULL, NULL);
     assert(ret == HG_SUCCESS);
 
-    BulkTransferInfo *bt_info = tangram_malloc(sizeof(BulkTransferInfo));
-    bt_info->handle = handle;
-    bt_info->bulk_handle = in_arg.bulk_handle;
-
-    ret = HG_Forward(handle, rpc_transfer_callback, bt_info, &in_arg);
-    assert(ret == HG_SUCCESS);
-    */
-
-    //ret = HG_Forward(handle, rpc_transfer_callback, NULL, &in_arg);
-    ret = HG_Forward(handle, NULL, NULL, NULL);
-    assert(ret == HG_SUCCESS);
+    pthread_cond_wait(&cond2, &mutex2);
+    pthread_mutex_unlock(&mutex2);
 
     ret = HG_Destroy(handle);
     assert(ret == HG_SUCCESS);
-    mercury_rma_progress_loop();
 }
 
 hg_return_t rpc_transfer_callback(const struct hg_cb_info *info) {
-    // Server will not send back the respond until the RDMA has finished,
-    // So we are sure that once we get here, the data will be ready.
-    /*
-    BulkTransferInfo *bt_info = info->arg;
-
-    rpc_transfer_out out;
-    HG_Get_output(bt_info->handle, &out);
-    HG_Free_output(bt_info->handle, &out);
-
-    HG_Bulk_free(bt_info->bulk_handle);
-    hg_return_t ret = HG_Destroy(bt_info->handle);
-    assert(ret == HG_SUCCESS);
-
-    tangram_free(bt_info, sizeof(BulkTransferInfo));
-    */
-    hg_handle_t handle = info->info.forward.handle;
-    //rpc_transfer_out out;
-    //HG_Get_output(handle, &out);
-    //HG_Free_output(handle, &out);
-    HG_Destroy(handle);
-
+    signal_main_thread2();
     return HG_SUCCESS;
 }
