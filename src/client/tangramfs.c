@@ -178,8 +178,8 @@ size_t tfs_write(TFS_File* tf, const void* buf, size_t size) {
 
 size_t tfs_read(TFS_File* tf, void* buf, size_t size) {
     int owner_rank;
-    owner_rank = (tfs.mpi_rank + 1) % tfs.mpi_size;
-    //tfs_query(tf, tf->offset, size, &owner_rank);
+    tfs_query(tf, tf->offset, size, &owner_rank);
+    //printf("my rank: %d, owner rank: %d\n", tfs.mpi_rank, owner_rank);
 
     // Turns out that myself has the latest data,
     // just read it locally.

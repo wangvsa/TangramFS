@@ -127,6 +127,29 @@ int TANGRAM_WRAP(open)(const char *pathname, int flags, ...)
     }
 }
 
+int TANGRAM_WRAP(open64)(const char *pathname, int flags, ...)
+{
+    printf("intercept open64 %s\n", pathname);
+    if(tangram_should_intercept(pathname)) {
+        TFSFdMap *entry = malloc(sizeof(TFSFdMap));
+        entry->tf = tfs_open(pathname);
+        entry->fd = entry->tf->local_fd;
+        HASH_ADD_INT(tf_fd_map, fd, entry);
+        return entry->fd;
+    }
+
+    MAP_OR_FAIL(open);
+    if(flags & O_CREAT) {
+        va_list arg;
+        va_start(arg, flags);
+        int mode = va_arg(arg, int);
+        va_end(arg);
+        return TANGRAM_REAL_CALL(open)(pathname, flags, mode);
+    } else {
+        return TANGRAM_REAL_CALL(open)(pathname, flags);
+    }
+}
+
 off_t TANGRAM_WRAP(lseek)(int fd, off_t offset, int whence)
 {
     TFS_File* tf = fd2tf(fd);

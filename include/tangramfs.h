@@ -9,7 +9,6 @@
 #define TANGRAM_CUSTOM_SEMANTICS        4
 
 
-
 typedef struct TFS_File_t {
     char filename[256]; // file name of the targeting file
     size_t offset;      // offset of the targeting file in this process

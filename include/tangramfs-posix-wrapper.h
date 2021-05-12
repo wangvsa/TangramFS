@@ -1,6 +1,7 @@
 #ifndef _TANGRAMFS_POSIX_WRAPPER_H_
 #define _TANGRAMFS_POSIX_WRAPPER_H_
 #include <dlfcn.h>
+#include <fcntl.h>
 
 #ifdef TANGRAM_PRELOAD
     #define TANGRAM_WRAP(func) func
@@ -36,7 +37,10 @@ TANGRAM_DECL_REAL_CALL(fwrite, size_t, (const void *ptr, size_t size, size_t cou
 TANGRAM_DECL_REAL_CALL(fread, size_t, (void * ptr, size_t size, size_t count, FILE* stream));
 TANGRAM_DECL_REAL_CALL(fclose, int, (FILE* stream));
 
+// TODO on my local machine, this signature only intercepts calls with the 3rd argument
+// Id does not intercept calls with two arguments like: open(filename, flag)
 TANGRAM_DECL_REAL_CALL(open, int, (const char *pathname, int flags, ...));
+TANGRAM_DECL_REAL_CALL(open64, int, (const char *pathname, int flags, ...));
 TANGRAM_DECL_REAL_CALL(lseek, off_t, (int fd, off_t offset, int whence));
 TANGRAM_DECL_REAL_CALL(write, ssize_t, (int fd, const void *buf, size_t count));
 TANGRAM_DECL_REAL_CALL(read, ssize_t, (int fd, void *buf, size_t count));

@@ -14,7 +14,7 @@ int size, rank;
 void test_passive_mode() {
     MPI_Barrier(MPI_COMM_WORLD);
 
-    int fd = open("./chen/test.txt", O_RDWR);
+    int fd = open("./test.txt", O_RDWR);
 
     char* data = malloc(sizeof(char)*DATA_SIZE);
     double tstart = MPI_Wtime();
@@ -34,7 +34,9 @@ void test_passive_mode() {
         printf("Bandwidth: %.2f MB/s\n", DATA_SIZE/MB*size*N/(tend-tstart));
     }
 
-    /*
+    int neighbor_rank = (rank + 1) % size;
+    offset = neighbor_rank * DATA_SIZE * N;
+    lseek(fd, offset, SEEK_SET);
     tstart = MPI_Wtime();
     for(i = 0; i < N; i++)
         read(fd, data, DATA_SIZE);
@@ -46,7 +48,6 @@ void test_passive_mode() {
         printf("Total read size: %d MB, elapsed time: %fs\n", DATA_SIZE/MB*N*size, (tend-tstart));
         printf("Bandwidth: %.2f MB/s\n", DATA_SIZE/MB*size*N/(tend-tstart));
     }
-    */
 
     close(fd);
 }
