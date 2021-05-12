@@ -79,8 +79,7 @@ void mercury_rma_client_register_rpcs() {
      * The third NULL is the pointer to the function (which is on the server,
      * so NULL here on the client).
      */
-    rpc_id_transfer = MERCURY_REGISTER(hg_class, RPC_NAME_TRANSFER, void, void, NULL);
-    HG_Registered_disable_response(hg_class, rpc_id_transfer, HG_TRUE);
+    rpc_id_transfer = MERCURY_REGISTER(hg_class, RPC_NAME_TRANSFER, rpc_transfer_in, rpc_transfer_out, NULL);
 }
 
 void* mercury_rma_client_progress_loop(void* arg) {
@@ -117,7 +116,7 @@ void tangram_rma_client_transfer(char* filename, int rank, size_t offset, size_t
         .count = count,
     };
 
-    ret = HG_Forward(handle, rpc_transfer_callback, NULL, NULL);
+    ret = HG_Forward(handle, rpc_transfer_callback, NULL, &in_arg);
     assert(ret == HG_SUCCESS);
 
     pthread_cond_wait(&cond2, &mutex2);
@@ -128,6 +127,12 @@ void tangram_rma_client_transfer(char* filename, int rank, size_t offset, size_t
 }
 
 hg_return_t rpc_transfer_callback(const struct hg_cb_info *info) {
+    hg_handle_t handle = info->info.forward.handle;
+
+    rpc_transfer_out out;
+    HG_Get_output(handle, &out);
+    HG_Free_output(handle, &out);
+
     signal_main_thread2();
     return HG_SUCCESS;
 }
