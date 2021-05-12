@@ -102,6 +102,7 @@ void signal_main_thread2() {
     pthread_mutex_unlock(&mutex2);
 }
 
+// Note: this function will be running on  the main thread
 void tangram_rma_client_transfer(char* filename, int rank, size_t offset, size_t count, void* buf) {
     hg_return_t ret;
     hg_handle_t handle;
@@ -116,12 +117,16 @@ void tangram_rma_client_transfer(char* filename, int rank, size_t offset, size_t
         .count = count,
     };
 
+    ret = HG_Bulk_create(hg_class, 1, &buf, &count, HG_BULK_READWRITE, &in_arg.bulk_handle);
+    assert(ret == HG_SUCCESS);
+
     ret = HG_Forward(handle, rpc_transfer_callback, NULL, &in_arg);
     assert(ret == HG_SUCCESS);
 
     pthread_cond_wait(&cond2, &mutex2);
     pthread_mutex_unlock(&mutex2);
 
+    HG_Bulk_free(in_arg.bulk_handle);
     ret = HG_Destroy(handle);
     assert(ret == HG_SUCCESS);
 }

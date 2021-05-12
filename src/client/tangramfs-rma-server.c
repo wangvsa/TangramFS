@@ -111,14 +111,8 @@ hg_return_t rpc_handler_transfer(hg_handle_t h)
     rpc_transfer_in in;
     HG_Get_input(h, &in);
 
-    //int rank = in.rank;
-    //printf("%d server get request\n", rank);
-
-    //printf("%d %dMB %dMB\n", in.rank, in.offset/1024/1024, in.count/1024/1024);
-
     // Find out the location of the required data
     // TODO This is assumed that we have it
-    /*
     size_t local_offset;
     TFS_File* tf = tangram_get_tfs_file(in.filename);
     assert(tf != NULL);
@@ -142,30 +136,6 @@ hg_return_t rpc_handler_transfer(hg_handle_t h)
     ret = HG_Bulk_transfer(hgi->context, rpc_handler_transfer_callback, bt_info, HG_BULK_PUSH,
                             hgi->addr, in.bulk_handle, 0, bt_info->bulk_handle, 0, bt_info->count, HG_OP_ID_IGNORE);
     assert(ret == HG_SUCCESS);
-    */
-
-    // TODO remove below code after test
-    // ---------------------------
-    rpc_transfer_out out;
-    ret = HG_Respond(h, NULL, NULL, &out);
-    assert(ret == HG_SUCCESS);
-
-    ret = HG_Free_input(h, &in);
-    assert(ret == HG_SUCCESS);
-
-    ret = HG_Destroy(h);
-    assert(ret == HG_SUCCESS);
-    //printf("%d sever respond back\n", rank);
-
-    /*
-    HG_Respond(bt_info->handle, NULL, NULL, &out);
-    HG_Bulk_free(bt_info->bulk_handle);
-    ret = HG_Destroy(bt_info->handle);
-    tangram_free(bt_info->buf, bt_info->count);
-    tangram_free(bt_info, sizeof(BulkTransferInfo));
-    */
-    // ---------------------------
-
     return HG_SUCCESS;
 }
 
@@ -181,7 +151,6 @@ hg_return_t rpc_handler_transfer_callback(const struct hg_cb_info *info)
     ret = HG_Destroy(bt_info->handle);
     assert(ret == HG_SUCCESS);
 
-    printf("%d %ldMB %ldMB - Finish \n", bt_info->rank, bt_info->offset/1024/1024, bt_info->count/1024/1024);
     tangram_free(bt_info->buf, bt_info->count);
     tangram_free(bt_info, sizeof(BulkTransferInfo));
 
