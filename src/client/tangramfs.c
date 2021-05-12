@@ -48,9 +48,9 @@ void tfs_init(const char* persist_dir, const char* tfs_dir) {
     tangram_rma_server_start(rma_server_addr);
     MPI_Allgather(rma_server_addr, 128, MPI_BYTE, tfs.rma_server_addrs, 128, MPI_BYTE, tfs.mpi_comm);
 
-    char server_addr[128];
-    tangram_read_server_addr(tfs.persist_dir, server_addr);
-    tangram_rpc_client_start(server_addr);
+    char rpc_server_addr[128];
+    tangram_read_server_addr(tfs.persist_dir, rpc_server_addr);
+    tangram_rpc_client_start(rpc_server_addr);
 
     MAP_OR_FAIL(open);
     MAP_OR_FAIL(close);
@@ -178,7 +178,8 @@ size_t tfs_write(TFS_File* tf, const void* buf, size_t size) {
 
 size_t tfs_read(TFS_File* tf, void* buf, size_t size) {
     int owner_rank;
-    tfs_query(tf, tf->offset, size, &owner_rank);
+    owner_rank = (tfs.mpi_rank + 1) % tfs.mpi_size;
+    //tfs_query(tf, tf->offset, size, &owner_rank);
 
     // Turns out that myself has the latest data,
     // just read it locally.
@@ -193,6 +194,7 @@ size_t tfs_read(TFS_File* tf, void* buf, size_t size) {
 
     char server_addr[128];
     memcpy(server_addr, tfs.rma_server_addrs+128*owner_rank, 128);
+
     tangram_rma_client_start(server_addr);
     tangram_rma_client_transfer(tf->filename, tfs.mpi_rank, tf->offset, size, buf);
     tangram_rma_client_stop();

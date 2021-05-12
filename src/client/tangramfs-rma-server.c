@@ -5,36 +5,44 @@
 #include <unistd.h>
 #include "mpi.h"
 #include <mercury_macros.h>
+#include <mercury_thread.h>
+#include <mercury_atomic.h>
 #include "tangramfs.h"
 #include "tangramfs-rpc.h"
 #include "tangramfs-utils.h"
 
 static hg_class_t*     hg_class   = NULL;
 static hg_context_t*   hg_context = NULL;
-static int running;
-static pthread_t server_progress_thread;
+
+//static int running;
+hg_atomic_int32_t running;
+static hg_thread_t rma_server_progress_thread;
 
 
 hg_return_t rpc_handler_transfer(hg_handle_t h);
 hg_return_t rpc_handler_transfer_callback(const struct hg_cb_info *info);
 
-void  mercury_server_init(char* server_addr);
-void  mercury_server_finalize();
-void  mercury_server_register_rpcs();
-void* mercury_server_progress_loop(void* arg);
+void  mercury_rma_server_init(char* server_addr);
+void  mercury_rma_server_finalize();
+void  mercury_rma_server_register_rpcs();
+static HG_THREAD_RETURN_TYPE mercury_rma_server_progress_loop(void* arg);
 
 
 void tangram_rma_server_start(char* server_addr) {
-    mercury_server_init(server_addr);
-    mercury_server_register_rpcs();
-    running = 1;
-    pthread_create(&server_progress_thread, NULL, mercury_server_progress_loop, NULL);
+    mercury_rma_server_init(server_addr);
+    mercury_rma_server_register_rpcs();
+    hg_atomic_set32(&running, 1);
+    //pthread_create(&rma_server_progress_thread, NULL, mercury_rma_server_progress_loop, NULL);
+    hg_thread_create(&rma_server_progress_thread, mercury_rma_server_progress_loop, hg_context);
 }
 
 void tangram_rma_server_stop() {
-    running = 0;
-    pthread_join(server_progress_thread, NULL);
-    mercury_server_finalize();
+    while (hg_atomic_get32(&running) == 1 )
+        hg_atomic_set32(&running, 0);
+
+    //pthread_join(rma_server_progress_thread, NULL);
+    hg_thread_join(rma_server_progress_thread);
+    mercury_rma_server_finalize();
 }
 
 /*
@@ -43,7 +51,7 @@ void tangram_rma_server_stop() {
  * ------------------------------------------
  */
 
-void mercury_server_init(char* server_addr) {
+void mercury_rma_server_init(char* server_addr) {
     hg_return_t ret;
 
     hg_class = HG_Init(MERCURY_PROTOCOL, HG_TRUE);
@@ -61,24 +69,33 @@ void mercury_server_init(char* server_addr) {
     assert(hg_context != NULL);
 }
 
-void mercury_server_finalize() {
+void mercury_rma_server_finalize() {
     HG_Context_destroy(hg_context);
     HG_Finalize(hg_class);
 }
 
-void mercury_server_register_rpcs() {
-    hg_id_t rpc_id_transfer = MERCURY_REGISTER(hg_class, RPC_NAME_TRANSFER, rpc_transfer_in, rpc_transfer_out, rpc_handler_transfer);
+void mercury_rma_server_register_rpcs() {
+    //hg_id_t rpc_id_transfer = MERCURY_REGISTER(hg_class, RPC_NAME_TRANSFER, rpc_transfer_in, rpc_transfer_out, rpc_handler_transfer);
+    hg_id_t rpc_id_transfer = MERCURY_REGISTER(hg_class, RPC_NAME_TRANSFER, void, void, rpc_handler_transfer);
+    HG_Registered_disable_response(hg_class, rpc_id_transfer, HG_TRUE);
 }
 
-void* mercury_server_progress_loop(void* arg) {
+static HG_THREAD_RETURN_TYPE
+mercury_rma_server_progress_loop(void* arg) {
     hg_return_t ret;
     do {
-        unsigned int count;
+        unsigned int count = 0;
         do {
-            ret = HG_Trigger(hg_context, 0, 1, &count);
+            ret = HG_Trigger(hg_context, 1000, 1, &count);
         } while((ret == HG_SUCCESS) && count);
-        HG_Progress(hg_context, 100);
-    } while(running);
+
+        if (hg_atomic_get32(&running)==0)
+            break;
+
+        ret = HG_Progress(hg_context, 1000);
+    } while(ret==HG_SUCCESS || ret == HG_TIMEOUT);
+
+    return 0;
 }
 
 
@@ -101,11 +118,11 @@ hg_return_t rpc_handler_transfer(hg_handle_t h)
 {
     hg_return_t ret;
 
-    rpc_transfer_in in;
-    HG_Get_input(h, &in);
+    //rpc_transfer_in in;
+    //HG_Get_input(h, &in);
 
-    int rank = in.rank;
-    printf("%d server get request\n", rank);
+    //int rank = in.rank;
+    //printf("%d server get request\n", rank);
 
     //printf("%d %dMB %dMB\n", in.rank, in.offset/1024/1024, in.count/1024/1024);
 
@@ -139,14 +156,15 @@ hg_return_t rpc_handler_transfer(hg_handle_t h)
 
     // TODO remove below code after test
     // ---------------------------
-    rpc_transfer_out out;
-    HG_Respond(h, NULL, NULL, &out);
+    //rpc_transfer_out out;
+    //ret = HG_Respond(h, NULL, NULL, &out);
+    //assert(ret == HG_SUCCESS);
 
-    ret = HG_Free_input(h, &in);
-    assert(ret == HG_SUCCESS);
+    //ret = HG_Free_input(h, &in);
+    //assert(ret == HG_SUCCESS);
     ret = HG_Destroy(h);
     assert(ret == HG_SUCCESS);
-    printf("%d sever respond back\n", rank);
+    //printf("%d sever respond back\n", rank);
 
     /*
     HG_Respond(bt_info->handle, NULL, NULL, &out);

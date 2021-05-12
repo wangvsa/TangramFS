@@ -57,17 +57,20 @@ void mercury_rma_finalize() {
 }
 
 void mercury_rma_register_rpcs() {
-    rpc_id_transfer = MERCURY_REGISTER(hg_class, RPC_NAME_TRANSFER, rpc_transfer_in, rpc_transfer_out, NULL);
+    //rpc_id_transfer = MERCURY_REGISTER(hg_class, RPC_NAME_TRANSFER, rpc_transfer_in, rpc_transfer_out, NULL);
+    rpc_id_transfer = MERCURY_REGISTER(hg_class, RPC_NAME_TRANSFER, void, void, NULL);
+    HG_Registered_disable_response(hg_class, rpc_id_transfer, HG_TRUE);
 }
 
 void mercury_rma_progress_loop() {
     hg_return_t ret;
     while(1) {
         unsigned int count = 0;
-        HG_Progress(hg_context, 500);
         ret = HG_Trigger(hg_context, 0, 1, &count);
-        if (ret == HG_SUCCESS && count)
+        //if (ret == HG_SUCCESS && count)
+        if (count)
             break;
+        HG_Progress(hg_context, 500);
     }
 }
 
@@ -106,7 +109,12 @@ void tangram_rma_client_transfer(char* filename, int rank, size_t offset, size_t
     assert(ret == HG_SUCCESS);
     */
 
-    ret = HG_Forward(handle, rpc_transfer_callback, NULL, &in_arg);
+    //ret = HG_Forward(handle, rpc_transfer_callback, NULL, &in_arg);
+    ret = HG_Forward(handle, NULL, NULL, NULL);
+    assert(ret == HG_SUCCESS);
+
+    ret = HG_Destroy(handle);
+    assert(ret == HG_SUCCESS);
     mercury_rma_progress_loop();
 }
 
@@ -127,9 +135,9 @@ hg_return_t rpc_transfer_callback(const struct hg_cb_info *info) {
     tangram_free(bt_info, sizeof(BulkTransferInfo));
     */
     hg_handle_t handle = info->info.forward.handle;
-    rpc_transfer_out out;
-    HG_Get_output(handle, &out);
-    HG_Free_output(handle, &out);
+    //rpc_transfer_out out;
+    //HG_Get_output(handle, &out);
+    //HG_Free_output(handle, &out);
     HG_Destroy(handle);
 
     return HG_SUCCESS;

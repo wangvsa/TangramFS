@@ -74,6 +74,7 @@ void mercury_server_register_rpcs() {
 
     hg_id_t rpc_id_stop = MERCURY_REGISTER(hg_class, RPC_NAME_STOP, void, void, rpc_handler_stop);
     HG_Registered_disable_response(hg_class, rpc_id_stop, HG_TRUE);
+
 }
 
 void mercury_server_progress_loop() {
