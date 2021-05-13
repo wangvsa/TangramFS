@@ -6,6 +6,7 @@
 #include <pthread.h>
 #include <string.h>
 #include <mercury_macros.h>
+#include <mercury_atomic.h>
 #include "tangramfs-rma-client.h"
 
 static hg_class_t*     hg_class   = NULL;
@@ -17,7 +18,7 @@ static hg_id_t         rpc_id_query;
 static hg_id_t         rpc_id_transfer;
 
 
-static bool running;                       // If we are still runing the progress loop
+static volatile bool running;                       // If we are still runing the progress loop
 pthread_t rma_client_progress_thread;
 
 pthread_cond_t cond2 =  PTHREAD_COND_INITIALIZER;
@@ -89,9 +90,8 @@ void* mercury_rma_client_progress_loop(void* arg) {
         do {
             ret = HG_Trigger(hg_context, 0, 1, &count);
         } while((ret == HG_SUCCESS) && count);
-        if(!running) break;
-        ret = HG_Progress(hg_context, MERCURY_PROGRESS_TIMEOUT);
-    } while(ret==HG_SUCCESS || ret == HG_TIMEOUT);
+        HG_Progress(hg_context, 0);
+    } while(running);
 
     return NULL;
 }

@@ -12,7 +12,7 @@
 #define MB (1024*1024)
 
 static int DATA_SIZE = 4*MB;
-static int N = 4;
+static int N = 10;
 
 
 int size, rank, provided;
