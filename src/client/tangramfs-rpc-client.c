@@ -6,7 +6,7 @@
 #include <pthread.h>
 #include <string.h>
 #include <mercury_macros.h>
-#include "tangramfs-rpc.h"
+#include "tangramfs-rpc-client.h"
 
 static hg_class_t*     hg_class   = NULL;
 static hg_context_t*   hg_context = NULL;
@@ -94,8 +94,9 @@ void* mercury_client_progress_loop(void* arg) {
         do {
             ret = HG_Trigger(hg_context, 0, 1, &count);
         } while((ret == HG_SUCCESS) && count);
-        HG_Progress(hg_context, 1000);
-    } while(running);
+        if(!running) break;
+        ret = HG_Progress(hg_context, MERCURY_PROGRESS_TIMEOUT);
+    } while(ret==HG_SUCCESS || ret == HG_TIMEOUT);
 
     return NULL;
 }

@@ -31,3 +31,4 @@ void tangram_read_server_addr(char* persist_dir, char* addr) {
     fscanf(f, "%s", addr);
     fclose(f);
 }
+

@@ -2,7 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <mercury_macros.h>
-#include "tangramfs-rpc.h"
+#include "tangramfs-rpc-server.h"
 #include "tangramfs-utils.h"
 
 static hg_class_t*     hg_class   = NULL;

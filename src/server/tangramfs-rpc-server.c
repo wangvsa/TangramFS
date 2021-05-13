@@ -4,7 +4,7 @@
 #include <unistd.h>
 #include <mercury_macros.h>
 #include "tangramfs.h"
-#include "tangramfs-rpc.h"
+#include "tangramfs-rpc-server.h"
 #include "tangramfs-utils.h"
 #include "tangramfs-metadata.h"
 
@@ -84,8 +84,9 @@ void mercury_server_progress_loop() {
         do {
             ret = HG_Trigger(hg_context, 0, 1, &count);
         } while((ret == HG_SUCCESS) && count);
-        HG_Progress(hg_context, 100);
-    } while(running);
+        if(!running) break;
+        ret = HG_Progress(hg_context, MERCURY_PROGRESS_TIMEOUT);
+    } while(ret==HG_SUCCESS || ret == HG_TIMEOUT);
 
     // server stoped
     tangram_server_finalize();

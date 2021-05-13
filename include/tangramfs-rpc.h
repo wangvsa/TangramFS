@@ -2,16 +2,18 @@
 #define _TANGRAMFS_RPC_H_
 
 #define MERCURY_PROTOCOL    "ofi+tcp"
+#define MERCURY_PROGRESS_TIMEOUT 100
+#define MERCURY_TRIGGER_TIMEOUT 100
 
 #define RPC_NAME_POST       "tfs_rpc_rpc_post"
 #define RPC_NAME_QUERY      "tfs_rpc_rpc_query"
 #define RPC_NAME_STOP       "tfs_rpc_rpc_stop"
 #define RPC_NAME_TRANSFER   "tfs_rpc_rpc_transfer"
 
+
 #include <mercury.h>
 #include <mercury_proc_string.h>
 #include <mercury_proc_bulk.h>
-
 
 typedef struct rpc_post_in_t {
     char* filename;
@@ -21,7 +23,8 @@ typedef struct rpc_post_in_t {
     struct rpc_post_in_t* next;
 } *rpc_post_in;
 
-static inline hg_return_t hg_proc_rpc_post_in(hg_proc_t proc, void* data)
+static HG_INLINE hg_return_t
+hg_proc_rpc_post_in(hg_proc_t proc, void* data)
 {
     hg_return_t ret;
     rpc_post_in *list = (rpc_post_in*)data;
@@ -96,7 +99,7 @@ typedef struct rpc_query_in_t {
 } rpc_query_in;
 
 /* hg_proc_[structure name] is a special name */
-static hg_return_t
+static HG_INLINE hg_return_t
 hg_proc_rpc_query_in(hg_proc_t proc, void* data) {
     rpc_query_in *arg = (rpc_query_in*) data;
     hg_proc_hg_const_string_t(proc, &arg->filename);
@@ -105,6 +108,20 @@ hg_proc_rpc_query_in(hg_proc_t proc, void* data) {
     hg_proc_uint32_t(proc, &arg->count);
     return HG_SUCCESS;
 }
+
+typedef struct rpc_query_out_t {
+    int32_t rank;
+} rpc_query_out;
+
+
+/* hg_proc_[structure name] is a special name */
+static HG_INLINE hg_return_t
+hg_proc_rpc_query_out(hg_proc_t proc, void* data) {
+    rpc_query_out *arg = (rpc_query_out*) data;
+    hg_proc_int32_t(proc, &arg->rank);
+    return HG_SUCCESS;
+}
+
 
 typedef struct rpc_transfer_in_t {
     char* filename;
@@ -132,65 +149,11 @@ typedef struct rpc_transfer_out_t {
 
 
 /* hg_proc_[structure name] is a special name */
-static hg_return_t
+static HG_INLINE hg_return_t
 hg_proc_rpc_transfer_out(hg_proc_t proc, void* data) {
     rpc_transfer_out *arg = (rpc_transfer_out*) data;
     hg_proc_int32_t(proc, &arg->rank);
     return HG_SUCCESS;
 }
-
-typedef struct rpc_query_out_t {
-    int32_t rank;
-} rpc_query_out;
-
-
-/* hg_proc_[structure name] is a special name */
-static hg_return_t
-hg_proc_rpc_query_out(hg_proc_t proc, void* data) {
-    rpc_query_out *arg = (rpc_query_out*) data;
-    hg_proc_int32_t(proc, &arg->rank);
-    return HG_SUCCESS;
-}
-
-/**
- * Mercury server for handling metadata operations,
- * incluing POST and QUERY
- *
- * The server program is a seperate program.
- * under ./src/server
- */
-void tangram_server_start(char* persist_dir, char* server_addr);
-void tangram_server_stop();
-
-
-/**
- * Each client process spaws a pthread to run
- * a Mercury client that is connected with
- * the Mercury server.
- */
-void tangram_rpc_client_start(const char* server_addr);
-void tangram_rpc_client_stop();
-void tangram_rpc_issue_rpc(const char* rpc_name, char* filename, int rank, size_t *offsets, size_t *counts, int len);
-rpc_query_out tangram_rpc_query_result();
-
-
-/**
- * Each client process spawns a pthread to run
- * a Mercury server for RMA
- */
-void tangram_rma_server_start(char* server_addr);
-void tangram_rma_server_stop();
-
-
-/**
- * The Mercury client for RMA, however, is started
- * only when the transfer is required. It will connect
- * to the server that has the data. It is run by the
- * main thread.
- */
-void tangram_rma_client_start(const char* server_addr);
-void tangram_rma_client_stop();
-void tangram_rma_client_transfer(char* filename, int rank, size_t offset, size_t count, void* local_buf);
-
 
 #endif

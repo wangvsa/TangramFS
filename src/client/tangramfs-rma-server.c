@@ -6,7 +6,7 @@
 #include "mpi.h"
 #include <mercury_macros.h>
 #include "tangramfs.h"
-#include "tangramfs-rpc.h"
+#include "tangramfs-rma-server.h"
 #include "tangramfs-utils.h"
 
 static hg_class_t*     hg_class   = NULL;
@@ -78,11 +78,8 @@ void* mercury_rma_server_progress_loop(void* arg) {
         do {
             ret = HG_Trigger(hg_context, 0, 1, &count);
         } while((ret == HG_SUCCESS) && count);
-
-        if(!running)
-            break;
-
-        ret = HG_Progress(hg_context, 500);
+        if(!running) break;
+        ret = HG_Progress(hg_context, MERCURY_PROGRESS_TIMEOUT);
     } while(ret==HG_SUCCESS || ret == HG_TIMEOUT);
 
     return NULL;

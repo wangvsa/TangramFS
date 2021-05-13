@@ -59,7 +59,6 @@ void read_phase() {
     for(int i = 0; i < N; i++) {
         //tfs_read_lazy(tf, data, DATA_SIZE);
         tfs_read(tf, data, DATA_SIZE);
-        MPI_Barrier(MPI_COMM_WORLD);
     }
 
     MPI_Barrier(MPI_COMM_WORLD);
@@ -98,7 +97,7 @@ int main(int argc, char* argv[]) {
         write_phase();
     }
 
-    for(int i = 0; i < 5; i++) {
+    for(int i = 0; i < 1; i++) {
         MPI_Barrier(MPI_COMM_WORLD);
         read_phase();
     }
