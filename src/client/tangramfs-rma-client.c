@@ -6,7 +6,6 @@
 #include <pthread.h>
 #include <string.h>
 #include <mercury_macros.h>
-#include <mercury_atomic.h>
 #include "tangramfs-rma-client.h"
 
 static hg_class_t*     hg_class   = NULL;
