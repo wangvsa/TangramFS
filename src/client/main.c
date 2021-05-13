@@ -11,8 +11,8 @@
 
 #define MB (1024*1024)
 
-static int DATA_SIZE = 4*MB;
-static int N = 10;
+static size_t DATA_SIZE = 512*MB;
+static int N = 1;
 
 
 int size, rank, provided;
@@ -39,7 +39,7 @@ void write_phase() {
     MPI_Reduce(&tend, &max_tend, 1, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
 
     if(rank == 0) {
-        printf("Total write size: %d MB, elapsed time: %fs\n", DATA_SIZE/MB*N*size, (max_tend-min_tstart));
+        printf("Total write size: %lu MB, elapsed time: %fs\n", DATA_SIZE/MB*N*size, (max_tend-min_tstart));
         printf("Bandwidth: %.2f MB/s\n", DATA_SIZE/MB*size*N/(max_tend-min_tstart));
     }
     free(data);
@@ -65,7 +65,7 @@ void read_phase() {
     double tend = MPI_Wtime();
 
     if(rank == 0) {
-        printf("Total read size: %d MB, elapsed time: %fs\n", DATA_SIZE/MB*N*size, (tend-tstart));
+        printf("Total read size: %lu MB, elapsed time: %fs\n", DATA_SIZE/MB*N*size, (tend-tstart));
         printf("Bandwidth: %.2f MB/s\n", DATA_SIZE/MB*size*N/(tend-tstart));
     }
     free(data);

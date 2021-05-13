@@ -96,6 +96,7 @@ TFS_File* tfs_open(const char* pathname) {
 
     HASH_FIND_STR(tfs_files, pathname, tf);
     if(tf) {
+        tf->offset = 0;
     } else {
         tf = tangram_malloc(sizeof(TFS_File));
         strcpy(tf->filename, pathname);
@@ -119,6 +120,7 @@ size_t tfs_write(TFS_File* tf, const void* buf, size_t size) {
 
     size_t local_offset, res;
     local_offset = TANGRAM_REAL_CALL(lseek)(tf->local_fd, 0, SEEK_END);
+    printf("rank: %d, tf->offset: %lu\n", tfs.mpi_rank, tf->offset/1024/1024);
 
     Interval *interval = tangram_it_new(tf->offset, size, local_offset);
     Interval** overlaps = tangram_it_overlaps(tf->it, interval, &overlap_type, &num_overlaps);
@@ -182,7 +184,7 @@ size_t tfs_write(TFS_File* tf, const void* buf, size_t size) {
 size_t tfs_read(TFS_File* tf, void* buf, size_t size) {
     int owner_rank;
     tfs_query(tf, tf->offset, size, &owner_rank);
-    //printf("my rank: %d, owner rank: %d\n", tfs.mpi_rank, owner_rank);
+    printf("my rank: %d, owner rank: %d\n", tfs.mpi_rank, owner_rank);
 
     // Turns out that myself has the latest data,
     // just read it locally.

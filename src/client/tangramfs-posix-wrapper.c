@@ -128,7 +128,6 @@ int TANGRAM_WRAP(open)(const char *pathname, int flags, ...)
 
 int TANGRAM_WRAP(open64)(const char *pathname, int flags, ...)
 {
-    printf("intercept open64 %s\n", pathname);
     if(tangram_should_intercept(pathname)) {
         TFSFdMap *entry = malloc(sizeof(TFSFdMap));
         entry->tf = tfs_open(pathname);
