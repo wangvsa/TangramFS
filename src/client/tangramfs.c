@@ -120,7 +120,6 @@ size_t tfs_write(TFS_File* tf, const void* buf, size_t size) {
 
     size_t local_offset, res;
     local_offset = TANGRAM_REAL_CALL(lseek)(tf->local_fd, 0, SEEK_END);
-    printf("rank: %d, tf->offset: %lu\n", tfs.mpi_rank, tf->offset/1024/1024);
 
     Interval *interval = tangram_it_new(tf->offset, size, local_offset);
     Interval** overlaps = tangram_it_overlaps(tf->it, interval, &overlap_type, &num_overlaps);
@@ -236,6 +235,7 @@ size_t tfs_seek(TFS_File *tf, size_t offset, int whence) {
 void tfs_post(TFS_File* tf, size_t offset, size_t count) {
     int num_covered;
     Interval** covered = tangram_it_covers(tf->it, offset, count, &num_covered);
+    printf("rank: %d, post: %lu\n", tfs.mpi_rank, offset/1024/1024);
 
     tangram_rpc_issue_rpc(RPC_NAME_POST, tf->filename, tfs.mpi_rank, &offset, &count, 1);
 

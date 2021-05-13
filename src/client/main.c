@@ -27,10 +27,11 @@ void write_phase() {
     double tstart = MPI_Wtime();
 
     tfs_seek(tf, offset, SEEK_SET);
-    for(int i = 0; i < N; i++)
+    for(int i = 0; i < N; i++) {
         tfs_write(tf, data, DATA_SIZE);
+        //tfs_post(tf, offset, DATA_SIZE);
+    }
     // Post all writes in one RPC
-    //tfs_post(tf, offset, N*DATA_SIZE);
     tfs_post_all(tf);
     double tend = MPI_Wtime();
 
@@ -72,6 +73,7 @@ void read_phase() {
     tfs_close(tf);
 }
 
+/*
 void error_handler(int sig) {
    void *array[30];
    size_t size;
@@ -79,9 +81,10 @@ void error_handler(int sig) {
    backtrace_symbols_fd(array, size, STDERR_FILENO);
    exit(1);
 }
+*/
 
 int main(int argc, char* argv[]) {
-    signal(SIGSEGV, error_handler);
+    //signal(SIGSEGV, error_handler);
 
     // Have to use MPI_THREAD_MULTIPLE for Mercury+pthread to work
     MPI_Init_thread(&argc, &argv, MPI_THREAD_MULTIPLE, &provided);

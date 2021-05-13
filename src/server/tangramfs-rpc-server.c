@@ -100,7 +100,6 @@ hg_return_t rpc_handler_post(hg_handle_t h)
 {
     rpc_post_in arg, tmp;
     HG_Get_input(h, &arg);
-    // printf("RPC - post: rank: %d, %s %d, %d\n", arg.rank, arg.filename, arg.offset/1024/1024, arg.count/1024/1024);
 
     tmp = arg;
     char* filename = tmp->filename;

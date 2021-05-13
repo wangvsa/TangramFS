@@ -130,6 +130,7 @@ void tangram_rpc_issue_rpc(const char* rpc_name, char* filename, int rank, size_
             tmp[i]->offset = offsets[i];
             tmp[i]->count = counts[i];
             tmp[i]->next = NULL;
+            printf("inside post, rank: %d, offset: %lu\n", rank, tmp[i]->offset/1024/1024);
         }
         for(i = 0; i < len - 1; i++)
             tmp[i]->next = tmp[i+1];

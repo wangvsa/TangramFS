@@ -18,8 +18,8 @@
 typedef struct rpc_post_in_t {
     char* filename;
     int32_t rank;
-    uint32_t offset;
-    uint32_t count;
+    uint64_t offset;
+    uint64_t count;
     struct rpc_post_in_t* next;
 } *rpc_post_in;
 
@@ -27,7 +27,7 @@ static HG_INLINE hg_return_t
 hg_proc_rpc_post_in(hg_proc_t proc, void* data)
 {
     hg_return_t ret;
-    rpc_post_in *list = (rpc_post_in*)data;
+    rpc_post_in *list = (rpc_post_in*) data;
 
     hg_size_t length = 0;
     rpc_post_in tmp = NULL;
@@ -48,8 +48,8 @@ hg_proc_rpc_post_in(hg_proc_t proc, void* data)
             hg_proc_hg_const_string_t(proc, &tmp->filename);
             hg_proc_int32_t(proc, &tmp->rank);
             while(tmp != NULL) {
-                hg_proc_uint32_t(proc, &tmp->offset);
-                hg_proc_uint32_t(proc, &tmp->count);
+                hg_proc_uint64_t(proc, &tmp->offset);
+                hg_proc_uint64_t(proc, &tmp->count);
                 tmp = tmp->next;
             }
             break;
@@ -61,7 +61,7 @@ hg_proc_rpc_post_in(hg_proc_t proc, void* data)
             // loop and create list elements
             *list = NULL;
             while(length > 0) {
-                tmp = (rpc_post_in)malloc(sizeof(*tmp));
+                tmp = (rpc_post_in) malloc(sizeof(struct rpc_post_in_t));
                 tmp->next = NULL;
                 if(*list == NULL) {
                     *list = tmp;
@@ -70,8 +70,8 @@ hg_proc_rpc_post_in(hg_proc_t proc, void* data)
                 }
                 if(prev != NULL)
                     prev->next = tmp;
-                hg_proc_uint32_t(proc, &tmp->offset);
-                hg_proc_uint32_t(proc, &tmp->count);
+                hg_proc_uint64_t(proc, &tmp->offset);
+                hg_proc_uint64_t(proc, &tmp->count);
                 prev = tmp;
                 length -= 1;
             }
@@ -94,8 +94,8 @@ hg_proc_rpc_post_in(hg_proc_t proc, void* data)
 typedef struct rpc_query_in_t {
     char* filename;
     int32_t rank;
-    uint32_t offset;
-    uint32_t count;
+    uint64_t offset;
+    uint64_t count;
 } rpc_query_in;
 
 /* hg_proc_[structure name] is a special name */
@@ -104,8 +104,8 @@ hg_proc_rpc_query_in(hg_proc_t proc, void* data) {
     rpc_query_in *arg = (rpc_query_in*) data;
     hg_proc_hg_const_string_t(proc, &arg->filename);
     hg_proc_int32_t(proc, &arg->rank);
-    hg_proc_uint32_t(proc, &arg->offset);
-    hg_proc_uint32_t(proc, &arg->count);
+    hg_proc_uint64_t(proc, &arg->offset);
+    hg_proc_uint64_t(proc, &arg->count);
     return HG_SUCCESS;
 }
 
@@ -126,8 +126,8 @@ hg_proc_rpc_query_out(hg_proc_t proc, void* data) {
 typedef struct rpc_transfer_in_t {
     char* filename;
     int32_t rank;
-    uint32_t offset;
-    uint32_t count;
+    uint64_t offset;
+    uint64_t count;
     hg_bulk_t bulk_handle;
 } rpc_transfer_in;
 
@@ -137,8 +137,8 @@ hg_proc_rpc_transfer_in(hg_proc_t proc, void* data)
     rpc_transfer_in *arg = (rpc_transfer_in*) data;
     hg_proc_hg_const_string_t(proc, &arg->filename);
     hg_proc_int32_t(proc, &arg->rank);
-    hg_proc_uint32_t(proc, &arg->offset);
-    hg_proc_uint32_t(proc, &arg->count);
+    hg_proc_uint64_t(proc, &arg->offset);
+    hg_proc_uint64_t(proc, &arg->count);
     hg_proc_hg_bulk_t(proc, &arg->bulk_handle); // TODO a matching function for hg_bulk_t?
     return HG_SUCCESS;
 }

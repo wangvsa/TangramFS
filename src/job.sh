@@ -16,17 +16,24 @@ export OMP_NUM_THREADS=1
 work_dir=/g/g90/wang116/sources/TangramFS/src
 cd $work_dir
 
+export TANGRAM_PERSIST_DIR=$work_dir
+export TANGRAM_BUFFER_DIR=/tmp
+
+
+
 #for nodes in {2..2..1}
 #do
     #tasks=$(( 8*$nodes ))
 
 echo "CHEN" $nodes "nodes"
 
-mpirun -np 1 ./server/server.out start ./ &
-sleep 2
+for repeat in {1..5..1}
+do
+    mpirun -np 1 ./server/server.out start ./ &
+    sleep 2
 
-mpirun -np 8 ./client/main.out ./
+    mpirun -np 16 ./client/main.out ./
 
-mpirun -np 1 ./server/server.out stop ./
-
-#done
+    mpirun -np 1 ./server/server.out stop ./
+    sleep 2
+done
