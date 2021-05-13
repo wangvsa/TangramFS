@@ -200,11 +200,7 @@ size_t tfs_read(TFS_File* tf, void* buf, size_t size) {
 
     tangram_rma_client_start(server_addr);
     tangram_rma_client_transfer(tf->filename, tfs.mpi_rank, tf->offset, size, buf);
-
-    double t1 = MPI_Wtime();
     tangram_rma_client_stop();
-    double t2 = MPI_Wtime();
-    printf("rma client stop time: %.3f seconds\n", t2-t1);
 
     tf->offset += size;
     return size;
