@@ -1,5 +1,7 @@
 #include <stdlib.h>
 #include <stdio.h>
+#include <sys/time.h>
+
 #include "tangramfs-utils.h"
 
 static size_t memory_usage = 0;
@@ -30,5 +32,11 @@ void tangram_read_server_addr(char* persist_dir, char* addr) {
     FILE* f = fopen(cfg_path, "r");
     fscanf(f, "%s", addr);
     fclose(f);
+}
+
+double tangram_wtime() {
+    struct timeval time;
+    gettimeofday(&time, NULL);
+    return (time.tv_sec + ((double)time.tv_usec / 1000000));
 }
 

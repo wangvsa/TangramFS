@@ -7,6 +7,7 @@
 #include <string.h>
 #include <mercury_macros.h>
 #include "tangramfs-rma-client.h"
+#include "tangramfs-utils.h"
 
 static hg_class_t*     hg_class   = NULL;
 static hg_context_t*   hg_context = NULL;
@@ -89,7 +90,7 @@ void* mercury_rma_client_progress_loop(void* arg) {
         do {
             ret = HG_Trigger(hg_context, 0, 1, &count);
         } while((ret == HG_SUCCESS) && count);
-        HG_Progress(hg_context, 0);
+        HG_Progress(hg_context, MERCURY_PROGRESS_TIMEOUT);
     } while(running);
 
     return NULL;
@@ -117,6 +118,7 @@ void tangram_rma_client_transfer(char* filename, int rank, size_t offset, size_t
         .count = count,
     };
 
+    double t1 = tangram_wtime();
     ret = HG_Bulk_create(hg_class, 1, &buf, &count, HG_BULK_READWRITE, &in_arg.bulk_handle);
     assert(ret == HG_SUCCESS);
 
@@ -125,6 +127,9 @@ void tangram_rma_client_transfer(char* filename, int rank, size_t offset, size_t
 
     pthread_cond_wait(&cond2, &mutex2);
     pthread_mutex_unlock(&mutex2);
+
+    double t2 = tangram_wtime();
+    printf("bulk transfer time: %.3f\n", t2-t1);
 
     HG_Bulk_free(in_arg.bulk_handle);
     ret = HG_Destroy(handle);

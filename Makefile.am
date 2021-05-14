@@ -4,7 +4,7 @@ ACLOCAL_AMFLAGS = -I m4
 bin_PROGRAMS = main.out server.out
 lib_LTLIBRARIES = libtangramfs.la
 
-AM_CPPFLAGS = -fPIC -I./include -Wno-unused-result -D_LARGEFILE64_SOURCE -DTANGRAM_PRELOAD
+AM_CPPFLAGS = -fPIC -I./include -Wno-unused-result -D_LARGEFILE64_SOURCE -DTANGRAM_PRELOADHH
 
 libtangramfs_la_SOURCES = src/client/tangramfs.c \
 						  src/client/tangramfs-interval-tree.c \
