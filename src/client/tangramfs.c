@@ -183,7 +183,7 @@ size_t tfs_write(TFS_File* tf, const void* buf, size_t size) {
 size_t tfs_read(TFS_File* tf, void* buf, size_t size) {
     int owner_rank;
     tfs_query(tf, tf->offset, size, &owner_rank);
-    printf("my rank: %d, owner rank: %d\n", tfs.mpi_rank, owner_rank);
+    //printf("my rank: %d, query: %lu, owner rank: %d\n", tfs.mpi_rank, tf->offset/1024/1024, owner_rank);
 
     // Turns out that myself has the latest data,
     // just read it locally.
@@ -235,7 +235,6 @@ size_t tfs_seek(TFS_File *tf, size_t offset, int whence) {
 void tfs_post(TFS_File* tf, size_t offset, size_t count) {
     int num_covered;
     Interval** covered = tangram_it_covers(tf->it, offset, count, &num_covered);
-    printf("rank: %d, post: %lu\n", tfs.mpi_rank, offset/1024/1024);
 
     tangram_rpc_issue_rpc(RPC_NAME_POST, tf->filename, tfs.mpi_rank, &offset, &count, 1);
 

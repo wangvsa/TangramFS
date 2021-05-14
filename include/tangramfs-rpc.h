@@ -2,8 +2,8 @@
 #define _TANGRAMFS_RPC_H_
 
 #define MERCURY_PROTOCOL    "ofi+tcp"
-#define MERCURY_PROGRESS_TIMEOUT 100
-#define MERCURY_TRIGGER_TIMEOUT 100
+#define MERCURY_PROGRESS_TIMEOUT 50
+#define MERCURY_TRIGGER_TIMEOUT 50
 
 #define RPC_NAME_POST       "tfs_rpc_rpc_post"
 #define RPC_NAME_QUERY      "tfs_rpc_rpc_query"
