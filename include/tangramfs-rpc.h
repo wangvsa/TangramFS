@@ -1,7 +1,7 @@
 #ifndef _TANGRAMFS_RPC_H_
 #define _TANGRAMFS_RPC_H_
 
-#define MERCURY_PROTOCOL    "ofi+tcp"
+#define MERCURY_PROTOCOL    "ofi+verbs"
 #define MERCURY_PROGRESS_TIMEOUT 0
 #define MERCURY_TRIGGER_TIMEOUT 0
 

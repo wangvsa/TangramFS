@@ -129,7 +129,7 @@ void tangram_rma_client_transfer(char* filename, int rank, size_t offset, size_t
     pthread_mutex_unlock(&mutex2);
 
     double t2 = tangram_wtime();
-    printf("bulk transfer time: %.3f\n", t2-t1);
+    printf("rank: %d, bulk transfer time: %.3f\n", rank, t2-t1);
 
     HG_Bulk_free(in_arg.bulk_handle);
     ret = HG_Destroy(handle);
