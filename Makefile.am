@@ -34,4 +34,5 @@ server_out_LDADD   = -L${MERCURY_DIR}/lib -lmercury
 
 test_out_CFLAGS = -I./test -I${LIBFABRIC_DIR}/include -std=c99
 test_out_SOURCES = ./test/test_libfabric.c
+test_out_LDFLAGS = -pthread
 test_out_LDADD = -L${LIBFABRIC_DIR}/lib -lfabric
