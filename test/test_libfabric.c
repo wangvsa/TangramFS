@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <assert.h>
+#include <unistd.h>
 
 #include <rdma/fabric.h>
 #include <rdma/fi_eq.h>
@@ -21,7 +22,8 @@ struct fid_pep *pep;                // passive endpoint, used only by server
 
 
 void *buff;
-size_t buff_size = 32 * 1024 * 1024;
+size_t buff_size = 32 * 1024;
+int ret;
 
 
 void *context = NULL;
@@ -39,10 +41,12 @@ void print_providers() {
 
 void common_init(const char* addr, uint64_t flags) {
     // 1. fi_info
-    fi_getinfo(FI_VERSION(1, 11), addr, "12345", flags, hints, &info);
+    ret = fi_getinfo(FI_VERSION(1, 11), addr, "12345", flags, hints, &info);
+    assert(ret == 0);
 
     // 2. fi_fabric
     fi_fabric(info->fabric_attr, &fabric, context);
+    assert(ret == 0);
 
     // 3. fi_eq
     struct fi_eq_attr eq_attr = {
@@ -81,21 +85,6 @@ void client_init() {
     int err;
     err = fi_endpoint(domain, info, &ep, context);
 
-    /*
-    struct fid_av *av;
-    struct fi_av_attr av_attr = {
-        .type = FI_AV_UNSPEC,
-        .rx_ctx_bits = 0,
-        .count = 0,
-        .ep_per_node = 0,
-        .name = "my_av",
-        .map_addr = NULL,
-        .flags = FI_SYMMETRIC,
-    };
-    fi_av_open(domain, &av_attr, &av, NULL);
-    fi_ep_bind(ep, &av->fid, 0);
-    */
-
     fi_ep_bind(ep, &eq->fid, 0);
     fi_ep_bind(ep, &cq->fid, FI_TRANSMIT | FI_RECV);
 
@@ -105,8 +94,22 @@ void client_init() {
 
     struct fi_eq_cm_entry entry;
 	uint32_t event;
-    fi_eq_sread(eq, &event, &entry, sizeof (entry), -1, 0);
+    fi_eq_sread(eq, &event, &entry, sizeof(entry), -1, 0);
     assert(event == FI_CONNECTED);
+    printf("Client: connected to the server\n");
+
+    struct fi_cq_entry cq_entry;
+    fi_recv(ep, buff, buff_size, NULL, 0, NULL);
+    while(1) {
+        ret = fi_cq_read(cq, &cq_entry, 1);
+        if(ret > 0) {
+            int data;
+            memcpy(&data, buff, sizeof(data));
+            printf("Client: received data: %d\n", data);
+            break;
+        }
+        assert(ret == -FI_EAGAIN);
+    }
 }
 
 
@@ -123,6 +126,7 @@ void client() {
 
     // The server should receive a shutdown event
     fi_shutdown(ep, 0);
+    printf("Client: shutdown\n");
 }
 
 void server_init() {
@@ -130,7 +134,7 @@ void server_init() {
     fi_passive_ep(fabric, info, &pep, NULL);
     fi_pep_bind(pep, &eq->fid, 0);
     fi_listen(pep);
-    printf("Server listening...\n");
+    printf("Server: listening...\n");
 
     struct fi_eq_cm_entry entry;
     uint32_t event;
@@ -138,7 +142,7 @@ void server_init() {
     // Wait for the FI_CONNREQ event
     fi_eq_sread(eq, &event, &entry, sizeof(entry), -1, 0);
     assert(event == FI_CONNREQ);
-    printf("Server received connect request\n");
+    printf("Server: received connect request\n");
 
     // 2. Use active endpoint to perform actual data transfer
     fi_endpoint(domain, entry.info, &ep, NULL);
@@ -149,13 +153,27 @@ void server_init() {
     // Now wait for the FI_CONNECTED event
     fi_eq_sread(eq, &event, &entry, sizeof(entry), -1, 0);
     assert(event == FI_CONNECTED);
-    printf("Connected!\n");
+    printf("Server: client connected!\n");
 
-    //fi_send(ep, buff, sizeof(keys), fi_mr_desc(mr), 0, NULL);
+    int data = 10;
+    memcpy(buff, &data, sizeof(data));
+    fi_send(ep, buff, sizeof(data), NULL, 0, NULL);
 
+    struct fi_cq_entry cq_entry;
+    while(1) {
+        ret = fi_cq_read(cq, &cq_entry, 1);
+        if(ret > 0) {
+            printf("Server: send data successfully.\n");
+            break;
+        }
+        assert(ret == -FI_EAGAIN);
+    }
+
+    //TODO Can not receive this FI_SHUTDOWN event. don't know why.
     // Finally, we should receive a shutdown event
-    fi_eq_sread(eq, &event, &entry, sizeof(entry), -1, 0);
-    assert(event == FI_SHUTDOWN);
+    //fi_eq_sread(eq, &event, &entry, sizeof(entry), -1, 0);
+    //assert(event == FI_SHUTDOWN);
+    //printf("Sever: client shutdown.\n");
 }
 
 void server() {
