@@ -40,6 +40,13 @@ void print_providers() {
 
 
 void common_init(const char* addr, uint64_t flags) {
+
+    hints = fi_allocinfo();
+	hints->ep_attr->type = FI_EP_MSG;
+	hints->domain_attr->mr_mode = FI_MR_BASIC;
+	hints->caps = FI_MSG | FI_RMA;
+	hints->mode = FI_CONTEXT | FI_LOCAL_MR | FI_RX_CQ_DATA;
+
     // 1. fi_info
     ret = fi_getinfo(FI_VERSION(1, 11), addr, "12345", flags, hints, &info);
     assert(ret == 0);
@@ -114,12 +121,6 @@ void client_init() {
 
 
 void client() {
-    hints = fi_allocinfo();
-    hints->addr_format = FI_SOCKADDR_IN;
-	hints->ep_attr->type = FI_EP_MSG;
-	hints->domain_attr->mr_mode = FI_MR_BASIC;
-	hints->caps = FI_MSG | FI_RMA;
-	hints->mode = FI_CONTEXT | FI_LOCAL_MR | FI_RX_CQ_DATA;
 
     common_init("127.0.0.1", 0);
     client_init();
