@@ -1,6 +1,16 @@
 ACLOCAL_AMFLAGS = -I m4
 
-bin_PROGRAMS = main.out server.out test.out
+EXTRA_DIST = autogen.sh
+EXTRA_PROGRAMS =
+
+noinst_HEADERS =
+include_HEADERS =
+noinst_PROGRAMS =
+nodist_noinst_SCRIPTS =
+dist_noinst_SCRIPTS = autogen.sh
+
+
+bin_PROGRAMS = main.out server.out
 lib_LTLIBRARIES = libtangramfs.la
 
 AM_CPPFLAGS = -fPIC -I./include -Wno-unused-result -D_LARGEFILE64_SOURCE -DTANGRAM_PRELOADHH
@@ -30,9 +40,3 @@ server_out_SOURCES = src/server/tangramfs-rpc-server.c \
 					 src/common/tangramfs-utils.c
 server_out_CFLAGS  = -I./include -I${MERCURY_DIR}/include -std=c99
 server_out_LDADD   = -L${MERCURY_DIR}/lib -lmercury
-
-
-test_out_CFLAGS = -I./test -I${LIBFABRIC_DIR}/include -std=c99
-test_out_SOURCES = ./test/test_libfabric.c
-test_out_LDFLAGS = -pthread
-test_out_LDADD = -L${LIBFABRIC_DIR}/lib -lfabric
