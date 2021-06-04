@@ -29,10 +29,10 @@ void write_phase() {
     tfs_seek(tf, offset, SEEK_SET);
     for(int i = 0; i < N; i++) {
         tfs_write(tf, data, DATA_SIZE);
-        //tfs_post(tf, offset, DATA_SIZE);
+        tfs_post(tf, offset, DATA_SIZE);
     }
     // Post all writes in one RPC
-    tfs_post_all(tf);
+    //tfs_post_all(tf);
     double tend = MPI_Wtime();
 
     double min_tstart, max_tend;
@@ -53,7 +53,8 @@ void read_phase() {
     char* data = malloc(sizeof(char)*DATA_SIZE);
 
     // read neighbor rank's data
-    int neighbor_rank = (rank + 8) % size;
+    //int neighbor_rank = (rank + 8) % size;
+    int neighbor_rank = rank;
     size_t offset = neighbor_rank * DATA_SIZE * N;
     tfs_seek(tf, offset, SEEK_SET);
     double tstart = MPI_Wtime();

@@ -8,11 +8,10 @@
 #include <mpi.h>
 #include "tangramfs.h"
 #include "tangramfs-utils.h"
-#include "tangramfs-rpc-client.h"
-#include "tangramfs-rma-client.h"
-#include "tangramfs-rma-server.h"
+#include "tangramfs-rpc.h"
 #include "tangramfs-posix-wrapper.h"
 
+#define PATH_MAX 4096
 
 typedef struct TFS_Info_t {
     int mpi_rank;
@@ -24,7 +23,6 @@ typedef struct TFS_Info_t {
     int semantics;  // Strong, Session or Commit; only needed in passive mode.
     bool initialized;
 
-    char *rma_server_addrs;
 } TFS_Info;
 
 
@@ -45,21 +43,10 @@ void tfs_init(const char* persist_dir, const char* tfs_dir) {
     if(semantics_str)
         tfs.semantics = atoi(semantics_str);
 
-    tfs.rma_server_addrs = tangram_malloc(sizeof(char)*128*tfs.mpi_size);
-
-    char rma_server_addr[128];
-    tangram_rma_server_start(rma_server_addr);
-    MPI_Allgather(rma_server_addr, 128, MPI_BYTE, tfs.rma_server_addrs, 128, MPI_BYTE, tfs.mpi_comm);
-
-    char rpc_server_addr[128];
-    tangram_read_server_addr(tfs.persist_dir, rpc_server_addr);
-    tangram_rpc_client_start(rpc_server_addr);
-
     MAP_OR_FAIL(open);
     MAP_OR_FAIL(close);
     MAP_OR_FAIL(fsync);
     MAP_OR_FAIL(lseek);
-
     tfs.initialized = true;
 }
 
@@ -71,11 +58,7 @@ void tfs_finalize() {
     // server stoped before all other clients
     MPI_Barrier(tfs.mpi_comm);
 
-    tangram_rma_server_stop();
-    tangram_rpc_client_stop();
     MPI_Comm_free(&tfs.mpi_comm);
-
-    tangram_free(tfs.rma_server_addrs, sizeof(char)*128*tfs.mpi_size);
 
     // Clear all resources
     TFS_File *tf, *tmp;
@@ -183,6 +166,7 @@ size_t tfs_write(TFS_File* tf, const void* buf, size_t size) {
 size_t tfs_read(TFS_File* tf, void* buf, size_t size) {
     int owner_rank;
     tfs_query(tf, tf->offset, size, &owner_rank);
+    owner_rank = tfs.mpi_rank;
     //printf("my rank: %d, query: %lu, owner rank: %d\n", tfs.mpi_rank, tf->offset/1024/1024, owner_rank);
 
     // Turns out that myself has the latest data,
@@ -196,13 +180,7 @@ size_t tfs_read(TFS_File* tf, void* buf, size_t size) {
         return size;
     }
 
-    char server_addr[128];
-    memcpy(server_addr, tfs.rma_server_addrs+128*owner_rank, 128);
-
-    tangram_rma_client_start(server_addr);
-    tangram_rma_client_transfer(tf->filename, tfs.mpi_rank, tf->offset, size, buf);
-    tangram_rma_client_stop();
-
+    /*TODO RMA read*/
     tf->offset += size;
     return size;
 }
@@ -236,7 +214,7 @@ void tfs_post(TFS_File* tf, size_t offset, size_t count) {
     int num_covered;
     Interval** covered = tangram_it_covers(tf->it, offset, count, &num_covered);
 
-    tangram_rpc_issue_rpc(RPC_NAME_POST, tf->filename, tfs.mpi_rank, &offset, &count, 1);
+    tangram_rpc_issue_rpc(RPC_OP_POST, tf->filename, tfs.mpi_rank, &offset, &count, 1, NULL);
 
     int i;
     for(i = 0; i < num_covered; i++)
@@ -244,8 +222,6 @@ void tfs_post(TFS_File* tf, size_t offset, size_t count) {
     tangram_free(covered, sizeof(Interval*)*num_covered);
 }
 
-// TODO: Currnet implementaion send one rpc for each interval
-// Should combine them and send only one rpc.
 void tfs_post_all(TFS_File* tf) {
     int num, i;
     Interval** unposted = tangram_it_unposted(tf->it, &num);
@@ -258,13 +234,14 @@ void tfs_post_all(TFS_File* tf) {
     }
 
     tangram_free(unposted, num*sizeof(Interval*));
-    tangram_rpc_issue_rpc(RPC_NAME_POST, tf->filename, tfs.mpi_rank, offsets, counts, num);
+    tangram_rpc_issue_rpc(RPC_OP_POST, tf->filename, tfs.mpi_rank, offsets, counts, num, NULL);
 }
 
 void tfs_query(TFS_File* tf, size_t offset, size_t size, int *out_rank) {
-    tangram_rpc_issue_rpc(RPC_NAME_QUERY, tf->filename, tfs.mpi_rank, &offset, &size, 1);
-    rpc_query_out res = tangram_rpc_query_result();
-    *out_rank = res.rank;
+    void* out;
+    tangram_rpc_issue_rpc(RPC_OP_QUERY, tf->filename, tfs.mpi_rank, &offset, &size, 1, &out);
+    //rpc_query_out res = tangram_rpc_query_result();
+    //*out_rank = res.rank;
 }
 
 int tfs_close(TFS_File* tf) {
