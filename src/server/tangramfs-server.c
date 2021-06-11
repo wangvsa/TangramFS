@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdbool.h>
 #include "tangramfs.h"
 #include "tangramfs-metadata.h"
 #include "tangramfs-ucx.h"
@@ -9,33 +10,32 @@
 tangram_ucx_context_t context;
 
 
-void rpc_handler_post(void* data, size_t length)
-{
-    /*
-    tmp = arg;
-    char* filename = tmp->filename;
-    int rank = tmp->rank;
-    while(tmp) {
-        tangram_ms_handle_post(rank, filename, tmp->offset, tmp->count);
-        tmp = tmp->next;
+/**
+ * Return a respond, can be NULL
+ */
+void* rpc_handler(int op, void* data, size_t length, size_t *respond_len) {
+    *respond_len = 0;
+
+    rpc_post_in_t* in = rpc_inout_unpack(data);
+
+    if(op == RPC_OP_POST) {
+        for(int i = 0; i < in->num_intervals; i++)
+            tangram_ms_handle_post(in->rank, in->filename, in->intervals[i].offset, in->intervals[i].count);
+
+        rpc_inout_free(in);
+        return NULL;
     }
-    */
-}
 
-void rpc_handler_query(void* data, size_t length)
-{
-    /*
-    rpc_query_in in;
-    HG_Get_input(h, &in);
+    if(op == RPC_OP_QUERY) {
+        *respond_len = sizeof(rpc_query_out_t);
+        rpc_query_out_t *out = malloc(sizeof(rpc_query_out_t));
+        bool found = tangram_ms_handle_query(in->filename, in->intervals[0].offset, in->intervals[0].count, &(out->rank));
+        assert(found);
+        printf("in rank: %d, out rank: %d\n", in->rank, out->rank);
 
-    rpc_query_out out;
-    bool found = tangram_ms_handle_query(in.filename, in.offset, in.count, &out.rank);
-    */
-}
-
-
-void rpc_handler(int op, void* data, size_t length) {
-    printf("server received rpc: %d\n", op);
+        rpc_inout_free(in);
+        return out;
+    }
 }
 
 

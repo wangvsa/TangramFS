@@ -166,7 +166,6 @@ size_t tfs_write(TFS_File* tf, const void* buf, size_t size) {
 size_t tfs_read(TFS_File* tf, void* buf, size_t size) {
     int owner_rank;
     tfs_query(tf, tf->offset, size, &owner_rank);
-    owner_rank = tfs.mpi_rank;
     //printf("my rank: %d, query: %lu, owner rank: %d\n", tfs.mpi_rank, tf->offset/1024/1024, owner_rank);
 
     // Turns out that myself has the latest data,
@@ -238,10 +237,9 @@ void tfs_post_all(TFS_File* tf) {
 }
 
 void tfs_query(TFS_File* tf, size_t offset, size_t size, int *out_rank) {
-    void* out;
+    rpc_query_out_t out;
     tangram_rpc_issue_rpc(RPC_OP_QUERY, tf->filename, tfs.mpi_rank, &offset, &size, 1, &out);
-    //rpc_query_out res = tangram_rpc_query_result();
-    //*out_rank = res.rank;
+    *out_rank = out.rank;
 }
 
 int tfs_close(TFS_File* tf) {

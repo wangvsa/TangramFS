@@ -3,7 +3,7 @@
 #include "tangramfs-ucx-comm.h"
 
 // To return resopnd to user
-void** server_respond;
+void* g_server_respond;
 volatile static int received_respond = 0;
 
 
@@ -19,12 +19,8 @@ static ucs_status_t client_am_recv_cb(void *arg, const void *header, size_t head
     // So we should have received the data already.
     assert(rendezvous == 0);
 
-    printf("Client: at client_am_recv_cb()\n");
-    //int op = *(int*)header;
-
     received_respond = 1;
-    //*server_respond = malloc(length);
-    //memcpy(*server_respond, data, length);
+    memcpy(g_server_respond, data, length);
 
     return UCS_OK;
 }
@@ -86,13 +82,13 @@ void tangram_ucx_send(tangram_ucx_context_t *context, int op, void* data, size_t
 }
 
 // Send and wait for the respond from server
-void tangram_ucx_sendrecv(tangram_ucx_context_t *context, int op, void* data, size_t length, void** respond) {
+void tangram_ucx_sendrecv(tangram_ucx_context_t *context, int op, void* data, size_t length, void* respond) {
     init_context(&context->ucp_context);
     init_worker(context->ucp_context, &context->ucp_worker);
 
     connect_to_server(context);
 
-    server_respond = respond;
+    printf("Client: start sendrecv, op: %d, size: %lu\n", op, length);
 
     // Active Message send
     ucp_request_param_t params;
@@ -101,16 +97,17 @@ void tangram_ucx_sendrecv(tangram_ucx_context_t *context, int op, void* data, si
     request_finalize(context->ucp_worker, request);
 
     // Wait the respond from server
+    g_server_respond = respond;
     while(received_respond==0) {
         ucp_worker_progress(context->ucp_worker);
     }
     received_respond = 0;
+    printf("Client: finished sendrecv, op: %d, size: %lu\n", op, length);
 
     ep_close(context->ucp_worker, context->client_ep);
     ucp_worker_destroy(context->ucp_worker);
     ucp_cleanup(context->ucp_context);
 }
-
 
 void tangram_ucx_stop_server(tangram_ucx_context_t *context) {
     init_context(&context->ucp_context);
@@ -128,3 +125,4 @@ void tangram_ucx_stop_server(tangram_ucx_context_t *context) {
     ucp_worker_destroy(context->ucp_worker);
     ucp_cleanup(context->ucp_context);
 }
+

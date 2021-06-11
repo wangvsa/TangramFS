@@ -53,8 +53,7 @@ void read_phase() {
     char* data = malloc(sizeof(char)*DATA_SIZE);
 
     // read neighbor rank's data
-    //int neighbor_rank = (rank + 8) % size;
-    int neighbor_rank = rank;
+    int neighbor_rank = (rank + 1) % size;
     size_t offset = neighbor_rank * DATA_SIZE * N;
     tfs_seek(tf, offset, SEEK_SET);
     double tstart = MPI_Wtime();

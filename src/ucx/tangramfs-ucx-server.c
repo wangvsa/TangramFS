@@ -2,25 +2,31 @@
 #include <stdlib.h>
 #include <assert.h>
 #include <string.h>
+#include <stdbool.h>
 #include <unistd.h>
 #include <arpa/inet.h>
 #include <ucp/api/ucp.h>
+#include "utlist.h"
 #include "tangramfs-ucx.h"
 #include "tangramfs-ucx-comm.h"
 
-volatile static ucp_conn_request_h g_conn_request = NULL;    // connection between client-server
+volatile static bool g_server_running = true;
 
-volatile static int complete = 0;
-volatile static int server_running = 1;
-volatile static int need_respond = 0;
+typedef struct my_session {
+    ucp_conn_request_h conn_request;
+    void* respond;
+    size_t respond_len;
+    volatile bool complete;
+    struct my_session *next;
+} my_session_t;
 
-void (*user_am_data_handler)(int op, void* data, size_t length);
+// TODO thread safe?
+static my_session_t *g_sessions;
+static my_session_t *current_session;
 
 
-static void server_am_send_cb(void *request, ucs_status_t status, void *user_data)
-{
-    printf("server am send cb\n");
-}
+void* (*user_am_data_handler)(int op, void* data, size_t length, size_t *respond_len);
+
 
 static void server_conn_cb(ucp_conn_request_h conn_request, void *arg)
 {
@@ -30,7 +36,12 @@ static void server_conn_cb(ucp_conn_request_h conn_request, void *arg)
     status = ucp_conn_request_query(conn_request, &attr);
     assert(status == UCS_OK);
 
-    g_conn_request = conn_request;
+    my_session_t *session = malloc(sizeof(my_session_t));
+    session->conn_request = conn_request;
+    session->complete = false;
+    session->respond = NULL;
+    session->respond_len = 0;
+    LL_PREPEND(g_sessions, session);
 }
 
 ucs_status_t server_am_cb_data(void *arg, const void *header, size_t header_length,
@@ -48,13 +59,10 @@ ucs_status_t server_am_cb_data(void *arg, const void *header, size_t header_leng
     printf("Server: at server_am_cb_data()\n");
     int op = *(int*)header;
 
-    (*user_am_data_handler)(op, data, length);
+    current_session->complete = true;
+    current_session->respond = (*user_am_data_handler)(op, data, length, &current_session->respond_len);
+    printf("\tOp: %d, send respond: %d, len: %lu\n", op, (current_session->respond!=NULL), current_session->respond_len);
 
-    // TODO
-    if(op == 1)
-        need_respond = 1;
-
-    complete = 1;
     return UCS_OK;
 }
 
@@ -62,8 +70,16 @@ ucs_status_t server_am_cb_cmd(void *arg, const void *header, size_t header_lengt
                                void *data, size_t length,
                                const ucp_am_recv_param_t *param) {
     printf("Server: at server_am_cb_cmd()\n");
-    server_running = 0;
+    g_server_running = false;
     return UCS_OK;
+}
+
+void tangram_ucx_server_respond(tangram_ucx_context_t *context, void* respond, size_t len) {
+    ucp_request_param_t am_params;
+    //am_params.op_attr_mask   = UCP_OP_ATTR_FIELD_CALLBACK;
+    //am_params.cb.send = (ucp_send_nbx_callback_t) server_am_send_cb;
+    void *request = ucp_am_send_nbx(context->server_ep, UCX_AM_ID_DATA, NULL, 0, respond, len, &am_params);
+    request_finalize(context->am_data_worker, request);
 }
 
 void run_server(tangram_ucx_context_t *context) {
@@ -97,39 +113,43 @@ void run_server(tangram_ucx_context_t *context) {
     attr.field_mask = UCP_LISTENER_ATTR_FIELD_SOCKADDR;
     status = ucp_listener_query(listener, &attr);
     assert(status == UCS_OK);
-    printf("Server: wait for connection\n");
 
     // Serve one client at a time
-    while(server_running) {
+    while(g_server_running) {
 
-        // Wait for connection
-        while(g_conn_request == NULL) {
-            ucp_worker_progress(context->ucp_worker);
+        // Check for connection
+        ucp_worker_progress(context->ucp_worker);
+
+        if(g_sessions != NULL) {
+            current_session = g_sessions;
+            printf("Server: connected with client\n");
+
+            ucp_ep_params_t ep_params;
+            ep_params.field_mask      = UCP_EP_PARAM_FIELD_ERR_HANDLER |
+                                        UCP_EP_PARAM_FIELD_CONN_REQUEST;
+            ep_params.conn_request    = current_session->conn_request;
+            ep_params.err_mode         = UCP_ERR_HANDLING_MODE_PEER;
+            ep_params.err_handler.cb  = err_cb;
+            ep_params.err_handler.arg = NULL;
+            status = ucp_ep_create(context->am_data_worker, &ep_params, &context->server_ep);
+            assert(status == UCS_OK);
+
+            // Wait for receive one AM message from client
+            // and end this session
+            while(g_server_running && !current_session->complete) {
+                ucp_worker_progress(context->am_data_worker);
+            }
+
+            if(current_session->respond) {
+                tangram_ucx_server_respond(context, current_session->respond, current_session->respond_len);
+                free(current_session->respond);
+            }
+
+            printf("Server: end one session\n\n\n");
+            ep_close(context->am_data_worker, context->server_ep);
+            LL_DELETE(g_sessions, current_session);
+            free(current_session);
         }
-        printf("Server: connected with client\n");
-
-        ucp_ep_params_t ep_params;
-        ep_params.field_mask      = UCP_EP_PARAM_FIELD_ERR_HANDLER |
-                                    UCP_EP_PARAM_FIELD_CONN_REQUEST;
-        ep_params.conn_request    = g_conn_request;
-        ep_params.err_handler.cb  = err_cb;
-        ep_params.err_handler.arg = NULL;
-        status = ucp_ep_create(context->am_data_worker, &ep_params, &context->server_ep);
-        assert(status == UCS_OK);
-
-        // Wait for receive one AM message from client
-        // and end this session
-        while(complete==0 && server_running) {
-            ucp_worker_progress(context->am_data_worker);
-        }
-        if(need_respond)
-            tangram_ucx_server_respond(context);
-
-        printf("Server: end one session\n\n\n");
-        complete = 0;
-        need_respond = 0;
-        g_conn_request = NULL;
-        ep_close(context->am_data_worker, context->server_ep);
     }
 
     // Clean up
@@ -144,7 +164,8 @@ void tangram_ucx_server_init(tangram_ucx_context_t *context) {
     init_worker(context->ucp_context, &(context->ucp_worker));
 }
 
-void tangram_ucx_server_register_rpc(tangram_ucx_context_t *context, void (*user_handler)(int, void*, size_t)) {
+
+void tangram_ucx_server_register_rpc(tangram_ucx_context_t *context, void* (*user_handler)(int, void*, size_t, size_t*)) {
 
     user_am_data_handler = user_handler;
 
@@ -166,14 +187,6 @@ void tangram_ucx_server_register_rpc(tangram_ucx_context_t *context, void (*user
     am_param2.cb         = server_am_cb_cmd;
     status              = ucp_worker_set_am_recv_handler(context->am_data_worker, &am_param2);
     assert(status == UCS_OK);
-}
-
-void tangram_ucx_server_respond(tangram_ucx_context_t *context) {
-    ucp_request_param_t am_params;
-    am_params.op_attr_mask   = UCP_OP_ATTR_FIELD_CALLBACK;
-    am_params.cb.send = (ucp_send_nbx_callback_t) server_am_send_cb;
-    void *request = ucp_am_send_nbx(context->server_ep, UCX_AM_ID_DATA, NULL, 0, NULL, 0, &am_params);
-    request_finalize(context->am_data_worker, request);
 }
 
 void tangram_ucx_server_start(tangram_ucx_context_t *context) {
