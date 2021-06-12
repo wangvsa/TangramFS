@@ -55,6 +55,7 @@ ucs_status_t server_am_cb_data(void *arg, const void *header, size_t header_leng
     // The exact size is defined by env variable UCX_RNDV_THRESH
     // So we should have received the data already.
     assert(rendezvous == 0);
+    assert(header);
 
     printf("Server: at server_am_cb_data()\n");
     int op = *(int*)header;
@@ -76,8 +77,6 @@ ucs_status_t server_am_cb_cmd(void *arg, const void *header, size_t header_lengt
 
 void tangram_ucx_server_respond(tangram_ucx_context_t *context, void* respond, size_t len) {
     ucp_request_param_t am_params;
-    //am_params.op_attr_mask   = UCP_OP_ATTR_FIELD_CALLBACK;
-    //am_params.cb.send = (ucp_send_nbx_callback_t) server_am_send_cb;
     void *request = ucp_am_send_nbx(context->server_ep, UCX_AM_ID_DATA, NULL, 0, respond, len, &am_params);
     request_finalize(context->am_data_worker, request);
 }
@@ -191,4 +190,34 @@ void tangram_ucx_server_register_rpc(tangram_ucx_context_t *context, void* (*use
 
 void tangram_ucx_server_start(tangram_ucx_context_t *context) {
     run_server(context);
+}
+
+void tangram_mmap_recv_rkey(tangram_ucx_context_t *context, const void* data) {
+    void* rkey_buf = malloc(25);
+    memcpy(rkey_buf, data, 25);
+
+    uint64_t remote_addr;
+    memcpy(&remote_addr, data+25, sizeof(uint64_t));
+    printf("remote addr: %p\n", (void*)remote_addr);
+
+    ucs_status_t status;
+    ucp_rkey_h rkey;
+    status = ucp_ep_rkey_unpack(context->server_ep, rkey_buf, &rkey);
+    assert(status == UCS_OK);
+
+    /*
+    void* addr;
+    status = ucp_rkey_ptr(rkey, remote_addr, &addr);
+    printf("remote addr: %p\n", (void*)remote_addr);
+    printf("err: %s\n", ucs_status_string(status));
+    assert(status == UCS_OK);
+    */
+
+    int *local_data = malloc(sizeof(int));
+    *local_data = 100;
+    status = ucp_put_nbi(context->server_ep, local_data, sizeof(int), remote_addr, rkey);
+    printf("err: %s\n", ucs_status_string(status));
+    assert(status == UCS_OK);
+
+    ucp_rkey_destroy(rkey);
 }

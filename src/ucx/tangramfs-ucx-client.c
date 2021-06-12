@@ -1,3 +1,5 @@
+#define _POSIX_C_SOURCE 200112L
+#include <stdlib.h>
 #include <arpa/inet.h>
 #include "tangramfs-ucx.h"
 #include "tangramfs-ucx-comm.h"
@@ -64,11 +66,15 @@ void connect_to_server(tangram_ucx_context_t *context) {
     printf("Client: connected with server\n");
 }
 
-void tangram_ucx_send(tangram_ucx_context_t *context, int op, void* data, size_t length) {
+void init_and_connect(tangram_ucx_context_t *context) {
     init_context(&context->ucp_context);
     init_worker(context->ucp_context, &context->ucp_worker);
-
     connect_to_server(context);
+}
+
+
+void tangram_ucx_send(tangram_ucx_context_t *context, int op, void* data, size_t length) {
+    init_and_connect(context);
 
     // Active Message send
     ucp_request_param_t am_params;
@@ -83,10 +89,7 @@ void tangram_ucx_send(tangram_ucx_context_t *context, int op, void* data, size_t
 
 // Send and wait for the respond from server
 void tangram_ucx_sendrecv(tangram_ucx_context_t *context, int op, void* data, size_t length, void* respond) {
-    init_context(&context->ucp_context);
-    init_worker(context->ucp_context, &context->ucp_worker);
-
-    connect_to_server(context);
+    init_and_connect(context);
 
     printf("Client: start sendrecv, op: %d, size: %lu\n", op, length);
 
@@ -110,10 +113,7 @@ void tangram_ucx_sendrecv(tangram_ucx_context_t *context, int op, void* data, si
 }
 
 void tangram_ucx_stop_server(tangram_ucx_context_t *context) {
-    init_context(&context->ucp_context);
-    init_worker(context->ucp_context, &context->ucp_worker);
-
-    connect_to_server(context);
+    init_and_connect(context);
 
     // Active Message send
     ucp_request_param_t am_params;
@@ -121,6 +121,60 @@ void tangram_ucx_stop_server(tangram_ucx_context_t *context) {
     void *request = ucp_am_send_nbx(context->client_ep, UCX_AM_ID_CMD, NULL, 0, NULL, 0, &am_params);
     request_finalize(context->ucp_worker, request);
 
+    ep_close(context->ucp_worker, context->client_ep);
+    ucp_worker_destroy(context->ucp_worker);
+    ucp_cleanup(context->ucp_context);
+}
+
+
+
+void tangram_mmap_send_rkey(tangram_ucx_context_t *context, size_t length, ucp_mem_h* memh) {
+    init_and_connect(context);
+
+    size_t page_size = 4096;
+    int *local_data;
+    posix_memalign((void**)&local_data, sizeof(int)*1024, length);
+
+    ucp_mem_map_params_t params;
+    params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS | UCP_MEM_MAP_PARAM_FIELD_LENGTH | UCP_MEM_MAP_PARAM_FIELD_FLAGS;
+    params.address = NULL;                              // Let UCP allocate memory for us
+    params.length = length;
+    params.flags = UCP_MEM_MAP_ALLOCATE;
+
+    // 1. mem map and let UCX allocate memory
+    ucs_status_t status;
+    status = ucp_mem_map(context->ucp_context, &params, memh);
+    assert(status == UCS_OK);
+
+    ucp_mem_attr_t attr;
+    attr.field_mask = UCP_MEM_ATTR_FIELD_ADDRESS | UCP_MEM_ATTR_FIELD_LENGTH;
+    ucp_mem_query(*memh, &attr);
+
+    // 2. Get and pack the rkey_buf
+    void* rkey_buf = NULL;
+    size_t rkey_buf_size;
+    ucp_rkey_pack(context->ucp_context, *memh, &rkey_buf, &rkey_buf_size);
+    assert(rkey_buf);
+    printf("rkey_buf length: %lu, mem ptr: %p, mem len: %lu\n", rkey_buf_size, attr.address, attr.length);
+
+    void* sendbuf = malloc(rkey_buf_size + sizeof(uint64_t));
+    memcpy(sendbuf, rkey_buf, rkey_buf_size);
+    uint64_t addr = (uint64_t) attr.address;
+    memcpy(sendbuf+rkey_buf_size, &addr, sizeof(addr));
+
+    // 3. Send it to the other side
+    ucp_request_param_t am_params;
+    am_params.op_attr_mask = 0;
+    int op = 4;
+    void *request = ucp_am_send_nbx(context->client_ep, UCX_AM_ID_DATA, &op, sizeof(int), sendbuf, rkey_buf_size+sizeof(uint64_t), &am_params);
+    request_finalize(context->ucp_worker, request);
+
+    sleep(3);
+    printf("tmp: %d\n", local_data[0]);
+    free(local_data);
+    free(sendbuf);
+    ucp_rkey_buffer_release(rkey_buf);
+    ucp_mem_unmap(context->ucp_context, *memh);
     ep_close(context->ucp_worker, context->client_ep);
     ucp_worker_destroy(context->ucp_worker);
     ucp_cleanup(context->ucp_context);

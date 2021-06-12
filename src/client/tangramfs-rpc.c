@@ -22,6 +22,10 @@ void tangram_rpc_issue_rpc(int op, char* filename, int rank, size_t *offsets, si
     switch(op) {
         case RPC_OP_POST:
             tangram_ucx_send(&context, op, data, size);
+
+            ucp_mem_h memh;
+            tangram_mmap_send_rkey(&context, 1024, &memh);
+
             break;
         case RPC_OP_QUERY:
             tangram_ucx_sendrecv(&context, op, data, size, respond);

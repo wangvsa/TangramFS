@@ -8,6 +8,7 @@
 #define RPC_OP_QUERY      1
 #define RPC_OP_STOP       2
 #define RPC_OP_TRANSFER   3
+#define RPC_OP_RMA        4
 
 
 typedef struct rpc_inout_interval {

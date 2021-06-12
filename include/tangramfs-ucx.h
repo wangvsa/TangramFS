@@ -23,9 +23,13 @@ void tangram_ucx_server_init(tangram_ucx_context_t *context);
 void tangram_ucx_server_register_rpc(tangram_ucx_context_t *context, void* (*user_handler)(int, void*, size_t, size_t*));
 void tangram_ucx_server_start(tangram_ucx_context_t *context);
 
+void tangram_mmap_recv_rkey(tangram_ucx_context_t *context, const void* rkey_buf);
+
 // Client
 void tangram_ucx_send(tangram_ucx_context_t *context, int op, void* data, size_t length);
 void tangram_ucx_sendrecv(tangram_ucx_context_t *context, int op, void* data, size_t length, void* respond);
 void tangram_ucx_stop_server(tangram_ucx_context_t *context);
+
+void tangram_mmap_send_rkey(tangram_ucx_context_t *context, size_t length, ucp_mem_h* memh);
 
 #endif

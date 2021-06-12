@@ -15,27 +15,27 @@ tangram_ucx_context_t context;
  */
 void* rpc_handler(int op, void* data, size_t length, size_t *respond_len) {
     *respond_len = 0;
-
-    rpc_post_in_t* in = rpc_inout_unpack(data);
+    void *respond = NULL;
 
     if(op == RPC_OP_POST) {
+        rpc_post_in_t* in = rpc_inout_unpack(data);
         for(int i = 0; i < in->num_intervals; i++)
             tangram_ms_handle_post(in->rank, in->filename, in->intervals[i].offset, in->intervals[i].count);
-
         rpc_inout_free(in);
-        return NULL;
-    }
-
-    if(op == RPC_OP_QUERY) {
+    } else if(op == RPC_OP_QUERY) {
+        rpc_post_in_t* in = rpc_inout_unpack(data);
         *respond_len = sizeof(rpc_query_out_t);
         rpc_query_out_t *out = malloc(sizeof(rpc_query_out_t));
         bool found = tangram_ms_handle_query(in->filename, in->intervals[0].offset, in->intervals[0].count, &(out->rank));
         assert(found);
         printf("in rank: %d, out rank: %d\n", in->rank, out->rank);
-
         rpc_inout_free(in);
-        return out;
+        respond = out;
+    } else if(op == RPC_OP_RMA) {
+        tangram_mmap_recv_rkey(&context, data);
     }
+
+    return respond;
 }
 
 
