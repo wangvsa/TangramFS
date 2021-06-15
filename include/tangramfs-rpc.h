@@ -82,7 +82,8 @@ static void* rpc_inout_unpack(void* data) {
     memcpy(&in->filename_len, data+pos, sizeof(int));
     pos += sizeof(int);
 
-    in->filename = malloc(in->filename_len);
+    in->filename = malloc(in->filename_len + 1);
+    memset(in->filename, 0, in->filename_len+1);
     memcpy(in->filename, data+pos, in->filename_len);
     pos += in->filename_len;
 
