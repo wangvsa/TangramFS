@@ -1,8 +1,16 @@
 #define _POSIX_C_SOURCE 200112L
 #include <stdlib.h>
+#include <string.h>
+#include <assert.h>
 #include <arpa/inet.h>
 #include "tangramfs-ucx.h"
 #include "tangramfs-ucx-comm.h"
+
+static ucp_context_h g_ucp_context;
+static ucp_worker_h g_ucp_worker;
+static char g_server_addr[128];
+static ucp_ep_h g_client_ep;
+
 
 // To return resopnd to user
 void* g_server_respond;
@@ -28,8 +36,7 @@ static ucs_status_t client_am_recv_cb(void *arg, const void *header, size_t head
 }
 
 
-void connect_to_server(tangram_ucx_context_t *context) {
-
+void connect_to_server() {
     ucp_ep_params_t ep_params;
     ucs_status_t    status;
 
@@ -37,7 +44,7 @@ void connect_to_server(tangram_ucx_context_t *context) {
     struct sockaddr_in connect_addr;
     memset(&connect_addr, 0, sizeof(struct sockaddr_in));
     connect_addr.sin_family      = AF_INET;
-    connect_addr.sin_addr.s_addr = inet_addr(context->server_addr);
+    connect_addr.sin_addr.s_addr = inet_addr(g_server_addr);
     connect_addr.sin_port        = htons(UCX_SERVER_PORT);
 
     // Set am callback to receive respond from server
@@ -46,7 +53,7 @@ void connect_to_server(tangram_ucx_context_t *context) {
                           UCP_AM_HANDLER_PARAM_FIELD_CB;
     am_param.id         = UCX_AM_ID_DATA;
     am_param.cb         = client_am_recv_cb;
-    status              = ucp_worker_set_am_recv_handler(context->ucp_worker, &am_param);
+    status              = ucp_worker_set_am_recv_handler(g_ucp_worker, &am_param);
     assert(status == UCS_OK);
 
     // Create EP to connect
@@ -61,122 +68,71 @@ void connect_to_server(tangram_ucx_context_t *context) {
     ep_params.sockaddr.addr    = (struct sockaddr*)&connect_addr;
     ep_params.sockaddr.addrlen = sizeof(connect_addr);
 
-    status = ucp_ep_create(context->ucp_worker, &ep_params, &context->client_ep);
+    status = ucp_ep_create(g_ucp_worker, &ep_params, &g_client_ep);
     assert(status == UCS_OK);
     printf("Client: connected with server\n");
 }
 
-void init_and_connect(tangram_ucx_context_t *context) {
-    init_context(&context->ucp_context);
-    init_worker(context->ucp_context, &context->ucp_worker);
-    connect_to_server(context);
+void init_and_connect() {
+    init_context(&g_ucp_context);
+    init_worker(g_ucp_context, &g_ucp_worker, true);
+    connect_to_server();
 }
 
 
-void tangram_ucx_send(tangram_ucx_context_t *context, int op, void* data, size_t length) {
-    init_and_connect(context);
+void tangram_ucx_send(int op, void* data, size_t length) {
+    init_and_connect();
 
     // Active Message send
     ucp_request_param_t am_params;
     am_params.op_attr_mask = 0;
-    void *request = ucp_am_send_nbx(context->client_ep, UCX_AM_ID_DATA, &op, sizeof(int), data, length, &am_params);
-    request_finalize(context->ucp_worker, request);
+    void *request = ucp_am_send_nbx(g_client_ep, UCX_AM_ID_DATA, &op, sizeof(int), data, length, &am_params);
+    request_finalize(g_ucp_worker, request);
 
-    ep_close(context->ucp_worker, context->client_ep);
-    ucp_worker_destroy(context->ucp_worker);
-    ucp_cleanup(context->ucp_context);
+    ep_close(g_ucp_worker, g_client_ep);
+    ucp_worker_destroy(g_ucp_worker);
+    ucp_cleanup(g_ucp_context);
 }
 
 // Send and wait for the respond from server
-void tangram_ucx_sendrecv(tangram_ucx_context_t *context, int op, void* data, size_t length, void* respond) {
-    init_and_connect(context);
+void tangram_ucx_sendrecv(int op, void* data, size_t length, void* respond) {
+    init_and_connect();
 
     printf("Client: start sendrecv, op: %d, size: %lu\n", op, length);
 
     // Active Message send
     ucp_request_param_t params;
     params.op_attr_mask   = 0;
-    void *request = ucp_am_send_nbx(context->client_ep, UCX_AM_ID_DATA, &op, sizeof(int), data, length, &params);
-    request_finalize(context->ucp_worker, request);
+    void *request = ucp_am_send_nbx(g_client_ep, UCX_AM_ID_DATA, &op, sizeof(int), data, length, &params);
+    request_finalize(g_ucp_worker, request);
 
     // Wait the respond from server
     g_server_respond = respond;
     while(received_respond==0) {
-        ucp_worker_progress(context->ucp_worker);
+        ucp_worker_progress(g_ucp_worker);
     }
     received_respond = 0;
     printf("Client: finished sendrecv, op: %d, size: %lu\n", op, length);
 
-    ep_close(context->ucp_worker, context->client_ep);
-    ucp_worker_destroy(context->ucp_worker);
-    ucp_cleanup(context->ucp_context);
+    ep_close(g_ucp_worker, g_client_ep);
+    ucp_worker_destroy(g_ucp_worker);
+    ucp_cleanup(g_ucp_context);
 }
 
-void tangram_ucx_stop_server(tangram_ucx_context_t *context) {
-    init_and_connect(context);
+void tangram_ucx_stop_server() {
+    init_and_connect();
 
     // Active Message send
     ucp_request_param_t am_params;
     am_params.op_attr_mask = 0;
-    void *request = ucp_am_send_nbx(context->client_ep, UCX_AM_ID_CMD, NULL, 0, NULL, 0, &am_params);
-    request_finalize(context->ucp_worker, request);
+    void *request = ucp_am_send_nbx(g_client_ep, UCX_AM_ID_CMD, NULL, 0, NULL, 0, &am_params);
+    request_finalize(g_ucp_worker, request);
 
-    ep_close(context->ucp_worker, context->client_ep);
-    ucp_worker_destroy(context->ucp_worker);
-    ucp_cleanup(context->ucp_context);
+    ep_close(g_ucp_worker, g_client_ep);
+    ucp_worker_destroy(g_ucp_worker);
+    ucp_cleanup(g_ucp_context);
 }
 
-
-
-void tangram_mmap_send_rkey(tangram_ucx_context_t *context, size_t length, ucp_mem_h* memh) {
-    init_and_connect(context);
-
-    size_t page_size = 4096;
-    int *local_data;
-    posix_memalign((void**)&local_data, sizeof(int)*1024, length);
-
-    ucp_mem_map_params_t params;
-    params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS | UCP_MEM_MAP_PARAM_FIELD_LENGTH | UCP_MEM_MAP_PARAM_FIELD_FLAGS;
-    params.address = NULL;                              // Let UCP allocate memory for us
-    params.length = length;
-    params.flags = UCP_MEM_MAP_ALLOCATE;
-
-    // 1. mem map and let UCX allocate memory
-    ucs_status_t status;
-    status = ucp_mem_map(context->ucp_context, &params, memh);
-    assert(status == UCS_OK);
-
-    ucp_mem_attr_t attr;
-    attr.field_mask = UCP_MEM_ATTR_FIELD_ADDRESS | UCP_MEM_ATTR_FIELD_LENGTH;
-    ucp_mem_query(*memh, &attr);
-
-    // 2. Get and pack the rkey_buf
-    void* rkey_buf = NULL;
-    size_t rkey_buf_size;
-    ucp_rkey_pack(context->ucp_context, *memh, &rkey_buf, &rkey_buf_size);
-    assert(rkey_buf);
-    printf("rkey_buf length: %lu, mem ptr: %p, mem len: %lu\n", rkey_buf_size, attr.address, attr.length);
-
-    void* sendbuf = malloc(rkey_buf_size + sizeof(uint64_t));
-    memcpy(sendbuf, rkey_buf, rkey_buf_size);
-    uint64_t addr = (uint64_t) attr.address;
-    memcpy(sendbuf+rkey_buf_size, &addr, sizeof(addr));
-
-    // 3. Send it to the other side
-    ucp_request_param_t am_params;
-    am_params.op_attr_mask = 0;
-    int op = 4;
-    void *request = ucp_am_send_nbx(context->client_ep, UCX_AM_ID_DATA, &op, sizeof(int), sendbuf, rkey_buf_size+sizeof(uint64_t), &am_params);
-    request_finalize(context->ucp_worker, request);
-
-    sleep(3);
-    printf("tmp: %d\n", local_data[0]);
-    free(local_data);
-    free(sendbuf);
-    ucp_rkey_buffer_release(rkey_buf);
-    ucp_mem_unmap(context->ucp_context, *memh);
-    ep_close(context->ucp_worker, context->client_ep);
-    ucp_worker_destroy(context->ucp_worker);
-    ucp_cleanup(context->ucp_context);
+void tangram_ucx_set_server_addr(const char* ip_addr) {
+    strcpy(g_server_addr, ip_addr);
 }
-

@@ -13,18 +13,21 @@ void init_context(ucp_context_h *ucp_context) {
 
     memset(&ucp_params, 0, sizeof(ucp_params));
     ucp_params.field_mask = UCP_PARAM_FIELD_FEATURES;
-    ucp_params.features = UCP_FEATURE_AM;
+    ucp_params.features = UCP_FEATURE_AM | UCP_FEATURE_RMA;
     status = ucp_init(&ucp_params, NULL, ucp_context);
     assert(status == UCS_OK);
 }
 
-void init_worker(ucp_context_h ucp_context, ucp_worker_h *ucp_worker) {
+void init_worker(ucp_context_h ucp_context, ucp_worker_h *ucp_worker, bool single_thread) {
     ucp_worker_params_t worker_params;
     ucs_status_t status;
 
     memset(&worker_params, 0, sizeof(worker_params));
     worker_params.field_mask  = UCP_WORKER_PARAM_FIELD_THREAD_MODE;
-    worker_params.thread_mode = UCS_THREAD_MODE_SINGLE;
+    if(single_thread)
+        worker_params.thread_mode = UCS_THREAD_MODE_SINGLE;
+    else
+        worker_params.thread_mode = UCS_THREAD_MODE_MULTI;
 
     status = ucp_worker_create(ucp_context, &worker_params, ucp_worker);
     assert(status == UCS_OK);
@@ -54,6 +57,7 @@ void ep_close(ucp_worker_h worker, ucp_ep_h ep)
     }
 }
 
+
 void request_finalize(ucp_worker_h worker, void *request)
 {
     ucs_status_t status;
@@ -62,10 +66,10 @@ void request_finalize(ucp_worker_h worker, void *request)
 
     if(UCS_PTR_IS_ERR(request)) {
         status = UCS_PTR_STATUS(request);
-        fprintf(stderr, "unable to send message (%s)\n", ucs_status_string(status));
+        fprintf(stderr, "Erro at requeset_finalize(): %s\n", ucs_status_string(status));
+        return;
     }
 
-    // wait until client_am_send_cb() set the condition to true
     do {
         ucp_worker_progress(worker);
         status = ucp_request_check_status(request);
@@ -73,5 +77,16 @@ void request_finalize(ucp_worker_h worker, void *request)
 
     status = ucp_request_check_status(request);
     assert(status == UCS_OK);
+
     ucp_request_free(request);
+}
+
+
+void empty_callback(void *request, ucs_status_t status) {
+}
+
+void worker_flush(ucp_worker_h worker)
+{
+    void *request = ucp_worker_flush_nb(worker, 0, empty_callback);
+    request_finalize(worker, request);
 }

@@ -43,6 +43,9 @@ void tfs_init(const char* persist_dir, const char* tfs_dir) {
     if(semantics_str)
         tfs.semantics = atoi(semantics_str);
 
+    tangram_set_server_addr();
+    tangram_rma_service_start();
+
     MAP_OR_FAIL(open);
     MAP_OR_FAIL(close);
     MAP_OR_FAIL(fsync);
@@ -59,6 +62,8 @@ void tfs_finalize() {
     MPI_Barrier(tfs.mpi_comm);
 
     MPI_Comm_free(&tfs.mpi_comm);
+
+    tangram_rma_service_stop();
 
     // Clear all resources
     TFS_File *tf, *tmp;

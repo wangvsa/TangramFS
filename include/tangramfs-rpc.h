@@ -2,14 +2,7 @@
 #define _TANGRAMFS_RPC_H_
 #include <stdlib.h>
 #include <string.h>
-
-
-#define RPC_OP_POST       0
-#define RPC_OP_QUERY      1
-#define RPC_OP_STOP       2
-#define RPC_OP_TRANSFER   3
-#define RPC_OP_RMA        4
-
+#include "tangramfs-ucx.h"
 
 typedef struct rpc_inout_interval {
     size_t offset;
@@ -103,6 +96,12 @@ static void rpc_inout_free(rpc_post_in_t *in) {
     free(in);
 }
 
+
+// RPC Client
+void tangram_set_server_addr();
 void tangram_rpc_issue_rpc(int op, char* filename, int rank, size_t *offsets, size_t *counts, int len, void* respond);
+
+void tangram_rma_service_start();
+void tangram_rma_service_stop();
 
 #endif

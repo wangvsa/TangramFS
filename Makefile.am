@@ -23,7 +23,8 @@ libtangramfs_la_SOURCES = src/client/tangramfs.c \
 						  src/common/tangramfs-utils.c \
 						  src/ucx/tangramfs-ucx-comm.c \
 						  src/ucx/tangramfs-ucx-server.c \
-						  src/ucx/tangramfs-ucx-client.c
+						  src/ucx/tangramfs-ucx-client.c \
+					 	  src/ucx/tangramfs-ucx-rma.c
 
 libtangramfs_la_CFLAGS  = -I./include -I${UCX_DIR}/include -std=c99
 libtangramfs_la_LDFLAGS = -Wl,-rpath,-L${UCX_DIR}/lib
@@ -40,6 +41,9 @@ server_out_SOURCES = src/server/tangramfs-metadata.c \
 					 src/common/tangramfs-utils.c \
 					 src/ucx/tangramfs-ucx-comm.c \
 					 src/ucx/tangramfs-ucx-server.c \
-					 src/ucx/tangramfs-ucx-client.c
+					 src/ucx/tangramfs-ucx-client.c \
+					 src/ucx/tangramfs-ucx-rma.c \
+					 src/client/tangramfs-rpc.c
+
 server_out_CFLAGS  = -I./include -I${UCX_DIR}/include -std=c99
 server_out_LDADD   = -L${UCX_DIR}/lib -lucp -lucs -luct
