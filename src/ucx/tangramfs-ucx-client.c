@@ -70,7 +70,7 @@ void connect_to_server() {
 
     status = ucp_ep_create(g_ucp_worker, &ep_params, &g_client_ep);
     assert(status == UCS_OK);
-    printf("Client: connected with server\n");
+    //printf("Client: connected with server\n");
 }
 
 void init_and_connect() {
@@ -98,7 +98,7 @@ void tangram_ucx_send(int op, void* data, size_t length) {
 void tangram_ucx_sendrecv(int op, void* data, size_t length, void* respond) {
     init_and_connect();
 
-    printf("Client: start sendrecv, op: %d, size: %lu\n", op, length);
+    //printf("Client: start sendrecv, op: %d, size: %lu\n", op, length);
 
     // Active Message send
     ucp_request_param_t params;
@@ -112,7 +112,7 @@ void tangram_ucx_sendrecv(int op, void* data, size_t length, void* respond) {
         ucp_worker_progress(g_ucp_worker);
     }
     received_respond = 0;
-    printf("Client: finished sendrecv, op: %d, size: %lu\n", op, length);
+    //printf("Client: finished sendrecv, op: %d, size: %lu\n", op, length);
 
     ep_close(g_ucp_worker, g_client_ep);
     ucp_worker_destroy(g_ucp_worker);

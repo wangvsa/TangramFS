@@ -11,7 +11,7 @@
 
 #define MB (1024*1024)
 
-static size_t DATA_SIZE = 256*MB;
+static size_t DATA_SIZE = 1*MB;
 static int N = 1;
 
 

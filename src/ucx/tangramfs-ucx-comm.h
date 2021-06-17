@@ -9,6 +9,7 @@ void err_cb(void *arg, ucp_ep_h ep, ucs_status_t status);
 void ep_close(ucp_worker_h worker, ucp_ep_h ep);
 
 void request_finalize(ucp_worker_h worker, void *request);
+void empty_callback(void *request, ucs_status_t status);
 void worker_flush(ucp_worker_h worker);
 
 #endif

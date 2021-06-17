@@ -185,7 +185,10 @@ size_t tfs_read(TFS_File* tf, void* buf, size_t size) {
     }
 
     /*TODO RMA read*/
+    size_t offset = tf->offset;
+    tangram_rpc_issue_rpc(OP_RMA_REQUEST, tf->filename, owner_rank, &offset, &size, 1, NULL);
     tf->offset += size;
+
     return size;
 }
 
@@ -218,7 +221,7 @@ void tfs_post(TFS_File* tf, size_t offset, size_t count) {
     int num_covered;
     Interval** covered = tangram_it_covers(tf->it, offset, count, &num_covered);
 
-    tangram_rpc_issue_rpc(RPC_OP_POST, tf->filename, tfs.mpi_rank, &offset, &count, 1, NULL);
+    tangram_rpc_issue_rpc(OP_RPC_POST, tf->filename, tfs.mpi_rank, &offset, &count, 1, NULL);
 
     int i;
     for(i = 0; i < num_covered; i++)
@@ -238,12 +241,12 @@ void tfs_post_all(TFS_File* tf) {
     }
 
     tangram_free(unposted, num*sizeof(Interval*));
-    tangram_rpc_issue_rpc(RPC_OP_POST, tf->filename, tfs.mpi_rank, offsets, counts, num, NULL);
+    tangram_rpc_issue_rpc(OP_RPC_POST, tf->filename, tfs.mpi_rank, offsets, counts, num, NULL);
 }
 
 void tfs_query(TFS_File* tf, size_t offset, size_t size, int *out_rank) {
     rpc_query_out_t out;
-    tangram_rpc_issue_rpc(RPC_OP_QUERY, tf->filename, tfs.mpi_rank, &offset, &size, 1, &out);
+    tangram_rpc_issue_rpc(OP_RPC_QUERY, tf->filename, tfs.mpi_rank, &offset, &size, 1, &out);
     *out_rank = out.rank;
 }
 

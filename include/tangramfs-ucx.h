@@ -8,13 +8,11 @@
 #define UCX_AM_ID_CMD           1
 #define UCX_AM_ID_RMA           2
 
-#define RPC_OP_POST       0
-#define RPC_OP_QUERY      1
-#define RPC_OP_STOP       2
-#define RPC_OP_TRANSFER   3
-
-#define OP_RMA_REQUEST          1001
-#define OP_RMA_RESPOND          1002
+#define OP_RPC_POST             1001
+#define OP_RPC_QUERY            1002
+#define OP_RPC_STOP             1003
+#define OP_RMA_REQUEST          2001
+#define OP_RMA_RESPOND          2002
 
 
 // Server
@@ -30,5 +28,6 @@ void tangram_ucx_stop_server();
 
 void tangram_ucx_rma_service_start();
 void tangram_ucx_rma_service_stop();
+void tangram_ucx_rma_request(int rank);
 
 #endif

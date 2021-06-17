@@ -15,11 +15,14 @@ void tangram_rpc_issue_rpc(int op, char* filename, int rank, size_t *offsets, si
     void* data = rpc_inout_pack(filename, rank, num_intervals, offsets, counts, &size);
 
     switch(op) {
-        case RPC_OP_POST:
+        case OP_RPC_POST:
             tangram_ucx_send(op, data, size);
             break;
-        case RPC_OP_QUERY:
+        case OP_RPC_QUERY:
             tangram_ucx_sendrecv(op, data, size, respond);
+            break;
+        case OP_RMA_REQUEST:
+            tangram_ucx_rma_request(rank);
             break;
         default:
             break;
