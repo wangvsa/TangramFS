@@ -1,8 +1,14 @@
+#define _POSIX_C_SOURCE 200112L
+#define NI_MAXHOST      1025
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <assert.h>
 #include <string.h>
 #include <unistd.h>
+#include <ifaddrs.h>
+#include <sys/socket.h>
+#include <netdb.h>
 #include <ucp/api/ucp.h>
 #include "tangramfs-ucx-comm.h"
 
@@ -89,4 +95,25 @@ void worker_flush(ucp_worker_h worker)
 {
     void *request = ucp_worker_flush_nb(worker, 0, empty_callback);
     request_finalize(worker, request);
+}
+
+// interface: e.g., "wlan0", "eno0"
+void get_interface_ip_addr(const char* interface, char *ip_addr) {
+    struct ifaddrs *ifaddr, *ifa;
+
+    int res = getifaddrs(&ifaddr);
+    assert(res != -1);
+
+    for(ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
+        if (ifa->ifa_addr == NULL)
+            continue;
+
+        if((strcmp(ifa->ifa_name, interface)==0) && (ifa->ifa_addr->sa_family==AF_INET)) {
+            res = getnameinfo(ifa->ifa_addr, sizeof(struct sockaddr_in), ip_addr, NI_MAXHOST, NULL, 0, NI_NUMERICHOST);
+            assert(res == 0);
+            break;
+        }
+    }
+
+    freeifaddrs(ifaddr);
 }

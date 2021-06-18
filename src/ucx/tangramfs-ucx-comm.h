@@ -12,4 +12,6 @@ void request_finalize(ucp_worker_h worker, void *request);
 void empty_callback(void *request, ucs_status_t status);
 void worker_flush(ucp_worker_h worker);
 
+void get_interface_ip_addr(const char* interface, char *ip_addr);
+
 #endif

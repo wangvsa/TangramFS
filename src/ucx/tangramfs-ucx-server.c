@@ -6,6 +6,7 @@
 #include <unistd.h>
 #include <arpa/inet.h>
 #include <ucp/api/ucp.h>
+#include <uct/api/uct.h>
 #include "utlist.h"
 #include "tangramfs-ucx.h"
 #include "tangramfs-ucx-comm.h"
@@ -163,9 +164,10 @@ void run_server() {
     ucp_cleanup(g_ucp_context);
 }
 
-void tangram_ucx_server_init() {
+void tangram_ucx_server_init(const char* interface, char* server_ip_addr) {
     init_context(&g_ucp_context);
     init_worker(g_ucp_context, &g_ucp_worker, true);
+    get_interface_ip_addr(interface, server_ip_addr);
 }
 
 

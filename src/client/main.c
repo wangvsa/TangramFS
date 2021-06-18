@@ -15,7 +15,7 @@ static size_t DATA_SIZE = 1*MB;
 static int N = 1;
 
 
-int size, rank, provided;
+int size, rank;
 
 
 void write_phase() {
@@ -86,14 +86,12 @@ void error_handler(int sig) {
 int main(int argc, char* argv[]) {
     //signal(SIGSEGV, error_handler);
 
-    // Have to use MPI_THREAD_MULTIPLE for Mercury+pthread to work
-    MPI_Init_thread(&argc, &argv, MPI_THREAD_MULTIPLE, &provided);
-    //MPI_Init(&argc, &argv);
+    MPI_Init(&argc, &argv);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
     //tfs_init("./chen/", "/l/ssd");
-    tfs_init(argv[1], "/tmp");
+    tfs_init("./", "/tmp");
 
     for(int i = 0; i < 1; i++) {
         MPI_Barrier(MPI_COMM_WORLD);

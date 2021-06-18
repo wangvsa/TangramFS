@@ -42,8 +42,8 @@ void tangram_issue_rpc_rma(int op, char* filename, int my_rank, int dest_rank,
     free(user_data);
 }
 
-void tangram_set_server_addr() {
-    tangram_ucx_set_server_addr("192.168.1.249");
+void tangram_set_iface_addr(const char* iface, const char* ip_addr) {
+    tangram_ucx_set_iface_addr(iface, ip_addr);
 }
 
 void tangram_rma_service_start(void* (*serve_rma_data)(void*, size_t*)) {

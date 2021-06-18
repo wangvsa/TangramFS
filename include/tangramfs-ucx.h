@@ -16,12 +16,12 @@
 
 
 // Server
-void tangram_ucx_server_init();
+void tangram_ucx_server_init(const char* iface, char* ip_addr);
 void tangram_ucx_server_register_rpc(void* (*user_handler)(int, void*, size_t, size_t*));
 void tangram_ucx_server_start();
 
 // Client
-void tangram_ucx_set_server_addr(const char* ip_addr);
+void tangram_ucx_set_iface_addr(const char* iface, const char* ip_addr);
 void tangram_ucx_send(int op, void* data, size_t length);
 void tangram_ucx_sendrecv(int op, void* data, size_t length, void* respond);
 void tangram_ucx_stop_server();

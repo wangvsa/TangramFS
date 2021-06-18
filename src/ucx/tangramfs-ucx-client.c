@@ -133,6 +133,7 @@ void tangram_ucx_stop_server() {
     ucp_cleanup(g_ucp_context);
 }
 
-void tangram_ucx_set_server_addr(const char* ip_addr) {
+void tangram_ucx_set_iface_addr(const char* iface, const char* ip_addr) {
+    setenv("UCX_NET_DEVICES", iface, 0);
     strcpy(g_server_addr, ip_addr);
 }

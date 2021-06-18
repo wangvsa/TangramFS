@@ -46,7 +46,11 @@ void tfs_init(const char* persist_dir, const char* tfs_dir) {
     if(semantics_str)
         tfs.semantics = atoi(semantics_str);
 
-    tangram_set_server_addr();
+    char iface[64];
+    char ip_addr[1025];
+    tangram_read_server_addr(persist_dir, iface, ip_addr);
+    tangram_set_iface_addr(iface, ip_addr);
+
     tangram_rma_service_start(serve_rma_data);
 
     MAP_OR_FAIL(open);
