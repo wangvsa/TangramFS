@@ -26,8 +26,8 @@ void tangram_ucx_send(int op, void* data, size_t length);
 void tangram_ucx_sendrecv(int op, void* data, size_t length, void* respond);
 void tangram_ucx_stop_server();
 
-void tangram_ucx_rma_service_start();
+void tangram_ucx_rma_service_start(void* (*serve_rma_data)(void*, size_t*));
 void tangram_ucx_rma_service_stop();
-void tangram_ucx_rma_request(int rank);
+void tangram_ucx_rma_request(int dest_rank, void* user_arg, size_t user_arg_size, void* recv_buf, size_t recv_size);
 
 #endif

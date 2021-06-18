@@ -10,8 +10,6 @@
 #include "tangramfs-ucx.h"
 #include "tangramfs-ucx-comm.h"
 
-static int g_mpi_rank;
-
 ucp_context_h       g_ucp_context;
 ucp_worker_h        g_rma_worker;       // for rma
 ucp_address_t**     g_rma_addrs;        // rma_addrs[i] is Processor i's rma service address
@@ -20,9 +18,21 @@ ucp_address_t**     g_rma_addrs;        // rma_addrs[i] is Processor i's rma ser
 static volatile bool g_running = true;
 static volatile bool g_ack = false;
 
+// The user of RMA serice needs to provide
+// this funciton to provide the actual data to
+// send though RMA
+void* (*g_serve_rma_data)(void*, size_t *size);
+
+
 static pthread_t g_progress_thread;
 pthread_cond_t  cond  = PTHREAD_COND_INITIALIZER;
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+
+
+typedef struct ptrs_to_free {
+    ucp_rkey_h* rkey_p;
+    void* data;
+} ptrs_to_free_t;
 
 
 // Main thread wait for a request to finsih
@@ -66,26 +76,73 @@ void connect_ep(int rank, ucp_ep_h *ep) {
     assert(status == UCS_OK);
 }
 
+void* pack_request_arg(int dest_rank, uint64_t my_addr, void* rkey_buf, size_t rkey_buf_size,
+                                void* user_arg, size_t user_arg_size, size_t *total_size) {
+    int my_rank;
+    MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
+    *total_size = sizeof(int) + sizeof(uint64_t) + sizeof(size_t)*2 + rkey_buf_size + user_arg_size;
+
+    int pos = 0;
+    void* send_buf = malloc(*total_size);
+
+    memcpy(send_buf+pos, &dest_rank, sizeof(int));
+    pos += sizeof(int);
+
+    memcpy(send_buf+pos, &my_addr, sizeof(uint64_t));
+    pos += sizeof(uint64_t);
+
+    memcpy(send_buf+pos, &rkey_buf_size, sizeof(size_t));
+    pos += sizeof(size_t);
+
+    memcpy(send_buf+pos, rkey_buf, rkey_buf_size);
+    pos += rkey_buf_size;
+
+    memcpy(send_buf+pos, &user_arg_size, sizeof(size_t));
+    pos += sizeof(size_t);
+
+    memcpy(send_buf+pos, user_arg, user_arg_size);
+    pos += user_arg_size;
+
+    return send_buf;
+}
+
+
 /** Send a RMA requeset
  * (1) connect
  * (2) register memory
  * (3) send my rkey
  * (4) wait for ack
+ *
+ * void* recv_buf is the user's buffer in tfs_read()
+ * we will check if it is page-aligned, if so we
+ * will use it directly for RMA.
+ *
+ * if not we let UCX to allocate memory for RMA
+ * and copy it to user's buffer.
  */
-void tangram_ucx_rma_request(int dest_rank) {
-    int my_rank;
-    MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
+void tangram_ucx_rma_request(int dest_rank, void* user_arg, size_t user_arg_size, void* recv_buf, size_t recv_size) {
+    bool aligned = false;
+    /*
+    if(recv_buf && ((uint64_t)recv_buf) % 4096 == 0) {
+        aligned = true;
+        printf("aligned!\n");
+    }
+    */
 
     ucp_ep_h ep;
     connect_ep(dest_rank, &ep);
 
+    // mem map
     ucp_mem_map_params_t params;
-    params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS | UCP_MEM_MAP_PARAM_FIELD_LENGTH | UCP_MEM_MAP_PARAM_FIELD_FLAGS;
-    params.address = NULL;                              // Let UCP allocate memory for us
-    params.length = 4096;
-    params.flags = UCP_MEM_MAP_ALLOCATE;
-
-    // mem map and let UCX allocate memory
+    params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS | UCP_MEM_MAP_PARAM_FIELD_LENGTH;
+    params.length = recv_size;
+    if(aligned) {
+        params.address = recv_buf;
+    } else {
+        params.address = NULL;                              // Let UCP allocate memory for us
+        params.field_mask |= UCP_MEM_MAP_PARAM_FIELD_FLAGS;
+        params.flags = UCP_MEM_MAP_ALLOCATE;
+    }
     ucp_mem_h memh;
     ucs_status_t status;
     status = ucp_mem_map(g_ucp_context, &params, &memh);
@@ -98,6 +155,7 @@ void tangram_ucx_rma_request(int dest_rank) {
     attr.field_mask = UCP_MEM_ATTR_FIELD_ADDRESS | UCP_MEM_ATTR_FIELD_LENGTH;
     ucp_mem_query(memh, &attr);
     uint64_t mem_addr = (uint64_t) attr.address;
+    if(aligned) assert(mem_addr == (uint64_t)recv_buf);
 
     // pack rkey_buf
     char* rkey_buf = NULL;
@@ -105,12 +163,8 @@ void tangram_ucx_rma_request(int dest_rank) {
     status = ucp_rkey_pack(g_ucp_context, memh, (void**)&rkey_buf, &rkey_buf_size);
     assert(status == UCS_OK && rkey_buf);
 
-    size_t total_buf_size = sizeof(int) + sizeof(size_t) + rkey_buf_size + sizeof(uint64_t);
-    void* sendbuf = malloc(total_buf_size);
-    memcpy(sendbuf, &my_rank, sizeof(int));
-    memcpy(sendbuf+sizeof(int), &rkey_buf_size, sizeof(size_t));
-    memcpy(sendbuf+sizeof(int)+sizeof(size_t), rkey_buf, rkey_buf_size);
-    memcpy(sendbuf+sizeof(int)+sizeof(size_t)+rkey_buf_size, &mem_addr, sizeof(uint64_t));
+    size_t total_buf_size;
+    void* sendbuf = pack_request_arg(dest_rank, mem_addr, rkey_buf, rkey_buf_size, user_arg, user_arg_size, &total_buf_size);
 
     // send it to the other side
     ucp_request_param_t am_params;
@@ -119,7 +173,6 @@ void tangram_ucx_rma_request(int dest_rank) {
     void *request = ucp_am_send_nbx(ep, UCX_AM_ID_RMA, &op, sizeof(int), sendbuf, total_buf_size, &am_params);
     wait_request(request);
     free(sendbuf);
-    //printf("rkey_buf sent, length: %lu, mem ptr: %p, mem len: %lu\n", rkey_buf_size, attr.address, attr.length);
 
     // wait for respond
     pthread_mutex_lock(&mutex);
@@ -129,8 +182,9 @@ void tangram_ucx_rma_request(int dest_rank) {
     pthread_mutex_unlock(&mutex);
 
     // Now we should have the data ready
-    printf("Rank: %d RMA data received: %d\n", g_mpi_rank, *((int*)attr.address));
-
+    if(!aligned) {
+        memcpy(recv_buf, attr.address, recv_size);
+    }
 
     status = ucp_mem_unmap(g_ucp_context, memh);
     assert(status == UCS_OK);
@@ -139,52 +193,69 @@ void tangram_ucx_rma_request(int dest_rank) {
 }
 
 void rma_ack_sent_cb(void *request, ucs_status_t status, void *user_data) {
+    ptrs_to_free_t *ptrs = (ptrs_to_free_t*) user_data;
     ucp_request_free(request);
-    ucp_rkey_h *rkey_p = (ucp_rkey_h*)user_data;
-    ucp_rkey_destroy(*rkey_p);
-    free(rkey_p);
-    printf("Rank: %d RMA data sent - finsihed\n", g_mpi_rank);
+    ucp_rkey_destroy(*(ptrs->rkey_p));
+    free(ptrs->rkey_p);
+    free(ptrs->data);
+    free(ptrs);
 }
 
 
 void rma_respond(void* data) {
 
     int dest_rank;
-    size_t rkey_buf_size;
-    char* rkey_buf;
     uint64_t remote_addr;
+    size_t rkey_buf_size, user_arg_size;
+    void *rkey_buf, *user_arg;
 
-    memcpy(&dest_rank, data, sizeof(int));
-    memcpy(&rkey_buf_size, data+sizeof(int), sizeof(size_t));
+    int pos = 0;
+    memcpy(&dest_rank, data+0, sizeof(int));
+    pos += sizeof(int);
+
+    memcpy(&remote_addr, data+pos, sizeof(uint64_t));
+    pos += sizeof(uint64_t);
+
+    memcpy(&rkey_buf_size, data+pos, sizeof(size_t));
+    pos += sizeof(size_t);
+
     rkey_buf = malloc(rkey_buf_size);
-    memcpy(rkey_buf, data+sizeof(int)+sizeof(size_t), rkey_buf_size);
-    memcpy(&remote_addr, data+sizeof(int)+sizeof(size_t)+rkey_buf_size, sizeof(uint64_t));
-    //printf("rkey_buf received length: %lu, remote addr: %p\n", rkey_buf_size, (void*)remote_addr);
+    memcpy(rkey_buf, data+pos, rkey_buf_size);
+    pos += rkey_buf_size;
 
+    memcpy(&user_arg_size, data+pos, sizeof(size_t));
+    pos += sizeof(size_t);
+    user_arg = data+pos;
+
+    // Connect EP
     ucp_ep_h ep;
     connect_ep(dest_rank, &ep);
 
+    // Get rkey
     ucs_status_t status;
     ucp_rkey_h *rkey_p = malloc(sizeof(ucp_rkey_h));
     status = ucp_ep_rkey_unpack(ep, rkey_buf, rkey_p);
     assert(status == UCS_OK);
     free(rkey_buf);
 
-    printf("Rank: %d RMA data sent - start\n", g_mpi_rank);
     // actual RMA
-    int local_data = 100;
-    ucp_put_nbi(ep, &local_data, sizeof(int), remote_addr, *rkey_p);
+    size_t rma_data_size;
+    void* rma_data = g_serve_rma_data(user_arg, &rma_data_size);
+    ucp_put_nbi(ep, rma_data, rma_data_size, remote_addr, *rkey_p);
 
     // Make sure the RMA operation completes before the following ACK message.
     ucp_worker_fence(g_rma_worker);
 
     // Send ACK
+    ptrs_to_free_t *ptrs = malloc(sizeof(ptrs_to_free_t));
+    ptrs->rkey_p = rkey_p;
+    ptrs->data = rma_data;
     ucp_request_param_t am_param;
     am_param.op_attr_mask = UCP_OP_ATTR_FIELD_CALLBACK |
                             UCP_OP_ATTR_FIELD_REQUEST  |
                             UCP_OP_ATTR_FIELD_USER_DATA;
     am_param.cb.send      = rma_ack_sent_cb;
-    am_param.user_data    = rkey_p;
+    am_param.user_data    = ptrs;
     int op = OP_RMA_RESPOND;
     ucs_status_ptr_t st = ucp_am_send_nbx(ep, UCX_AM_ID_RMA, &op, sizeof(int), NULL, 0, &am_param);
 
@@ -193,6 +264,8 @@ void rma_respond(void* data) {
     if(st == UCS_OK) {
         ucp_rkey_destroy(*rkey_p);
         free(rkey_p);
+        free(rma_data);
+        free(ptrs);
     }
 }
 
@@ -204,13 +277,11 @@ static ucs_status_t am_handler(void *arg, const void *header, size_t header_leng
     // 1. Received an RMA requeset
     // Need to send data thorugh RMA, and also the respond through AM.
     if(op == OP_RMA_REQUEST) {
-        printf("Rank: %d RMA request received\n", g_mpi_rank);
         rma_respond(data);
     }
 
     // 2. Received the respond for my previous RMA request
     if(op == OP_RMA_RESPOND) {
-        printf("Rank: %d RMA respond received!\n", g_mpi_rank);
         pthread_mutex_lock(&mutex);
         g_ack = true;
         pthread_cond_signal(&cond);
@@ -242,9 +313,8 @@ void* progress_loop(void* arg) {
     }
 }
 
-void tangram_ucx_rma_service_start() {
-
-    MPI_Comm_rank(MPI_COMM_WORLD, &g_mpi_rank);
+void tangram_ucx_rma_service_start(void* (serve_rma_data)(void*, size_t*)) {
+    g_serve_rma_data = serve_rma_data;
 
     init_context(&g_ucp_context);
     init_worker(g_ucp_context, &g_rma_worker, false);

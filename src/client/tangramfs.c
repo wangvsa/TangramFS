@@ -30,6 +30,9 @@ static TFS_File *tfs_files;   // hash map of currently opened files
 
 static TFS_Info tfs;
 
+void* serve_rma_data(void* in_arg, size_t* size);
+
+
 
 void tfs_init(const char* persist_dir, const char* tfs_dir) {
     MPI_Comm_dup(MPI_COMM_WORLD, &tfs.mpi_comm);
@@ -44,7 +47,7 @@ void tfs_init(const char* persist_dir, const char* tfs_dir) {
         tfs.semantics = atoi(semantics_str);
 
     tangram_set_server_addr();
-    tangram_rma_service_start();
+    tangram_rma_service_start(serve_rma_data);
 
     MAP_OR_FAIL(open);
     MAP_OR_FAIL(close);
@@ -77,12 +80,11 @@ void tfs_finalize() {
 
 
 TFS_File* tfs_open(const char* pathname) {
-    TFS_File *tf = NULL;
 
     char abs_filename[PATH_MAX+64];
     sprintf(abs_filename, "%s/_tfs_tmpfile.%d", tfs.tfs_dir, tfs.mpi_rank);
 
-    HASH_FIND_STR(tfs_files, pathname, tf);
+    TFS_File *tf = tangram_get_tfs_file(pathname);
     if(tf) {
         tf->offset = 0;
     } else {
@@ -186,9 +188,8 @@ size_t tfs_read(TFS_File* tf, void* buf, size_t size) {
 
     /*TODO RMA read*/
     size_t offset = tf->offset;
-    tangram_rpc_issue_rpc(OP_RMA_REQUEST, tf->filename, owner_rank, &offset, &size, 1, NULL);
+    tangram_issue_rpc_rma(OP_RMA_REQUEST, tf->filename, tfs.mpi_rank, owner_rank, &offset, &size, 1, buf);
     tf->offset += size;
-
     return size;
 }
 
@@ -221,7 +222,7 @@ void tfs_post(TFS_File* tf, size_t offset, size_t count) {
     int num_covered;
     Interval** covered = tangram_it_covers(tf->it, offset, count, &num_covered);
 
-    tangram_rpc_issue_rpc(OP_RPC_POST, tf->filename, tfs.mpi_rank, &offset, &count, 1, NULL);
+    tangram_issue_rpc_rma(OP_RPC_POST, tf->filename, tfs.mpi_rank, 0, &offset, &count, 1, NULL);
 
     int i;
     for(i = 0; i < num_covered; i++)
@@ -241,12 +242,12 @@ void tfs_post_all(TFS_File* tf) {
     }
 
     tangram_free(unposted, num*sizeof(Interval*));
-    tangram_rpc_issue_rpc(OP_RPC_POST, tf->filename, tfs.mpi_rank, offsets, counts, num, NULL);
+    tangram_issue_rpc_rma(OP_RPC_POST, tf->filename, tfs.mpi_rank, 0, offsets, counts, num, NULL);
 }
 
 void tfs_query(TFS_File* tf, size_t offset, size_t size, int *out_rank) {
-    rpc_query_out_t out;
-    tangram_rpc_issue_rpc(OP_RPC_QUERY, tf->filename, tfs.mpi_rank, &offset, &size, 1, &out);
+    rpc_out_t out;
+    tangram_issue_rpc_rma(OP_RPC_QUERY, tf->filename, tfs.mpi_rank, 0, &offset, &size, 1, &out);
     *out_rank = out.rank;
 }
 
@@ -280,4 +281,26 @@ TFS_File* tangram_get_tfs_file(const char* filename) {
     TFS_File *tf= NULL;
     HASH_FIND_STR(tfs_files, filename, tf);
     return tf;
+}
+
+
+/*
+ * Read data locally to serve for the RMA request
+ */
+void* serve_rma_data(void* in_arg, size_t* size) {
+    rpc_in_t* in = rpc_in_unpack(in_arg);
+
+    TFS_File* tf = tangram_get_tfs_file(in->filename);
+    assert(tf != NULL);
+
+    size_t local_offset;
+    bool found = tangram_it_query(tf->it, in->intervals[0].offset, in->intervals[0].count, &local_offset);
+    assert(found);
+
+    *size = in->intervals[0].count;
+    void* data = malloc(*size);
+    pread(tf->local_fd, data, *size, local_offset);
+
+    rpc_in_free(in);
+    return data;
 }

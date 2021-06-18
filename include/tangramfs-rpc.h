@@ -4,36 +4,25 @@
 #include <string.h>
 #include "tangramfs-ucx.h"
 
-typedef struct rpc_inout_interval {
+typedef struct rpc_interval {
     size_t offset;
     size_t count;
 } interval_t;
 
-typedef struct rpc_post_in {
+typedef struct rpc_in {
     int rank;
     int num_intervals;
     int filename_len;
     char* filename;
     interval_t *intervals;
-} rpc_post_in_t;
+} rpc_in_t;
 
-typedef struct rpc_query_out {
+typedef struct rpc_out {
     int rank;
-} rpc_query_out_t;
-
-typedef struct rpc_transfer_in {
-    char* filename;
-    int rank;
-    size_t offset;
-    size_t count;
-} rpc_transfer_in_t;
-
-typedef struct rpc_transfer_out_t {
-    int rank;
-} rpc_transfer_out_t;
+} rpc_out_t;
 
 
-static void* rpc_inout_pack(char* filename, int rank, int num_intervals, size_t *offsets, size_t *counts, size_t *size) {
+static void* rpc_in_pack(char* filename, int rank, int num_intervals, size_t *offsets, size_t *counts, size_t *size) {
     int filename_len = strlen(filename);
 
     size_t total = sizeof(int)*3;           // rank, filename_len, num_intervals
@@ -62,9 +51,9 @@ static void* rpc_inout_pack(char* filename, int rank, int num_intervals, size_t 
     return data;
 }
 
-static void* rpc_inout_unpack(void* data) {
+static rpc_in_t* rpc_in_unpack(void* data) {
     int pos = 0;
-    rpc_post_in_t *in = malloc(sizeof(rpc_post_in_t));
+    rpc_in_t *in = malloc(sizeof(rpc_in_t));
 
     memcpy(&in->rank, data+pos, sizeof(int));
     pos += sizeof(int);
@@ -90,18 +79,16 @@ static void* rpc_inout_unpack(void* data) {
     return in;
 }
 
-static void rpc_inout_free(rpc_post_in_t *in) {
+static void rpc_in_free(rpc_in_t *in) {
     free(in->filename);
     free(in->intervals);
     free(in);
 }
 
 
-// RPC Client
 void tangram_set_server_addr();
-void tangram_rpc_issue_rpc(int op, char* filename, int rank, size_t *offsets, size_t *counts, int len, void* respond);
-
-void tangram_rma_service_start();
+void tangram_issue_rpc_rma(int op, char* filename, int my_rank, int dest_rank, size_t *offsets, size_t *counts, int len, void* respond);
+void tangram_rma_service_start(void* (*serve_rma_data)(void*, size_t*));
 void tangram_rma_service_stop();
 
 #endif
