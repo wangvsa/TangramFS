@@ -51,12 +51,18 @@ void ep_close(ucp_worker_h worker, ucp_ep_h ep)
     void *close_req;
     param.op_attr_mask = UCP_OP_ATTR_FIELD_FLAGS;
     param.flags        = UCP_EP_CLOSE_FLAG_FORCE;
-    close_req          = ucp_ep_close_nbx(ep, &param);
+    //close_req          = ucp_ep_close_nbx(ep, &param);
+    close_req          = ucp_ep_close_nb(ep, UCP_EP_CLOSE_MODE_FLUSH);
+    //request_finalize(worker, close_req);
     if (UCS_PTR_IS_PTR(close_req)) {
         do {
             ucp_worker_progress(worker);
             status = ucp_request_check_status(close_req);
         } while (status == UCS_INPROGRESS);
+        // TODO confirm this
+        // Do not assert astatus == UCS_OK here,
+        // as the endponit maybe closed by the other already
+        // so the status will not be UCS_OK
         ucp_request_free(close_req);
     } else if (UCS_PTR_STATUS(close_req) != UCS_OK) {
         fprintf(stderr, "failed to close ep %p\n", (void*)ep);
