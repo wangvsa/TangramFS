@@ -12,7 +12,7 @@
 #define MB (1024*1024)
 
 static size_t DATA_SIZE = 1*MB;
-static int N = 4;
+static int N = 2;
 
 int size, rank;
 
@@ -28,7 +28,7 @@ void write_phase() {
     tfs_seek(tf, offset, SEEK_SET);
     for(int i = 0; i < N; i++) {
         tfs_write(tf, data, DATA_SIZE);
-        tfs_post(tf, offset, DATA_SIZE);
+        tfs_post(tf, offset+i*DATA_SIZE, DATA_SIZE);
     }
     // Post all writes in one RPC
     //tfs_post_all(tf);
