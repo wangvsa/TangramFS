@@ -65,7 +65,7 @@ void ep_close(ucp_worker_h worker, ucp_ep_h ep)
         // so the status will not be UCS_OK
         ucp_request_free(close_req);
     } else if (UCS_PTR_STATUS(close_req) != UCS_OK) {
-        fprintf(stderr, "failed to close ep %p\n", (void*)ep);
+        fprintf(stderr, "failed to close ep, %s\n", ucs_status_string(UCS_PTR_STATUS(close_req)));
     }
 }
 

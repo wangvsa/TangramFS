@@ -9,8 +9,9 @@
 
 source /g/g90/wang116/.bash_profile
 
+
 export I_MPI_EXTRA_FILESYSTEM=on
-export I_MPI_EXTRA_FILESYSTEM_LIST=lustre
+#export I_MPI_EXTRA_FILESYSTEM_LIST=lustre
 export OMP_NUM_THREADS=1
 
 work_dir=/g/g90/wang116/sources/TangramFS
@@ -19,15 +20,13 @@ export TANGRAM_PERSIST_DIR=$work_dir
 export TANGRAM_BUFFER_DIR=/l/ssd
 
 
+UCX_NET_DEVICES=eno1 ./server.out start &
+sleep 5
+
 for nodes in {2..4..1}
 do
-    tasks=$(( 8*$nodes ))
-
-    mpirun -np 1 ./server.out start ./ &
-    sleep 2
-
-    srun -N $nodes -n $tasks ./main.out ./
-
-    mpirun -np 1 ./server.out stop ./
-    sleep 2
+    tasks=$(( 4*$nodes ))
+    mpiexec -ppn 8 -n $tasks ./main.out
+    #sleep 5
 done
+./server.out stop

@@ -56,6 +56,7 @@ void connect_to_server() {
     status              = ucp_worker_set_am_recv_handler(g_ucp_worker, &am_param);
     assert(status == UCS_OK);
 
+
     // Create EP to connect
     ep_params.field_mask       = UCP_EP_PARAM_FIELD_FLAGS       |
                                  UCP_EP_PARAM_FIELD_SOCK_ADDR   |
@@ -85,7 +86,8 @@ void tangram_ucx_send(int op, void* data, size_t length) {
 
     // Active Message send
     ucp_request_param_t am_params;
-    am_params.op_attr_mask = 0;
+    am_params.op_attr_mask   = UCP_OP_ATTR_FIELD_FLAGS;
+    am_params.flags = UCP_AM_SEND_FLAG_EAGER;
     void *request = ucp_am_send_nbx(g_client_ep, UCX_AM_ID_DATA, &op, sizeof(int), data, length, &am_params);
     request_finalize(g_ucp_worker, request);
 
@@ -101,9 +103,10 @@ void tangram_ucx_sendrecv(int op, void* data, size_t length, void* respond) {
     //printf("Client: start sendrecv, op: %d, size: %lu\n", op, length);
 
     // Active Message send
-    ucp_request_param_t params;
-    params.op_attr_mask   = 0;
-    void *request = ucp_am_send_nbx(g_client_ep, UCX_AM_ID_DATA, &op, sizeof(int), data, length, &params);
+    ucp_request_param_t am_params;
+    am_params.op_attr_mask   = UCP_OP_ATTR_FIELD_FLAGS;
+    am_params.flags = UCP_AM_SEND_FLAG_EAGER;
+    void *request = ucp_am_send_nbx(g_client_ep, UCX_AM_ID_DATA, &op, sizeof(int), data, length, &am_params);
     request_finalize(g_ucp_worker, request);
 
     // Wait the respond from server

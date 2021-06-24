@@ -83,7 +83,8 @@ ucs_status_t server_am_cb_cmd(void *arg, const void *header, size_t header_lengt
 
 void tangram_ucx_server_respond(void* respond, size_t len) {
     ucp_request_param_t am_params;
-    am_params.op_attr_mask = 0;
+    am_params.op_attr_mask   = UCP_OP_ATTR_FIELD_FLAGS;
+    am_params.flags = UCP_AM_SEND_FLAG_EAGER;
     void *request = ucp_am_send_nbx(g_server_ep, UCX_AM_ID_DATA, NULL, 0, respond, len, &am_params);
     request_finalize(g_am_data_worker, request);
 }
@@ -129,8 +130,9 @@ void run_server() {
             printf("Server: connected with client\n");
 
             ucp_ep_params_t ep_params;
-            ep_params.field_mask      = UCP_EP_PARAM_FIELD_ERR_HANDLER |
-                                        UCP_EP_PARAM_FIELD_CONN_REQUEST;
+            ep_params.field_mask      = UCP_EP_PARAM_FIELD_CONN_REQUEST |
+                                        UCP_EP_PARAM_FIELD_ERR_HANDLER  |
+                                        UCP_EP_PARAM_FIELD_ERR_HANDLING_MODE;
             ep_params.conn_request    = current_session->conn_request;
             ep_params.err_mode         = UCP_ERR_HANDLING_MODE_PEER;
             ep_params.err_handler.cb  = err_cb;
