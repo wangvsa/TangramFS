@@ -2,7 +2,7 @@
 #define _TANGRAMFS_UCX_H_
 #include <ucp/api/ucp.h>
 
-#define UCX_SERVER_PORT     13337
+#define UCX_SERVER_PORT         13432
 
 #define UCX_AM_ID_DATA          0
 #define UCX_AM_ID_CMD           1
@@ -22,7 +22,6 @@ void tangram_ucx_server_start();
 
 // Client
 void tangram_ucx_set_iface_addr(const char* iface, const char* ip_addr);
-void tangram_ucx_send(int op, void* data, size_t length);
 void tangram_ucx_sendrecv(int op, void* data, size_t length, void* respond);
 void tangram_ucx_stop_server();
 

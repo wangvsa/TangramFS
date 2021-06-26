@@ -192,7 +192,7 @@ size_t tfs_read(TFS_File* tf, void* buf, size_t size) {
 
     /*TODO RMA read*/
     size_t offset = tf->offset;
-    tangram_issue_rpc_rma(OP_RMA_REQUEST, tf->filename, tfs.mpi_rank, owner_rank, &offset, &size, 1, buf);
+    //tangram_issue_rpc_rma(OP_RMA_REQUEST, tf->filename, tfs.mpi_rank, owner_rank, &offset, &size, 1, buf);
     tf->offset += size;
     return size;
 }

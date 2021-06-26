@@ -1,8 +1,8 @@
 #!/usr/bin/bash
-#SBATCH -N 4
+#SBATCH -N 3
 #SBATCH -n 96
-#SBATCH -t 00:10:00
-#SBATCH -p pbatch
+#SBATCH -t 00:02:00
+#SBATCH -p pdebug
 #SBATCH --job-name="hello"
 
 # note: -e fsync() after write; -w write onley, default is write and read;
@@ -19,14 +19,14 @@ cd $work_dir
 export TANGRAM_PERSIST_DIR=$work_dir
 export TANGRAM_BUFFER_DIR=/l/ssd
 
-
 UCX_NET_DEVICES=eno1 ./server.out start &
-sleep 5
+sleep 2
 
-for nodes in {2..4..1}
+for nodes in {3..3..1}
 do
-    tasks=$(( 4*$nodes ))
-    mpiexec -ppn 8 -n $tasks ./main.out
-    #sleep 5
+    echo "CHEN" $nodes
+    tasks=$((6*$nodes ))
+    srun -n 24 ./main.out
 done
+
 ./server.out stop

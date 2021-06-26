@@ -22,10 +22,11 @@ void tangram_issue_rpc_rma(int op, char* filename, int my_rank, int dest_rank,
     size_t data_size;
     size_t total_recv_size = 0;     // RMA only
     void* user_data = rpc_in_pack(filename, my_rank, num_intervals, offsets, counts, &data_size);
+    int ack;
 
     switch(op) {
         case OP_RPC_POST:
-            tangram_ucx_send(op, user_data, data_size);
+            tangram_ucx_sendrecv(op, user_data, data_size, &ack);
             break;
         case OP_RPC_QUERY:
             tangram_ucx_sendrecv(op, user_data, data_size, respond);

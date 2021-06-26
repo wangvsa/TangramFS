@@ -19,7 +19,7 @@ void init_context(ucp_context_h *ucp_context) {
 
     memset(&ucp_params, 0, sizeof(ucp_params));
     ucp_params.field_mask = UCP_PARAM_FIELD_FEATURES;
-    ucp_params.features = UCP_FEATURE_AM | UCP_FEATURE_RMA;
+    ucp_params.features = UCP_FEATURE_AM | UCP_FEATURE_RMA | UCP_FEATURE_TAG;
     status = ucp_init(&ucp_params, NULL, ucp_context);
     assert(status == UCS_OK);
 }
@@ -40,8 +40,8 @@ void init_worker(ucp_context_h ucp_context, ucp_worker_h *ucp_worker, bool singl
 }
 
 void err_cb(void *arg, ucp_ep_h ep, ucs_status_t status) {
-    printf("error handling callback was invoked with status %d (%s)\n",
-           status, ucs_status_string(status));
+    char* message = (char*) arg;
+    printf("%s, at err_cb(%d): %s\n", message, status, ucs_status_string(status));
 }
 
 void ep_close(ucp_worker_h worker, ucp_ep_h ep)

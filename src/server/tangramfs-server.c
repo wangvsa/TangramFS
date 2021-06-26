@@ -10,7 +10,6 @@
 #include "tangramfs-rpc.h"
 #include "tangramfs-utils.h"
 
-
 /**
  * Return a respond, can be NULL
  */
@@ -24,6 +23,11 @@ void* rpc_handler(int op, void* data, size_t length, size_t *respond_len) {
             tangram_ms_handle_post(in->rank, in->filename, in->intervals[i].offset, in->intervals[i].count);
         printf("post in->rank: %d, filename: %s, offset:%lu, count: %lu\n", in->rank, in->filename, in->intervals[0].offset/1024/1024, in->intervals[0].count/1024/1024);
         rpc_in_free(in);
+        int *ack = malloc(sizeof(int));
+        *ack = 111;
+        respond = ack;
+        *respond_len = sizeof(int);
+        return respond;
     } else if(op == OP_RPC_QUERY) {
         rpc_in_t* in = rpc_in_unpack(data);
         *respond_len = sizeof(rpc_out_t);
@@ -62,7 +66,6 @@ int main(int argc, char* argv[]) {
         char iface[64] = {0};
         char ip_addr[1025] = {0};
         tangram_read_server_addr("./", iface, ip_addr);
-        printf("Server iface: %s, IP address: %s\n", iface, ip_addr);
         tangram_ucx_set_iface_addr(iface, ip_addr);
         tangram_ucx_stop_server();
     }
