@@ -27,17 +27,12 @@ typedef struct my_session {
     void* respond;
     size_t respond_len;
     volatile bool complete;
-    volatile bool respond_complete;
-    struct my_session *next;
 
     ucp_worker_h  am_data_worker;          // handle active messages
     ucp_ep_h      server_ep;               // connected ep with client
     pthread_t     thread;
 } my_session_t;
 
-static my_session_t *g_sessions;
-
-pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
 
 
 void* (*user_am_data_handler)(int op, void* data, size_t length, size_t *respond_len);
@@ -75,60 +70,22 @@ ucs_status_t server_am_cb_cmd(void *arg, const void *header, size_t header_lengt
     return UCS_OK;
 }
 
-void server_am_send_cb(void *request, ucs_status_t status, void *user_data) {
-    my_session_t* session = (my_session_t*) user_data;
-    session->respond_complete = true;
-}
-
-void server_tag_send_cb(void *request, ucs_status_t status, void *user_data) {
-    my_session_t* session = (my_session_t*) user_data;
-    session->respond_complete = true;
-}
 
 void tangram_ucx_server_respond(my_session_t *session) {
-    /*
     ucp_request_param_t am_params;
-    am_params.op_attr_mask = UCP_OP_ATTR_FIELD_FLAGS    |
-                             UCP_OP_ATTR_FIELD_CALLBACK |
-                             UCP_OP_ATTR_FIELD_USER_DATA;
+    am_params.op_attr_mask = UCP_OP_ATTR_FIELD_FLAGS;
     am_params.flags        = UCP_AM_SEND_FLAG_EAGER;
-    am_params.cb.send      = server_am_send_cb;
-    am_params.user_data    = session;
-    session->respond_complete = false;
+
     void *request = ucp_am_send_nbx(session->server_ep, UCX_AM_ID_DATA, NULL, 0, session->respond, session->respond_len, &am_params);
     request_finalize(session->am_data_worker, request);
-    */
-
-    ucp_request_param_t tag_param;
-    tag_param.op_attr_mask = UCP_OP_ATTR_FIELD_CALLBACK | UCP_OP_ATTR_FIELD_USER_DATA;
-    tag_param.user_data    = session;
-    tag_param.cb.send      = server_tag_send_cb;
-    void* request = ucp_tag_send_nbx(session->server_ep, session->respond, session->respond_len, TTAG, &tag_param);
-    request_finalize(session->am_data_worker, request);
-
-    while(!session->respond_complete) {
-        ucp_worker_progress(session->am_data_worker);
-    }
 }
 
 
 void server_err_cb(void *arg, ucp_ep_h ep, ucs_status_t status) {
     my_session_t *session = (my_session_t*) arg;
-    printf("server_err_cb: complete: %d, respond complete: %d, %s\n",
-                    session->complete, session->respond_complete, ucs_status_string(status));
+    printf("server_err_cb: complete: %d, %s\n",
+                session->complete, ucs_status_string(status));
     session->complete = true;
-    session->respond_complete = true;
-}
-
-static void server_tag_recv_cb(void *request, ucs_status_t status, const ucp_tag_recv_info_t *info, void *user_data)
-{
-    my_session_t *session = (my_session_t*) user_data;
-    session->complete = true;
-
-    int *ack = malloc(sizeof(int));
-    *ack = 111;
-    session->respond = ack;
-    session->respond_len = sizeof(int);
 }
 
 
@@ -138,7 +95,6 @@ void* session_handler(void* arg) {
     ucs_status_t status;
     init_worker(g_ucp_context, &session->am_data_worker, true);
 
-    /*
     // Set up Active Message data handler
     ucp_am_handler_param_t am_param;
     am_param.field_mask = UCP_AM_HANDLER_PARAM_FIELD_ID |
@@ -157,7 +113,6 @@ void* session_handler(void* arg) {
     am_param2.cb         = server_am_cb_cmd;
     status               = ucp_worker_set_am_recv_handler(session->am_data_worker, &am_param2);
     assert(status == UCS_OK);
-    */
 
     // Create EP for data communication
     ucp_ep_params_t ep_params;
@@ -171,29 +126,18 @@ void* session_handler(void* arg) {
     status = ucp_ep_create(session->am_data_worker, &ep_params, &session->server_ep);
     assert(status == UCS_OK);
 
-    int msg;
-    ucp_request_param_t tag_param;
-    tag_param.op_attr_mask = UCP_OP_ATTR_FIELD_CALLBACK |
-                             UCP_OP_ATTR_FIELD_USER_DATA;
-    tag_param.user_data    = session;
-    tag_param.cb.recv      = server_tag_recv_cb;
-    void* request = ucp_tag_recv_nbx(session->am_data_worker, &msg, sizeof(int), TAG, 0, &tag_param);
-    request_finalize(session->am_data_worker, request);
-
     // Wait for receive one AM message from client
     // and end this session
-    while(g_server_running && !session->complete) {
+    while(!session->complete) {
         ucp_worker_progress(session->am_data_worker);
     }
 
-    if(msg == 888)
-        g_server_running = false;
 
-    if(g_server_running)
+    if(session->respond) {
         tangram_ucx_server_respond(session);
-    free(session->respond);
+        free(session->respond);
+    }
 
-    sleep(2);
     ep_close(session->am_data_worker, session->server_ep);
     ucp_worker_destroy(session->am_data_worker);
     free(session);
@@ -208,7 +152,6 @@ static void server_conn_cb(ucp_conn_request_h conn_request, void *arg)
     session->respond_len = 0;
 
     pthread_create(&session->thread, NULL, session_handler, session);
-    //LL_PREPEND(g_sessions, session);
 }
 
 void run_server() {

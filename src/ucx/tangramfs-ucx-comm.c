@@ -51,8 +51,8 @@ void ep_close(ucp_worker_h worker, ucp_ep_h ep)
     void *close_req;
     param.op_attr_mask = UCP_OP_ATTR_FIELD_FLAGS;
     param.flags        = UCP_EP_CLOSE_FLAG_FORCE;
-    //close_req          = ucp_ep_close_nbx(ep, &param);
-    close_req          = ucp_ep_close_nb(ep, UCP_EP_CLOSE_MODE_FLUSH);
+    close_req          = ucp_ep_close_nbx(ep, &param);
+    //close_req          = ucp_ep_close_nb(ep, UCP_EP_CLOSE_MODE_FLUSH);
     //request_finalize(worker, close_req);
     if (UCS_PTR_IS_PTR(close_req)) {
         do {

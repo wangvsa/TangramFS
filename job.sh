@@ -19,14 +19,16 @@ cd $work_dir
 export TANGRAM_PERSIST_DIR=$work_dir
 export TANGRAM_BUFFER_DIR=/l/ssd
 
-UCX_NET_DEVICES=eno1 ./server.out start &
+export UCX_NET_DEVICES=hsi0
+
+./server.out start &
 sleep 2
 
 for nodes in {3..3..1}
 do
     echo "CHEN" $nodes
-    tasks=$((6*$nodes ))
-    srun -n 24 ./main.out
+    #tasks=$((6*$nodes ))
+    mpirun -n 80 -env UCX_NET_DEVICES=hsi0 ./main.out
 done
 
 ./server.out stop
