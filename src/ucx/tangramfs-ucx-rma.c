@@ -29,11 +29,6 @@ pthread_cond_t  cond  = PTHREAD_COND_INITIALIZER;
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
 
-typedef struct ptrs_to_free {
-    ucp_rkey_h* rkey_p;
-    void* data;
-} ptrs_to_free_t;
-
 
 // Main thread wait for a request to finsih
 // Since we have a dedicate pthread doing progress
@@ -45,7 +40,7 @@ void wait_request(void* request) {
 
     if(UCS_PTR_IS_ERR(request)) {
         status = UCS_PTR_STATUS(request);
-        fprintf(stderr, "Erro at wait_request(): %s\n", ucs_status_string(status));
+        fprintf(stderr, "Error at wait_request(): %s\n", ucs_status_string(status));
         return;
     }
 
@@ -76,7 +71,7 @@ void connect_ep(int rank, ucp_ep_h *ep) {
     assert(status == UCS_OK);
 }
 
-void* pack_request_arg(int dest_rank, uint64_t my_addr, void* rkey_buf, size_t rkey_buf_size,
+void* pack_request_arg(uint64_t my_addr, void* rkey_buf, size_t rkey_buf_size,
                                 void* user_arg, size_t user_arg_size, size_t *total_size) {
     int my_rank;
     MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
@@ -85,7 +80,7 @@ void* pack_request_arg(int dest_rank, uint64_t my_addr, void* rkey_buf, size_t r
     int pos = 0;
     void* send_buf = malloc(*total_size);
 
-    memcpy(send_buf+pos, &dest_rank, sizeof(int));
+    memcpy(send_buf+pos, &my_rank, sizeof(int));
     pos += sizeof(int);
 
     memcpy(send_buf+pos, &my_addr, sizeof(uint64_t));
@@ -122,7 +117,7 @@ void* pack_request_arg(int dest_rank, uint64_t my_addr, void* rkey_buf, size_t r
  */
 void tangram_ucx_rma_request(int dest_rank, void* user_arg, size_t user_arg_size, void* recv_buf, size_t recv_size) {
     bool aligned = false;
-    /*
+    /* TODO: this check does not guarantee the addr works
     if(recv_buf && ((uint64_t)recv_buf) % 4096 == 0) {
         aligned = true;
         printf("aligned!\n");
@@ -164,7 +159,7 @@ void tangram_ucx_rma_request(int dest_rank, void* user_arg, size_t user_arg_size
     assert(status == UCS_OK && rkey_buf);
 
     size_t total_buf_size;
-    void* sendbuf = pack_request_arg(dest_rank, mem_addr, rkey_buf, rkey_buf_size, user_arg, user_arg_size, &total_buf_size);
+    void* sendbuf = pack_request_arg(mem_addr, rkey_buf, rkey_buf_size, user_arg, user_arg_size, &total_buf_size);
 
     // send it to the other side
     ucp_request_param_t am_params;
@@ -192,15 +187,6 @@ void tangram_ucx_rma_request(int dest_rank, void* user_arg, size_t user_arg_size
     wait_request(request);
 }
 
-void rma_ack_sent_cb(void *request, ucs_status_t status, void *user_data) {
-    ptrs_to_free_t *ptrs = (ptrs_to_free_t*) user_data;
-    ucp_request_free(request);
-    ucp_rkey_destroy(*(ptrs->rkey_p));
-    free(ptrs->rkey_p);
-    free(ptrs->data);
-    free(ptrs);
-}
-
 
 void rma_respond(void* data) {
 
@@ -210,7 +196,7 @@ void rma_respond(void* data) {
     void *rkey_buf, *user_arg;
 
     int pos = 0;
-    memcpy(&dest_rank, data+0, sizeof(int));
+    memcpy(&dest_rank, data+pos, sizeof(int));
     pos += sizeof(int);
 
     memcpy(&remote_addr, data+pos, sizeof(uint64_t));
@@ -247,26 +233,18 @@ void rma_respond(void* data) {
     ucp_worker_fence(g_rma_worker);
 
     // Send ACK
-    ptrs_to_free_t *ptrs = malloc(sizeof(ptrs_to_free_t));
-    ptrs->rkey_p = rkey_p;
-    ptrs->data = rma_data;
     ucp_request_param_t am_param;
-    am_param.op_attr_mask = UCP_OP_ATTR_FIELD_CALLBACK |
-                            UCP_OP_ATTR_FIELD_REQUEST  |
-                            UCP_OP_ATTR_FIELD_USER_DATA;
-    am_param.cb.send      = rma_ack_sent_cb;
-    am_param.user_data    = ptrs;
+    am_param.op_attr_mask = UCP_OP_ATTR_FIELD_REQUEST;
     int op = OP_RMA_RESPOND;
-    ucs_status_ptr_t st = ucp_am_send_nbx(ep, UCX_AM_ID_RMA, &op, sizeof(int), NULL, 0, &am_param);
+    void* request = ucp_am_send_nbx(ep, UCX_AM_ID_RMA, &op, sizeof(int), NULL, 0, &am_param);
+    wait_request(request);
 
-    // if the AM send operation completes in-place (immediately)
-    // the callback will not be invoked, so we have to release resources now.
-    if(st == UCS_OK) {
-        ucp_rkey_destroy(*rkey_p);
-        free(rkey_p);
-        free(rma_data);
-        free(ptrs);
-    }
+    ucp_rkey_destroy(*rkey_p);
+    free(rkey_p);
+    free(rma_data);
+
+    request = ucp_ep_close_nb(ep, UCP_EP_CLOSE_MODE_FLUSH);
+    wait_request(request);
 }
 
 // Handler for active messages
