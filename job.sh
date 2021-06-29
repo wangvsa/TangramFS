@@ -1,8 +1,8 @@
 #!/usr/bin/bash
-#SBATCH -N 3
-#SBATCH -n 96
+#SBATCH -N 8
+#SBATCH -n 64
 #SBATCH -t 00:02:00
-#SBATCH -p pdebug
+#SBATCH -p pbatch
 #SBATCH --job-name="hello"
 
 # note: -e fsync() after write; -w write onley, default is write and read;
@@ -24,11 +24,8 @@ export UCX_NET_DEVICES=hsi0
 ./server.out start &
 sleep 2
 
-for nodes in {3..3..1}
-do
-    echo "CHEN" $nodes
-    #tasks=$((6*$nodes ))
-    mpirun -n 80 -env UCX_NET_DEVICES=hsi0 ./main.out
-done
+echo "Run 1"
+mpirun -n 64 -env UCX_NET_DEVICES=hsi0 ./main.out
+
 
 ./server.out stop

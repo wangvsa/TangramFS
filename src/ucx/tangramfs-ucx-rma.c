@@ -23,16 +23,25 @@ static volatile bool g_ack = false;
 // send though RMA
 void* (*g_serve_rma_data)(void*, size_t *size);
 
-
 static pthread_t g_progress_thread;
-pthread_cond_t  cond  = PTHREAD_COND_INITIALIZER;
-pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
 
+typedef struct ptrs_to_free {
+    int op;
+    ucp_rkey_h *rkey_p;
+    void* rma_data;
+} ptrs_to_free_t;
 
-// Main thread wait for a request to finsih
-// Since we have a dedicate pthread doing progress
-// Here we only need to check the request status
+
+/* Main thread wait for a request to finsih
+ * Since we have a dedicate pthread doing progress
+ * Here we only need to check the request status
+ *
+ * Note!!
+ * the dedicate pthread can not call this function as
+ * it will block forever since the pthread is also
+ * responsible for progressing.
+ */
 void wait_request(void* request) {
     ucs_status_t status;
     if(request == NULL)
@@ -40,7 +49,7 @@ void wait_request(void* request) {
 
     if(UCS_PTR_IS_ERR(request)) {
         status = UCS_PTR_STATUS(request);
-        fprintf(stderr, "Error at wait_request(): %s\n", ucs_status_string(status));
+        printf("Error at wait_request(): %s\n", ucs_status_string(status));
         return;
     }
 
@@ -161,20 +170,19 @@ void tangram_ucx_rma_request(int dest_rank, void* user_arg, size_t user_arg_size
     size_t total_buf_size;
     void* sendbuf = pack_request_arg(mem_addr, rkey_buf, rkey_buf_size, user_arg, user_arg_size, &total_buf_size);
 
+
     // send it to the other side
-    ucp_request_param_t am_params;
-    am_params.op_attr_mask = 0;
+    ucp_request_param_t am_param;
+    am_param.op_attr_mask = UCP_OP_ATTR_FIELD_FLAGS;
+    am_param.flags        = UCP_AM_SEND_FLAG_EAGER;
     int op = OP_RMA_REQUEST;
-    void *request = ucp_am_send_nbx(ep, UCX_AM_ID_RMA, &op, sizeof(int), sendbuf, total_buf_size, &am_params);
+    void *request = ucp_am_send_nbx(ep, UCX_AM_ID_RMA, &op, sizeof(int), sendbuf, total_buf_size, &am_param);
     wait_request(request);
     free(sendbuf);
 
-    // wait for respond
-    pthread_mutex_lock(&mutex);
-    while(!g_ack)
-        pthread_cond_wait(&cond, &mutex);
-    g_ack = false;
-    pthread_mutex_unlock(&mutex);
+    // Wait for the respond
+    while(g_ack == false) {
+    }
 
     // Now we should have the data ready
     if(!aligned) {
@@ -187,7 +195,25 @@ void tangram_ucx_rma_request(int dest_rank, void* user_arg, size_t user_arg_size
     wait_request(request);
 }
 
+void pthread_sent_respond_cb(void *request, ucs_status_t status, void *user_data) {
+    ptrs_to_free_t* ptrs = (ptrs_to_free_t*) user_data;
+    ucp_rkey_destroy(*(ptrs->rkey_p));
+    free(ptrs->rkey_p);
+    free(ptrs->rma_data);
+    free(ptrs);
+    ucp_request_free(request);
+}
 
+
+/**
+ * Careful here, this function is invoked upon the
+ * RMA request, which means this function is invoked
+ * by the pthread ucp_worker_progress().
+ *
+ * So,
+ * - We can not call ucp_worker_progress() inside this function
+ * - We can not call wait_request() while will loop forever.
+ */
 void rma_respond(void* data) {
 
     int dest_rank;
@@ -233,37 +259,48 @@ void rma_respond(void* data) {
     ucp_worker_fence(g_rma_worker);
 
     // Send ACK
+    ptrs_to_free_t *ptrs = malloc(sizeof(ptrs_to_free_t));
+    ptrs->rkey_p = rkey_p;
+    ptrs->rma_data = rma_data;
+
     ucp_request_param_t am_param;
-    am_param.op_attr_mask = UCP_OP_ATTR_FIELD_REQUEST;
-    int op = OP_RMA_RESPOND;
-    void* request = ucp_am_send_nbx(ep, UCX_AM_ID_RMA, &op, sizeof(int), NULL, 0, &am_param);
-    wait_request(request);
+    am_param.op_attr_mask = UCP_OP_ATTR_FIELD_FLAGS    |
+                            UCP_OP_ATTR_FIELD_CALLBACK |
+                            UCP_OP_ATTR_FIELD_USER_DATA;
+    am_param.flags        = UCP_AM_SEND_FLAG_EAGER;
+    am_param.cb.send      = pthread_sent_respond_cb;
+    am_param.user_data    = ptrs;
+    ptrs->op = OP_RMA_RESPOND;      // cant use a stack variable as the send call maybe delayed
+    void *request = ucp_am_send_nbx(ep, UCX_AM_ID_RMA, &ptrs->op, sizeof(int), NULL, 0, &am_param);
+    // complete in place, the callback will not be called.
+    if(request == NULL) {
+        ucp_rkey_destroy(*rkey_p);
+        free(rkey_p);
+        free(rma_data);
+        free(ptrs);
+    }
 
-    ucp_rkey_destroy(*rkey_p);
-    free(rkey_p);
-    free(rma_data);
-
-    request = ucp_ep_close_nb(ep, UCP_EP_CLOSE_MODE_FLUSH);
-    wait_request(request);
+    // TODO close ep?
 }
 
 // Handler for active messages
 static ucs_status_t am_handler(void *arg, const void *header, size_t header_length,
                               void *data, size_t length,
                               const ucp_am_recv_param_t *param) {
+
     int op = *((int*)header);
+
     // 1. Received an RMA requeset
     // Need to send data thorugh RMA, and also the respond through AM.
     if(op == OP_RMA_REQUEST) {
         rma_respond(data);
+    }else {
+        op = OP_RMA_RESPOND;
     }
 
     // 2. Received the respond for my previous RMA request
     if(op == OP_RMA_RESPOND) {
-        pthread_mutex_lock(&mutex);
         g_ack = true;
-        pthread_cond_signal(&cond);
-        pthread_mutex_unlock(&mutex);
     }
 
     return UCS_OK;
@@ -292,6 +329,7 @@ void* progress_loop(void* arg) {
 }
 
 void tangram_ucx_rma_service_start(void* (serve_rma_data)(void*, size_t*)) {
+
     g_serve_rma_data = serve_rma_data;
 
     init_context(&g_ucp_context);

@@ -6,8 +6,10 @@
 #include <unistd.h>
 #include <stdbool.h>
 #include <string.h>
+#include <mpi.h>
 #include "tangramfs-rpc.h"
 
+static double post_time;
 
 /*
  * Perform RPC or RMA.
@@ -23,6 +25,8 @@ void tangram_issue_rpc_rma(int op, char* filename, int my_rank, int dest_rank,
     size_t total_recv_size = 0;     // RMA only
     void* user_data = rpc_in_pack(filename, my_rank, num_intervals, offsets, counts, &data_size);
     int ack;
+
+    double t1 = MPI_Wtime();
 
     switch(op) {
         case OP_RPC_POST:
@@ -41,6 +45,9 @@ void tangram_issue_rpc_rma(int op, char* filename, int my_rank, int dest_rank,
     }
 
     free(user_data);
+    double t2 = MPI_Wtime();
+
+    post_time += (t2-t1);
 }
 
 void tangram_set_iface_addr(const char* iface, const char* ip_addr) {
@@ -53,5 +60,6 @@ void tangram_rma_service_start(void* (*serve_rma_data)(void*, size_t*)) {
 
 void tangram_rma_service_stop() {
     tangram_ucx_rma_service_stop();
+    //printf("Total post time: %.3f\n", post_time);
 }
 

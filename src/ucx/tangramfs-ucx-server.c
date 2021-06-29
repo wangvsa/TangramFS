@@ -56,7 +56,7 @@ ucs_status_t server_am_cb_data(void *arg, const void *header, size_t header_leng
 
     session->complete = true;
     session->respond = (*user_am_data_handler)(op, data, length, &session->respond_len);
-    printf("Server: op: %d, send respond: %d, len: %lu\n", op, (session->respond!=NULL), session->respond_len);
+    //printf("Server: op: %d, send respond: %d, len: %lu\n", op, (session->respond!=NULL), session->respond_len);
 
     // return UCS_OK, data will not be persisted. i.e., freed by UCP
     return UCS_OK;

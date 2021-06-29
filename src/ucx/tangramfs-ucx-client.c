@@ -1,4 +1,5 @@
 #define _POSIX_C_SOURCE 200112L
+#include <unistd.h>
 #include <stdlib.h>
 #include <string.h>
 #include <alloca.h>
@@ -7,7 +8,7 @@
 #include "tangramfs-ucx.h"
 #include "tangramfs-ucx-comm.h"
 #define TAG                    0xCAFE
-#define TTAG                    0xCAFF
+#define TTAG                   0xCAFF
 
 static ucp_context_h g_ucp_context;
 static char g_server_addr[128];
@@ -95,7 +96,6 @@ void init_and_connect(my_session_t* session) {
     connect_to_server(session);
 }
 
-
 // Send and wait for the respond from server
 void tangram_ucx_sendrecv(int op, void* data, size_t length, void* respond) {
     my_session_t session;
@@ -106,7 +106,7 @@ void tangram_ucx_sendrecv(int op, void* data, size_t length, void* respond) {
 
     // Active Message send
     ucp_request_param_t am_params;
-    am_params.op_attr_mask   = UCP_OP_ATTR_FIELD_FLAGS;
+    am_params.op_attr_mask = UCP_OP_ATTR_FIELD_FLAGS;
     am_params.flags = UCP_AM_SEND_FLAG_EAGER;
     void *request = ucp_am_send_nbx(session.client_ep, UCX_AM_ID_DATA, &op, sizeof(int), data, length, &am_params);
     request_finalize(session.ucp_worker, request);
@@ -116,7 +116,6 @@ void tangram_ucx_sendrecv(int op, void* data, size_t length, void* respond) {
     while(!session.received_respond) {
         ucp_worker_progress(session.ucp_worker);
     }
-
 
     ep_close(session.ucp_worker, session.client_ep);
     ucp_worker_destroy(session.ucp_worker);
@@ -133,6 +132,7 @@ void tangram_ucx_stop_server() {
     void *request = ucp_am_send_nbx(session.client_ep, UCX_AM_ID_CMD, NULL, 0, NULL, 0, &am_params);
     request_finalize(session.ucp_worker, request);
 
+    sleep(1);
     ep_close(session.ucp_worker, session.client_ep);
     ucp_worker_destroy(session.ucp_worker);
     ucp_cleanup(g_ucp_context);
