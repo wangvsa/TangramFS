@@ -132,6 +132,8 @@ void tangram_ucx_rma_request(int dest_rank, void* user_arg, size_t user_arg_size
         printf("aligned!\n");
     }
     */
+    int rank;
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
     ucp_ep_h ep;
     connect_ep(dest_rank, &ep);
@@ -170,8 +172,8 @@ void tangram_ucx_rma_request(int dest_rank, void* user_arg, size_t user_arg_size
     size_t total_buf_size;
     void* sendbuf = pack_request_arg(mem_addr, rkey_buf, rkey_buf_size, user_arg, user_arg_size, &total_buf_size);
 
-
     // send it to the other side
+    g_ack = false;
     ucp_request_param_t am_param;
     am_param.op_attr_mask = UCP_OP_ATTR_FIELD_FLAGS;
     am_param.flags        = UCP_AM_SEND_FLAG_EAGER;
@@ -288,14 +290,14 @@ static ucs_status_t am_handler(void *arg, const void *header, size_t header_leng
                               void *data, size_t length,
                               const ucp_am_recv_param_t *param) {
 
+    int rank;
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     int op = *((int*)header);
 
     // 1. Received an RMA requeset
     // Need to send data thorugh RMA, and also the respond through AM.
     if(op == OP_RMA_REQUEST) {
         rma_respond(data);
-    }else {
-        op = OP_RMA_RESPOND;
     }
 
     // 2. Received the respond for my previous RMA request
@@ -360,7 +362,7 @@ void tangram_ucx_rma_service_stop() {
 
     int mpi_size, mpi_rank;
     MPI_Comm_size(MPI_COMM_WORLD, &mpi_size);
-    MPI_Comm_size(MPI_COMM_WORLD, &mpi_rank);
+    MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
     MPI_Barrier(MPI_COMM_WORLD);
 
     // free addrs

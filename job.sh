@@ -1,7 +1,7 @@
 #!/usr/bin/bash
-#SBATCH -N 8
-#SBATCH -n 64
-#SBATCH -t 00:02:00
+#SBATCH -N 32
+#SBATCH -n 256
+#SBATCH -t 00:05:00
 #SBATCH -p pbatch
 #SBATCH --job-name="hello"
 
@@ -24,8 +24,9 @@ export UCX_NET_DEVICES=hsi0
 ./server.out start &
 sleep 2
 
-echo "Run 1"
-mpirun -n 64 -env UCX_NET_DEVICES=hsi0 ./main.out
-
+nodes=32
+procs=$(( 8 * $nodes))
+echo "nodes:" $nodes "procs:" $procs
+mpirun -np $procs -env UCX_NET_DEVICES=hsi0 ./main.out
 
 ./server.out stop
