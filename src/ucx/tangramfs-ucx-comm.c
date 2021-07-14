@@ -19,7 +19,7 @@ void init_context(ucp_context_h *ucp_context) {
 
     memset(&ucp_params, 0, sizeof(ucp_params));
     ucp_params.field_mask = UCP_PARAM_FIELD_FEATURES;
-    ucp_params.features = UCP_FEATURE_AM | UCP_FEATURE_RMA | UCP_FEATURE_TAG;
+    ucp_params.features = UCP_FEATURE_AM | UCP_FEATURE_RMA;
     status = ucp_init(&ucp_params, NULL, ucp_context);
     assert(status == UCS_OK);
 }
@@ -42,6 +42,15 @@ void init_worker(ucp_context_h ucp_context, ucp_worker_h *ucp_worker, bool singl
 void err_cb(void *arg, ucp_ep_h ep, ucs_status_t status) {
     char* message = (char*) arg;
     printf("%s, at err_cb(%d): %s\n", message, status, ucs_status_string(status));
+}
+
+
+void ep_connect(ucp_address_t* addr, ucp_worker_h worker, ucp_ep_h *ep) {
+    ucp_ep_params_t ep_params;
+    ep_params.field_mask = UCP_EP_PARAM_FIELD_REMOTE_ADDRESS;
+    ep_params.address = addr;
+    ucs_status_t status = ucp_ep_create(worker, &ep_params, ep);
+    assert(status == UCS_OK);
 }
 
 void ep_close(ucp_worker_h worker, ucp_ep_h ep)

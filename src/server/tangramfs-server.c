@@ -8,12 +8,11 @@
 #include "tangramfs-metadata.h"
 #include "tangramfs-ucx.h"
 #include "tangramfs-rpc.h"
-#include "tangramfs-utils.h"
 
 /**
  * Return a respond, can be NULL
  */
-void* rpc_handler(int op, void* data, size_t length, size_t *respond_len) {
+void* rpc_handler(int op, void* data, size_t *respond_len) {
     *respond_len = 0;
     void *respond = NULL;
 
@@ -48,26 +47,15 @@ int main(int argc, char* argv[]) {
 
     if( strcmp(argv[1], "start") == 0 ) {
 
-        char* iface = NULL;
-        iface  = getenv("UCX_NET_DEVICES");
-        if(iface == NULL) {
-            printf("[TangramFS] Please use UCX_NET_DEVICES environment variable to specify network interace.\n");
-            return 0;
-        }
-
-        char ip_addr[1025] = {0};
-        tangram_ucx_server_init(iface, ip_addr);
-        printf("Server IP address: %s\n", ip_addr);
-
-        tangram_write_server_addr("./", iface, ip_addr);
+        tangram_ucx_server_init("./");
+        printf("Server started\n");
         tangram_ucx_server_register_rpc(rpc_handler);
         tangram_ucx_server_start();
+
     } else if( strcmp(argv[1], "stop") == 0 ) {
-        char iface[64] = {0};
-        char ip_addr[1025] = {0};
-        tangram_read_server_addr("./", iface, ip_addr);
-        tangram_ucx_set_iface_addr(iface, ip_addr);
+        tangram_rpc_service_start("./");
         tangram_ucx_stop_server();
+        tangram_rpc_service_stop();
     }
 
     return 0;

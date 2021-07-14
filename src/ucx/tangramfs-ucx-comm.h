@@ -6,6 +6,7 @@
 void init_context(ucp_context_h *ucp_context);
 void init_worker(ucp_context_h ucp_context, ucp_worker_h *ucp_worker, bool single_thread);
 void err_cb(void *arg, ucp_ep_h ep, ucs_status_t status);
+void ep_connect(ucp_address_t* addr, ucp_worker_h worker, ucp_ep_h *ep);
 void ep_close(ucp_worker_h worker, ucp_ep_h ep);
 
 void request_finalize(ucp_worker_h worker, void *request);

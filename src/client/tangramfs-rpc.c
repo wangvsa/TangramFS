@@ -9,7 +9,7 @@
 #include <mpi.h>
 #include "tangramfs-rpc.h"
 
-static double post_time;
+static double rma_time;
 
 /*
  * Perform RPC or RMA.
@@ -47,11 +47,15 @@ void tangram_issue_rpc_rma(int op, char* filename, int my_rank, int dest_rank,
     free(user_data);
     double t2 = MPI_Wtime();
 
-    post_time += (t2-t1);
+    rma_time += (t2-t1);
 }
 
-void tangram_set_iface_addr(const char* iface, const char* ip_addr) {
-    tangram_ucx_set_iface_addr(iface, ip_addr);
+void tangram_rpc_service_start(const char* persist_dir){
+    tangram_ucx_rpc_service_start(persist_dir);
+}
+
+void tangram_rpc_service_stop() {
+    tangram_ucx_rpc_service_stop();
 }
 
 void tangram_rma_service_start(void* (*serve_rma_data)(void*, size_t*)) {
@@ -60,6 +64,6 @@ void tangram_rma_service_start(void* (*serve_rma_data)(void*, size_t*)) {
 
 void tangram_rma_service_stop() {
     tangram_ucx_rma_service_stop();
-    //printf("Total post time: %.3f\n", post_time);
+    //printf("Total rma time: %.3f\n", rma_time);
 }
 

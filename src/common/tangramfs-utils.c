@@ -16,22 +16,24 @@ void tangram_free(void* ptr, size_t size) {
     free(ptr);
 }
 
-void tangram_write_server_addr(const char* persist_dir, const char* iface, const char* ip_addr) {
+void tangram_write_server_addr(const char* persist_dir, void* addr, size_t addr_len) {
     char cfg_path[512] = {0};
     sprintf(cfg_path, "%s/tfs.cfg", persist_dir);
 
-    FILE* f = fopen(cfg_path, "w");
-    fprintf(f, "%s\n", iface);
-    fprintf(f, "%s\n", ip_addr);
+    FILE* f = fopen(cfg_path, "wb");
+    fwrite(&addr_len, sizeof(addr_len), 1, f);
+    fwrite(addr, 1, addr_len, f);
     fclose(f);
 }
 
-void tangram_read_server_addr(const char* persist_dir, char* iface, char* ip_addr) {
+void tangram_read_server_addr(const char* persist_dir, void** addr, size_t* addr_len) {
     char cfg_path[512] = {0};
     sprintf(cfg_path, "%s/tfs.cfg", persist_dir);
 
     FILE* f = fopen(cfg_path, "r");
-    fscanf(f, "%s\n%s\n", iface, ip_addr);
+    fread(addr_len, sizeof(size_t), 1, f);
+    *addr = malloc(*addr_len);
+    fread(addr, 1, *addr_len, f);
     fclose(f);
 }
 

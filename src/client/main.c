@@ -11,10 +11,11 @@
 
 #define MB (1024*1024)
 
-static size_t DATA_SIZE = 256*MB;
+static size_t DATA_SIZE = 128*MB;
 static int N = 1;
 
 int size, rank;
+double write_bandwidth, read_bandwidth;
 
 void write_phase() {
     TFS_File* tf = tfs_open("./test.txt");
@@ -22,6 +23,7 @@ void write_phase() {
     char* data = malloc(sizeof(char)*DATA_SIZE);
     size_t offset = rank*DATA_SIZE*N;
 
+    MPI_Barrier(MPI_COMM_WORLD);
     double tstart = MPI_Wtime();
 
     tfs_seek(tf, offset, SEEK_SET);
@@ -31,22 +33,18 @@ void write_phase() {
     }
     // Post all writes in one RPC
     //tfs_post_all(tf);
+    MPI_Barrier(MPI_COMM_WORLD);
     double tend = MPI_Wtime();
 
-    double min_tstart, max_tend;
-    MPI_Reduce(&tstart, &min_tstart, 1, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
-    MPI_Reduce(&tend, &max_tend, 1, MPI_DOUBLE, MPI_MIN, 0, MPI_COMM_WORLD);
+    write_bandwidth = DATA_SIZE/MB*size*N/(tend-tstart);
 
-    if(rank == 0) {
-        printf("Total write size: %lu MB, elapsed time: %fs\n", DATA_SIZE/MB*N*size, (max_tend-min_tstart));
-        printf("Bandwidth: %.2f MB/s\n", DATA_SIZE/MB*size*N/(max_tend-min_tstart));
-    }
     free(data);
     tfs_close(tf);
 }
 
 void read_phase() {
     TFS_File* tf = tfs_open("./test.txt");
+    MPI_Barrier(MPI_COMM_WORLD);        // make sure everyone has opened the file first
 
     char* data = malloc(sizeof(char)*DATA_SIZE);
 
@@ -54,6 +52,7 @@ void read_phase() {
     int neighbor_rank = (rank + 1) % size;
     size_t offset = neighbor_rank * DATA_SIZE * N;
     tfs_seek(tf, offset, SEEK_SET);
+
     double tstart = MPI_Wtime();
     for(int i = 0; i < N; i++) {
         //tfs_read_lazy(tf, data, DATA_SIZE);
@@ -63,10 +62,8 @@ void read_phase() {
     MPI_Barrier(MPI_COMM_WORLD);
     double tend = MPI_Wtime();
 
-    if(rank == 0) {
-        printf("Total read size: %lu MB, elapsed time: %fs\n", DATA_SIZE/MB*N*size, (tend-tstart));
-        printf("Bandwidth: %.2f MB/s\n", DATA_SIZE/MB*size*N/(tend-tstart));
-    }
+    read_bandwidth = DATA_SIZE/MB*size*N/(tend-tstart);
+
     free(data);
     tfs_close(tf);
 }
@@ -91,14 +88,20 @@ int main(int argc, char* argv[]) {
     tfs_init("./", "/l/ssd");
     //tfs_init("./", "/tmp");
 
+    /*
     for(int i = 0; i < 1; i++) {
         MPI_Barrier(MPI_COMM_WORLD);
         write_phase();
     }
+    */
 
     for(int i = 0; i < 1; i++) {
         MPI_Barrier(MPI_COMM_WORLD);
         read_phase();
+    }
+
+    if(rank == 0) {
+        printf("Write Bandwidth: %.2f MB/s\t\tRead Bandwidth: %.2f\n", write_bandwidth, read_bandwidth);
     }
 
     tfs_finalize();

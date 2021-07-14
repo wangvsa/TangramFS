@@ -46,11 +46,7 @@ void tfs_init(const char* persist_dir, const char* tfs_dir) {
     if(semantics_str)
         tfs.semantics = atoi(semantics_str);
 
-    char iface[64];
-    char ip_addr[1025];
-    tangram_read_server_addr(persist_dir, iface, ip_addr);
-    tangram_set_iface_addr(iface, ip_addr);
-
+    tangram_rpc_service_start("./");
     tangram_rma_service_start(serve_rma_data);
 
     MAP_OR_FAIL(open);
@@ -70,6 +66,7 @@ void tfs_finalize() {
 
     MPI_Comm_free(&tfs.mpi_comm);
 
+    tangram_rpc_service_stop();
     tangram_rma_service_stop();
 
     // Clear all resources
@@ -177,7 +174,7 @@ size_t tfs_write(TFS_File* tf, const void* buf, size_t size) {
 size_t tfs_read(TFS_File* tf, void* buf, size_t size) {
     int owner_rank;
     tfs_query(tf, tf->offset, size, &owner_rank);
-    owner_rank = (1 + tfs.mpi_rank) % tfs.mpi_size;
+    owner_rank = (16 + tfs.mpi_rank) % tfs.mpi_size;
     //printf("my rank: %d, query: %lu, owner rank: %d\n", tfs.mpi_rank, tf->offset/1024/1024, owner_rank);
 
     // Turns out that myself has the latest data,
