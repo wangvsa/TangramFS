@@ -8,16 +8,16 @@
 #include "tangramfs-ucx-comm.h"
 
 
-static ucp_context_h g_ucp_context;
-static ucp_worker_h  g_ucp_worker;
-static ucp_ep_h      g_client_ep;
-static ucp_address_t *g_worker_addr;
-void*         g_server_addr;
-static void*         g_am_header;
-static size_t        g_am_header_len;
+static ucp_context_h  g_ucp_context;
+static ucp_worker_h   g_ucp_worker;
+static ucp_ep_h       g_client_ep;
+static ucp_address_t* g_worker_addr;
+static void*          g_server_addr;
+static void*          g_am_header;
+static size_t         g_am_header_len;
 
-static void*         g_server_respond;
-static volatile bool g_received_respond;
+static void*          g_server_respond;
+static volatile bool  g_received_respond;
 
 
 static ucs_status_t client_am_recv_cb(void *arg, const void *header, size_t header_length,
@@ -61,7 +61,7 @@ void tangram_ucx_sendrecv(int op, void* data, size_t length, void* respond) {
     am_params.flags = UCP_AM_SEND_FLAG_EAGER;
 
     memcpy(g_am_header, &op, sizeof(int));
-    void *request = ucp_am_send_nbx(g_client_ep, UCX_AM_ID_DATA, &g_am_header, g_am_header_len, data, length, &am_params);
+    void *request = ucp_am_send_nbx(g_client_ep, UCX_AM_ID_DATA, g_am_header, g_am_header_len, data, length, &am_params);
     request_finalize(g_ucp_worker, request);
 
     // Wait for the respond from server
@@ -99,8 +99,10 @@ void tangram_ucx_rpc_service_start(const char* persist_dir) {
 
     status = ucp_worker_get_address(g_ucp_worker, &g_worker_addr, &addr_len);
     assert(status == UCS_OK);
+    // am header: [op(int) client_worker_addr]
     g_am_header_len = sizeof(int) + addr_len;
     g_am_header = malloc(g_am_header_len);
+    memcpy(g_am_header+sizeof(int), g_worker_addr, addr_len);
 }
 
 void tangram_ucx_rpc_service_stop() {
