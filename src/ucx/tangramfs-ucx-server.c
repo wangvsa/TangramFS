@@ -11,12 +11,12 @@
 #include "tangramfs-ucx.h"
 #include "tangramfs-ucx-comm.h"
 
-#define NUM_THREADS             8
+#define NUM_THREADS 8
 
-volatile static bool g_server_running = true;
-static ucp_context_h g_ucp_context;
-static ucp_worker_h  g_ucp_worker;              // for listening connections
-static ucp_address_t *g_server_addr;
+volatile static bool  g_server_running = true;
+static ucp_context_h  g_ucp_context;
+static ucp_worker_h   g_ucp_worker;              // for listening connections
+static ucp_address_t* g_server_addr;             // server worker address
 
 
 typedef struct my_session {

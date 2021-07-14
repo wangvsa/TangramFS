@@ -33,7 +33,7 @@ void tangram_read_server_addr(const char* persist_dir, void** addr, size_t* addr
     FILE* f = fopen(cfg_path, "r");
     fread(addr_len, sizeof(size_t), 1, f);
     *addr = malloc(*addr_len);
-    fread(addr, 1, *addr_len, f);
+    fread(*addr, 1, *addr_len, f);
     fclose(f);
 }
 

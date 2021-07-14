@@ -12,7 +12,7 @@ static ucp_context_h g_ucp_context;
 static ucp_worker_h  g_ucp_worker;
 static ucp_ep_h      g_client_ep;
 static ucp_address_t *g_worker_addr;
-static void*         g_server_addr;
+void*         g_server_addr;
 static void*         g_am_header;
 static size_t        g_am_header_len;
 
@@ -80,7 +80,6 @@ void tangram_ucx_stop_server() {
     am_params.op_attr_mask = 0;
     void *request = ucp_am_send_nbx(g_client_ep, UCX_AM_ID_CMD, NULL, 0, NULL, 0, &am_params);
     request_finalize(g_ucp_worker, request);
-    sleep(1);
 }
 
 void tangram_ucx_rpc_service_start(const char* persist_dir) {
