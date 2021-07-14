@@ -68,6 +68,8 @@ ucs_status_t server_am_cb_data(void *arg, const void *header, size_t header_leng
     session->op = *(int*)header;
     session->client_addr = malloc(header_length - sizeof(int));
     memcpy(session->client_addr, header+sizeof(int), header_length - sizeof(int));
+    // TODO can directly use the data and return UCS_INPROGRESS
+    // then free it later.
     session->data = malloc(length);
     memcpy(session->data, data, length);
 

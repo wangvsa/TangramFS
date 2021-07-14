@@ -93,12 +93,10 @@ int main(int argc, char* argv[]) {
         write_phase();
     }
 
-    /*
     for(int i = 0; i < 1; i++) {
         MPI_Barrier(MPI_COMM_WORLD);
         read_phase();
     }
-    */
 
     if(rank == 0) {
         printf("Write Bandwidth: %.2f MB/s\t\tRead Bandwidth: %.2f\n", write_bandwidth, read_bandwidth);

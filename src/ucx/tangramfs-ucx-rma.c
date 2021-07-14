@@ -322,8 +322,7 @@ void tangram_ucx_rma_request(int dest_rank, void* user_arg, size_t user_arg_size
     status = ucp_mem_unmap(g_ucp_context, memh);
     assert(status == UCS_OK);
 
-    void* close_req = ucp_ep_close_nb(ep, UCP_EP_CLOSE_MODE_FLUSH);
-    request_finalize(g_request_worker, close_req);
+    ep_close(g_request_worker, ep);
 }
 
 void exchange_address(void* addr, size_t addr_len) {
