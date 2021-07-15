@@ -1,6 +1,6 @@
 #!/usr/bin/bash
-#SBATCH -N 10
-#SBATCH -n 160
+#SBATCH -N 32
+#SBATCH -n 512
 #SBATCH -t 00:05:00
 #SBATCH -p pbatch
 #SBATCH --job-name="hello"
@@ -21,11 +21,14 @@ export TANGRAM_BUFFER_DIR=/l/ssd
 
 unset UCX_NET_DEVICES
 #export UCX_NET_DEVICES=qib0:1,qib1:1
+#export UCX_NET_DEVICES=hsi0,hsi1,qib0:1,qib1:1
 
-UCX_NET_DEVICES=hsi0,hsi1 ./server.out start &
-sleep 2
+#UCX_NET_DEVICES=hsi0,hsi1
 
-for nodes in {2..10..2}
+./server.out start &
+sleep 1
+
+for nodes in {30..32..2}
 do
     procs=$(( 16 * $nodes))
     echo "nodes:" $nodes "procs:" $procs

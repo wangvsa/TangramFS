@@ -11,7 +11,7 @@
 
 #define MB (1024*1024)
 
-static size_t DATA_SIZE = 1*MB;
+static size_t DATA_SIZE = 128*MB;
 static int N = 1;
 
 int size, rank;
@@ -85,8 +85,8 @@ int main(int argc, char* argv[]) {
     MPI_Comm_size(MPI_COMM_WORLD, &size);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 
-    //tfs_init("./", "/l/ssd");
-    tfs_init("./", "/tmp");
+    tfs_init("./", "/l/ssd");
+    //tfs_init("./", "/tmp");
 
     for(int i = 0; i < 1; i++) {
         MPI_Barrier(MPI_COMM_WORLD);
