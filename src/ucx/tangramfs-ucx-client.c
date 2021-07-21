@@ -3,112 +3,139 @@
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
-#include "tangramfs-utils.h"
+#include <pthread.h>
+#include <mpi.h>
 #include "tangramfs-ucx.h"
 #include "tangramfs-ucx-comm.h"
 
-
-static ucp_context_h  g_ucp_context;
-static ucp_worker_h   g_ucp_worker;
-static ucp_ep_h       g_client_ep;
-static ucp_address_t* g_worker_addr;
-static void*          g_server_addr;
-static void*          g_am_header;
-static size_t         g_am_header_len;
+int g_mpi_rank;
 
 static void*          g_server_respond;
 static volatile bool  g_received_respond;
 
+static uct_listener_info_t g_info;
+static bool g_running = true;
+ucs_async_context_t  *g_client_context;
 
-static ucs_status_t client_am_recv_cb(void *arg, const void *header, size_t header_length,
-                              void *data, size_t length,
-                              const ucp_am_recv_param_t *param) {
 
-    int rendezvous = 0;
-    if (param->recv_attr & UCP_AM_RECV_ATTR_FLAG_RNDV)
-        rendezvous = 1;
+pthread_t g_progress_thread;
+pthread_mutex_t g_lock = PTHREAD_MUTEX_INITIALIZER;
 
-    // Small messages will use eager protocol.
-    // The exact size is defined by env variable UCX_RNDV_THRESH
-    // So we should have received the data already.
-    assert(rendezvous == 0);
 
+static ucs_status_t am_query_respond_listener(void *arg, void *data, size_t length, unsigned flags) {
     g_received_respond = true;
     if(g_server_respond)
-        memcpy(g_server_respond, data, length);
-
-    // return UCS_OK, ucp will free *data
+        memcpy(g_server_respond, data+sizeof(uint64_t), length-sizeof(uint64_t));
     return UCS_OK;
 }
 
-void client_err_cb(void *arg, ucp_ep_h ep, ucs_status_t status) {
-    printf("client_err_cb: received respond: %d, %s\n",
-            g_received_respond, ucs_status_string(status));
+static ucs_status_t am_post_respond_listener(void *arg, void *data, size_t length, unsigned flags) {
     g_received_respond = true;
+    return UCS_OK;
+}
+
+static ucs_status_t am_rma_request_listener(void *arg, void *data, size_t length, unsigned flags) {
+    // Note this is called by pthread-progress funciton.
+    // we can not do am_send here as no one will perform the progress
+    // So we create a new thread to handle this rma request
+    void* persist_data = malloc(length-sizeof(uint64_t));
+    memcpy(persist_data, data+sizeof(uint64_t), length-sizeof(uint64_t));
+    pthread_t thread;
+    pthread_create(&thread, NULL, rma_respond, persist_data);
+
+    return UCS_OK;
+}
+
+static ucs_status_t am_ep_addr_listener(void *arg, void *data, size_t length, unsigned flags) {
+    void* peer_ep_addr = malloc(length-sizeof(uint64_t));
+    memcpy(peer_ep_addr, data+sizeof(uint64_t), length-sizeof(uint64_t));
+    set_peer_ep_addr(peer_ep_addr);
+    return UCS_OK;
 }
 
 
+void* progress_loop(void* arg) {
+    while(g_running) {
+        pthread_mutex_lock(&g_lock);
+        uct_worker_progress(g_info.worker);
+        pthread_mutex_unlock(&g_lock);
+    }
+}
 
-// Send and wait for the respond from server
-void tangram_ucx_sendrecv(int op, void* data, size_t length, void* respond) {
+void tangram_ucx_sendrecv(uint8_t id, void* data, size_t length, void* respond) {
     g_server_respond = respond;
     g_received_respond = false;
-    ep_connect(g_server_addr, g_ucp_worker, &g_client_ep);
 
-    // Active Message send
-    ucp_request_param_t am_params;
-    am_params.op_attr_mask = UCP_OP_ATTR_FIELD_FLAGS;
-    am_params.flags = UCP_AM_SEND_FLAG_EAGER;
-
-    memcpy(g_am_header, &op, sizeof(int));
-    void *request = ucp_am_send_nbx(g_client_ep, UCX_AM_ID_DATA, g_am_header, g_am_header_len, data, length, &am_params);
-    request_finalize(g_ucp_worker, request);
-
-    // Wait for the respond from server
+    uct_ep_h ep;
+    uct_ep_create_connect(g_info.iface, g_info.server_dev_addr, g_info.server_iface_addr, &ep);
+    do_uct_am_short(&g_lock, ep, id, g_mpi_rank, data, length);
     while(!g_received_respond) {
-        ucp_worker_progress(g_ucp_worker);
     }
 
-    ep_close(g_ucp_worker, g_client_ep);
+    uct_ep_destroy(ep);
 }
 
-void tangram_ucx_stop_server() {
-    ep_connect(g_server_addr, g_ucp_worker, &g_client_ep);
+void tangram_ucx_sendrecv_peer(uint8_t id, int dest, void* data, size_t length, void* respond) {
+    // TODO remove respond
+    uct_ep_h ep;
+    uct_ep_create_connect(g_info.iface, g_info.client_dev_addrs[dest], g_info.client_iface_addrs[dest], &ep);
+    do_uct_am_short(&g_lock, ep, id, g_mpi_rank, data, length);
+    uct_ep_destroy(ep);
+}
 
-    // Active Message send
-    ucp_request_param_t am_params;
-    am_params.op_attr_mask = 0;
-    void *request = ucp_am_send_nbx(g_client_ep, UCX_AM_ID_CMD, NULL, 0, NULL, 0, &am_params);
-    request_finalize(g_ucp_worker, request);
+
+void tangram_ucx_stop_server() {
+    uct_ep_h ep;
+    uct_ep_create_connect(g_info.iface, g_info.server_dev_addr, g_info.server_iface_addr, &ep);
+    do_uct_am_short(&g_lock, ep, AM_ID_STOP_REQUEST, g_mpi_rank, NULL, 0);
+    uct_ep_destroy(ep);
+}
+
+void send_address_to_server() {
+    uct_ep_h ep;
+    uct_ep_create_connect(g_info.iface, g_info.server_dev_addr, g_info.server_iface_addr, &ep);
+
+    size_t len = 2 * sizeof(size_t) + g_info.iface_attr.device_addr_len + g_info.iface_attr.iface_addr_len;
+    void* data = malloc(len);
+
+    memcpy(data, &g_info.iface_attr.device_addr_len, sizeof(size_t));
+    memcpy(data+sizeof(size_t), g_info.client_dev_addrs[g_mpi_rank], g_info.iface_attr.device_addr_len);
+    memcpy(data+sizeof(size_t)+g_info.iface_attr.device_addr_len, &g_info.iface_attr.iface_addr_len, sizeof(size_t));
+    memcpy(data+2*sizeof(size_t)+g_info.iface_attr.device_addr_len, g_info.client_iface_addrs[g_mpi_rank], g_info.iface_attr.iface_addr_len);
+
+    do_uct_am_short(&g_lock, ep, AM_ID_CLIENT_ADDR, g_mpi_rank, data, len);
+
+    uct_ep_destroy(ep);
+    free(data);
 }
 
 void tangram_ucx_rpc_service_start(const char* persist_dir) {
-    size_t addr_len;
-    tangram_read_server_addr(persist_dir, &g_server_addr, &addr_len);
-    init_context(&g_ucp_context);
-    init_worker(g_ucp_context, &g_ucp_worker, true);
+    MPI_Comm_rank(MPI_COMM_WORLD, &g_mpi_rank);
 
-    // Set am callback to receive respond from server
-    ucp_am_handler_param_t am_param;
-    am_param.field_mask = UCP_AM_HANDLER_PARAM_FIELD_ID |
-                          UCP_AM_HANDLER_PARAM_FIELD_CB;
-    am_param.id         = UCX_AM_ID_DATA;
-    am_param.cb         = client_am_recv_cb;
-    ucs_status_t status = ucp_worker_set_am_recv_handler(g_ucp_worker, &am_param);
+    ucs_status_t status;
+    ucs_async_context_create(UCS_ASYNC_MODE_THREAD_SPINLOCK, &g_client_context);
+
+    init_uct_listener_info(g_client_context, "enp6s0", "tcp", false, &g_info);
+
+    status = uct_iface_set_am_handler(g_info.iface, AM_ID_QUERY_RESPOND, am_query_respond_listener, NULL, 0);
+    assert(status == UCS_OK);
+    status = uct_iface_set_am_handler(g_info.iface, AM_ID_POST_RESPOND, am_post_respond_listener, NULL, 0);
+    assert(status == UCS_OK);
+    status = uct_iface_set_am_handler(g_info.iface, AM_ID_RMA_REQUEST, am_rma_request_listener, NULL, 0);
+    assert(status == UCS_OK);
+    status = uct_iface_set_am_handler(g_info.iface, AM_ID_RMA_EP_ADDR, am_ep_addr_listener, NULL, 0);
     assert(status == UCS_OK);
 
-    status = ucp_worker_get_address(g_ucp_worker, &g_worker_addr, &addr_len);
-    assert(status == UCS_OK);
-    // am header: [op(int) client_worker_addr]
-    g_am_header_len = sizeof(int) + addr_len;
-    g_am_header = malloc(g_am_header_len);
-    memcpy(g_am_header+sizeof(int), g_worker_addr, addr_len);
+    pthread_create(&g_progress_thread, NULL, progress_loop, NULL);
+
+    send_address_to_server();
 }
 
+
 void tangram_ucx_rpc_service_stop() {
-    ucp_worker_release_address(g_ucp_worker, g_worker_addr);
-    ucp_worker_destroy(g_ucp_worker);
-    ucp_cleanup(g_ucp_context);
-    free(g_server_addr);
-    free(g_am_header);
+    g_running = false;
+    pthread_join(g_progress_thread, NULL);
+
+    destroy_uct_listener_info(&g_info);
+    ucs_async_context_destroy(g_client_context);
 }

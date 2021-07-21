@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
+#include <mpi.h>
 #include "tangramfs.h"
 #include "tangramfs-metadata.h"
 #include "tangramfs-ucx.h"
@@ -12,11 +13,11 @@
 /**
  * Return a respond, can be NULL
  */
-void* rpc_handler(int op, void* data, size_t *respond_len) {
+void* rpc_handler(int8_t id, void* data, size_t *respond_len) {
     *respond_len = 0;
     void *respond = NULL;
 
-    if(op == OP_RPC_POST) {
+    if(id == AM_ID_POST_REQUEST) {
         rpc_in_t* in = rpc_in_unpack(data);
         for(int i = 0; i < in->num_intervals; i++)
             tangram_ms_handle_post(in->rank, in->filename, in->intervals[i].offset, in->intervals[i].count);
@@ -25,7 +26,7 @@ void* rpc_handler(int op, void* data, size_t *respond_len) {
         respond = malloc(sizeof(int));
         *respond_len = sizeof(int);
         return respond;
-    } else if(op == OP_RPC_QUERY) {
+    } else if(id == AM_ID_QUERY_REQUEST) {
         rpc_in_t* in = rpc_in_unpack(data);
         *respond_len = sizeof(rpc_out_t);
         rpc_out_t *out = malloc(sizeof(rpc_out_t));
@@ -44,6 +45,7 @@ void* rpc_handler(int op, void* data, size_t *respond_len) {
 
 int main(int argc, char* argv[]) {
     assert(argc == 2);
+    MPI_Init(&argc, &argv);
 
     if( strcmp(argv[1], "start") == 0 ) {
 
@@ -58,6 +60,7 @@ int main(int argc, char* argv[]) {
         tangram_rpc_service_stop();
     }
 
+    MPI_Finalize();
     return 0;
 }
 

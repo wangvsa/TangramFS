@@ -6,10 +6,13 @@
 #include <assert.h>
 #include <string.h>
 #include <unistd.h>
+#include <alloca.h>
 #include <ifaddrs.h>
 #include <sys/socket.h>
 #include <netdb.h>
 #include <ucp/api/ucp.h>
+#include <mpi.h>
+#include "tangramfs-utils.h"
 #include "tangramfs-ucx-comm.h"
 
 
@@ -129,6 +132,205 @@ void get_interface_ip_addr(const char* interface, char *ip_addr) {
             break;
         }
     }
-
     freeifaddrs(ifaddr);
 }
+
+
+void init_iface(char* dev_name, char* tl_name, uct_listener_info_t *info) {
+    ucs_status_t        status;
+    uct_iface_config_t  *config; /* Defines interface configuration options */
+    uct_iface_params_t  params;
+    params.field_mask           = UCT_IFACE_PARAM_FIELD_OPEN_MODE   |
+                                  UCT_IFACE_PARAM_FIELD_DEVICE      |
+                                  UCT_IFACE_PARAM_FIELD_STATS_ROOT  |
+                                  UCT_IFACE_PARAM_FIELD_RX_HEADROOM |
+                                  UCT_IFACE_PARAM_FIELD_CPU_MASK;
+    params.open_mode            = UCT_IFACE_OPEN_MODE_DEVICE;
+    params.mode.device.dev_name = dev_name;
+    params.mode.device.tl_name  = tl_name;
+    params.stats_root           = NULL;
+    params.rx_headroom          = 0;
+
+    // TODO??
+    UCS_CPU_ZERO(&params.cpu_mask);
+
+    uct_md_iface_config_read(info->md, tl_name, NULL, NULL, &config);
+    status = uct_iface_open(info->md, info->worker, &params, config, &info->iface);
+    uct_config_release(config);
+
+    // enable progress
+    uct_iface_progress_enable(info->iface, UCT_PROGRESS_SEND | UCT_PROGRESS_RECV);
+
+    // get attr
+    uct_iface_query(info->iface, &info->iface_attr);
+}
+
+void dev_tl_lookup(char* dev_name, char* tl_name, uct_listener_info_t *info) {
+
+    uct_component_h* components;
+    unsigned num_components;
+    uct_query_components(&components, &num_components);
+
+    // Iterate through components
+    for(int i = 0; i < num_components; i++) {
+        uct_component_attr_t   component_attr;
+        component_attr.field_mask = UCT_COMPONENT_ATTR_FIELD_MD_RESOURCE_COUNT;
+        uct_component_query(components[i], &component_attr);
+
+        component_attr.field_mask = UCT_COMPONENT_ATTR_FIELD_MD_RESOURCES;
+        component_attr.md_resources = alloca(sizeof(*component_attr.md_resources) *
+                                             component_attr.md_resource_count);
+        uct_component_query(components[i], &component_attr);
+
+        //iface_p->iface = NULL;
+        // Iterate through memory domain
+        for(int j= 0; j < component_attr.md_resource_count; j++) {
+            uct_md_h md;
+            uct_md_config_t *md_config;
+            uct_md_config_read(components[i], NULL, NULL, &md_config);
+            uct_md_open(components[i], component_attr.md_resources[j].md_name,
+                        md_config, &md);
+            uct_config_release(md_config);
+
+            uct_tl_resource_desc_t *tl_resources = NULL;
+            unsigned num_tl_resources;
+            uct_md_query_tl_resources(md, &tl_resources, &num_tl_resources);
+
+
+            int found = 0;
+            // Iterate through transport
+            for(int k = 0; k < num_tl_resources; k++) {
+                char* tln = tl_resources[k].tl_name;
+                char* devn = tl_resources[k].dev_name;
+                if(0==strcmp(tln, tl_name) && 0==strcmp(devn, dev_name)) {
+                    found = 1;
+                    info->md = md;
+                    info->component = components[i];
+                    uct_md_query(md, &info->md_attr);
+                }
+            }
+
+            uct_release_tl_resource_list(tl_resources);
+            if(!found)
+                uct_md_close(md);
+        }
+    }
+    uct_release_component_list(components);
+}
+
+void exchange_dev_iface_addr(void* dev_addr, void* iface_addr, uct_listener_info_t* info) {
+    int mpi_size, mpi_rank;
+    MPI_Comm_size(MPI_COMM_WORLD, &mpi_size);
+    MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
+
+    size_t addr_len;
+    void*  all_addrs;
+
+    // exchange device addrs
+    addr_len = info->iface_attr.device_addr_len;
+    all_addrs = malloc(addr_len*mpi_size);
+    MPI_Allgather(dev_addr, addr_len, MPI_BYTE, all_addrs, addr_len, MPI_BYTE, MPI_COMM_WORLD);
+
+    info->client_dev_addrs = malloc(mpi_size*sizeof(uct_device_addr_t*));
+    for(int rank = 0; rank < mpi_size; rank++) {
+        info->client_dev_addrs[rank] = malloc(addr_len);
+        memcpy(info->client_dev_addrs[rank], all_addrs+rank*addr_len, addr_len);
+    }
+    free(all_addrs);
+
+    // exchange iface addrs
+    addr_len = info->iface_attr.iface_addr_len;
+    all_addrs = malloc(addr_len*mpi_size);
+    MPI_Allgather(iface_addr, addr_len, MPI_BYTE, all_addrs, addr_len, MPI_BYTE, MPI_COMM_WORLD);
+
+    info->client_iface_addrs = malloc(mpi_size*sizeof(uct_iface_addr_t*));
+    for(int rank = 0; rank < mpi_size; rank++) {
+        info->client_iface_addrs[rank] = malloc(addr_len);
+        memcpy(info->client_iface_addrs[rank], all_addrs+rank*addr_len, addr_len);
+    }
+    free(all_addrs);
+}
+
+void init_uct_listener_info(ucs_async_context_t* context, char* dev_name, char* tl_name, bool server, uct_listener_info_t *info) {
+    uct_worker_create(context, UCS_THREAD_MODE_SERIALIZED, &info->worker);
+
+    // search for dev and tl
+    // This will open info->md and set info->md_attr
+    dev_tl_lookup(dev_name, tl_name, info);
+
+    // This will open the info->iface and set info->iface_attr
+    init_iface(dev_name, tl_name, info);
+
+
+    if(server) {
+        info->server_dev_addr = malloc(info->iface_attr.device_addr_len);
+        uct_iface_get_device_address(info->iface, info->server_dev_addr);
+        info->server_iface_addr = malloc(info->iface_attr.iface_addr_len);
+        uct_iface_get_address(info->iface, info->server_iface_addr);
+        tangram_write_uct_server_addr("./", info->server_dev_addr, info->iface_attr.device_addr_len,
+                            info->server_iface_addr, info->iface_attr.iface_addr_len);
+
+        int mpi_size = 32;
+        info->client_dev_addrs = malloc(sizeof(uct_device_addr_t*) * 32);
+        info->client_iface_addrs = malloc(sizeof(uct_iface_addr_t*) * 32);
+        for(int i = 0; i < 32; i++) {
+            info->client_dev_addrs[i] = NULL;
+            info->client_iface_addrs[i] = NULL;
+        }
+
+    } else {
+        void* dev_addr = alloca(info->iface_attr.device_addr_len);
+        uct_iface_get_device_address(info->iface, dev_addr);
+        void* iface_addr = alloca(info->iface_attr.iface_addr_len);
+        uct_iface_get_address(info->iface, iface_addr);
+        void* ep_addr = alloca(info->iface_attr.ep_addr_len);
+        exchange_dev_iface_addr(dev_addr, iface_addr, info);
+        tangram_read_uct_server_addr("./", (void**)&info->server_dev_addr, (void**)&info->server_iface_addr);
+    }
+}
+
+void destroy_uct_listener_info(uct_listener_info_t *info) {
+
+    /*
+    for(int rank = 0; rank < 32; rank++) {
+        if(info->client_dev_addrs[rank])
+            free(info->client_dev_addrs[rank]);
+        if(info->client_iface_addrs[rank])
+            free(info->client_iface_addrs[rank]);
+    }
+    */
+
+    uct_iface_close(info->iface);
+    uct_md_close(info->md);
+    free(info->client_dev_addrs);
+    free(info->client_iface_addrs);
+    uct_worker_destroy(info->worker);
+}
+
+
+// Create and connect to all other rank's endpoint
+void uct_ep_create_connect(uct_iface_h iface, uct_device_addr_t* dev_addr, uct_iface_addr_t* iface_addr, uct_ep_h* ep) {
+    //assert(info->iface_attr.cap.flags & UCT_IFACE_FLAG_CONNECT_TO_IFACE);
+    ucs_status_t status;
+
+    uct_ep_params_t ep_params;
+    ep_params.field_mask = UCT_EP_PARAM_FIELD_IFACE     |
+                           UCT_EP_PARAM_FIELD_DEV_ADDR  |
+                           UCT_EP_PARAM_FIELD_IFACE_ADDR;
+    ep_params.iface      = iface;
+    ep_params.dev_addr   = dev_addr;
+    ep_params.iface_addr = iface_addr;
+
+    status = uct_ep_create(&ep_params, ep);
+    assert(status == UCS_OK);
+}
+
+void do_uct_am_short(pthread_mutex_t *lock, uct_ep_h ep, uint8_t id, int header, void* data, size_t length) {
+    ucs_status_t status = UCS_OK;
+    do {
+        pthread_mutex_lock(lock);
+        status = uct_ep_am_short(ep, id, header, data, length);
+        pthread_mutex_unlock(lock);
+    } while (status == UCS_ERR_NO_RESOURCE);
+}
+

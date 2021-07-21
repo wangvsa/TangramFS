@@ -5,219 +5,204 @@
 #include <stdbool.h>
 #include <unistd.h>
 #include <pthread.h>
-#include <ucp/api/ucp.h>
 #include "utlist.h"
-#include "tangramfs-utils.h"
 #include "tangramfs-ucx.h"
 #include "tangramfs-ucx-comm.h"
 
 #define NUM_THREADS 8
 
-volatile static bool  g_server_running = true;
-static ucp_context_h  g_ucp_context;
-static ucp_worker_h   g_ucp_worker;              // for listening connections
-static ucp_address_t* g_server_addr;             // server worker address
+volatile static bool g_server_running = true;
+static ucs_async_context_t  *g_server_context;
+static uct_listener_info_t g_info;
 
 
-typedef struct my_session {
-    void* respond;
-    size_t respond_len;
+typedef struct rpc_task {
+    uint8_t id;
+    void*   respond;
+    size_t  respond_len;
 
-    int op;
-    void* data;
+    int     client_rank;
+    void*   data;
 
-    ucp_worker_h  ucp_worker;
-    ucp_address_t *client_addr;
-    ucp_ep_h      client_ep;              // connected ep with client
-    struct my_session *next, *prev;
-} my_session_t;
+    struct rpc_task *next, *prev;
+} rpc_task_t;
 
 
-struct my_worker {
+struct rpc_task_worker {
     int tid;
     pthread_t thread;
     pthread_mutex_t lock;
-    my_session_t *sessions;
+    rpc_task_t *tasks;
 };
 
 
-// A thread pool, where each worker handles a list of my_session_t*
-static struct my_worker g_my_workers[NUM_THREADS];
+// A thread pool, where each worker handles a list of rpc_task_t*
+static struct rpc_task_worker g_workers[NUM_THREADS];
 static int who = 0;
 
-void* (*user_am_data_handler)(int op, void* data, size_t *respond_len);
+// progress lock
+pthread_mutex_t g_progress_lock = PTHREAD_MUTEX_INITIALIZER;
 
 
+void* (*user_am_data_handler)(int8_t, void* data, size_t *respond_len);
 
 
-ucs_status_t server_am_cb_data(void *arg, const void *header, size_t header_length,
-                               void *data, size_t length,
-                               const ucp_am_recv_param_t *param) {
-    int rendezvous = 0;
-    if (param->recv_attr & UCP_AM_RECV_ATTR_FLAG_RNDV)
-        rendezvous = 1;
+void append_task(uint8_t id, void* data, size_t length) {
+    // uint64_t is the header in am_short();
+    // we use it to send client rank
 
-    // Small messages will use eager protocol.
-    // The exact size is defined by env variable UCX_RNDV_THRESH
-    // So we should have received the data already.
-    assert(rendezvous == 0);
-    assert(header);
+    rpc_task_t *task = malloc(sizeof(rpc_task_t));
+    task->id = id;
+    task->respond = NULL;
+    task->respond_len = 0;
+    task->client_rank = *(uint64_t*)data;
+    task->data = malloc(length-sizeof(uint64_t));
+    memcpy(task->data, data+sizeof(uint64_t), length-sizeof(uint64_t));
 
-    my_session_t *session = malloc(sizeof(my_session_t));
+    pthread_mutex_lock(&g_workers[who].lock);
+    DL_APPEND(g_workers[who].tasks, task);
+    assert(g_workers[who].tasks != NULL);
+    pthread_mutex_unlock(&g_workers[who].lock);
+}
 
-    session->op = *(int*)header;
-    session->client_addr = malloc(header_length - sizeof(int));
-    memcpy(session->client_addr, header+sizeof(int), header_length - sizeof(int));
+static ucs_status_t am_query_listener(void *arg, void *data, size_t length, unsigned flags) {
     // TODO can directly use the data and return UCS_INPROGRESS
     // then free it later.
-    session->data = malloc(length);
-    memcpy(session->data, data, length);
-
-    session->respond = NULL;
-    session->respond_len = 0;
-
-    pthread_mutex_lock(&g_my_workers[who].lock);
-    DL_APPEND(g_my_workers[who].sessions, session);
-    assert(g_my_workers[who].sessions != NULL);
-    pthread_mutex_unlock(&g_my_workers[who].lock);
+    append_task(AM_ID_QUERY_REQUEST, data, length);
     who = (who + 1) % NUM_THREADS;
-
     return UCS_OK;
 }
 
-ucs_status_t server_am_cb_cmd(void *arg, const void *header, size_t header_length,
-                               void *data, size_t length,
-                               const ucp_am_recv_param_t *param) {
+static ucs_status_t am_post_listener(void *arg, void *data, size_t length, unsigned flags) {
+    append_task(AM_ID_POST_REQUEST, data, length);
+    who = (who + 1) % NUM_THREADS;
+    return UCS_OK;
+}
+
+static ucs_status_t am_stop_listener(void *arg, void *data, size_t length, unsigned flags) {
     printf("Server: received stop server command!\n");
     g_server_running = false;
+    return UCS_OK;
+}
+
+static ucs_status_t am_client_addr_listener(void *arg, void *data, size_t length, unsigned flags) {
+    size_t dev_addr_len, iface_addr_len;
+    int rank = *(uint64_t*)data;
+    assert(rank >= 0);
+    if(g_info.client_dev_addrs[rank]) {
+        free(g_info.client_dev_addrs[rank]);
+        g_info.client_dev_addrs[rank] = NULL;
+    }
+    if(g_info.client_iface_addrs[rank]) {
+        free(g_info.client_iface_addrs[rank]);
+        g_info.client_iface_addrs[rank] = NULL;
+    }
+
+    void* ptr = data + sizeof(uint64_t);
+
+    memcpy(&dev_addr_len, ptr, sizeof(size_t));
+    g_info.client_dev_addrs[rank] = malloc(dev_addr_len);
+    memcpy(g_info.client_dev_addrs[rank], ptr+sizeof(size_t), dev_addr_len);
+
+    memcpy(&iface_addr_len, ptr+sizeof(size_t)+dev_addr_len, sizeof(size_t));
+    g_info.client_iface_addrs[rank] = malloc(iface_addr_len);
+    memcpy(g_info.client_iface_addrs[rank], ptr+2*sizeof(size_t)+dev_addr_len, iface_addr_len);
 
     return UCS_OK;
 }
 
+void handle_one_task(rpc_task_t* task) {
+    uct_ep_h ep;
+    uct_ep_create_connect(g_info.iface, g_info.client_dev_addrs[task->client_rank],
+                          g_info.client_iface_addrs[task->client_rank], &ep);
 
-void tangram_ucx_server_respond(my_session_t *session) {
-}
+    task->respond = (*user_am_data_handler)(task->id, task->data, &task->respond_len);
 
-
-void server_err_cb(void *arg, ucp_ep_h ep, ucs_status_t status) {
-    my_session_t *session = (my_session_t*) arg;
-    printf("server_err_cb: complete: %s\n", ucs_status_string(status));
-}
-
-
-void handle_one_session(my_session_t* session) {
-    ucs_status_t status;
-    init_worker(g_ucp_context, &session->ucp_worker, true);
-
-    // Connect to client ep
-    ep_connect(session->client_addr, session->ucp_worker, &session->client_ep);
-
-    session->respond = (*user_am_data_handler)(session->op, session->data, &session->respond_len);
-
-    // Send respond to client
-    if(session->respond) {
-        ucp_request_param_t am_params;
-        am_params.op_attr_mask = UCP_OP_ATTR_FIELD_FLAGS;
-        am_params.flags        = UCP_AM_SEND_FLAG_EAGER;
-
-        void *request = ucp_am_send_nbx(session->client_ep, UCX_AM_ID_DATA, NULL, 0, session->respond, session->respond_len, &am_params);
-        request_finalize(session->ucp_worker, request);
-
-        free(session->respond);
+    // TODO Send respond to client
+    if(task->respond) {
+        uint8_t id;
+        if(task->id == AM_ID_QUERY_REQUEST)
+            id = AM_ID_QUERY_RESPOND;
+        if(task->id == AM_ID_POST_REQUEST)
+            id = AM_ID_POST_RESPOND;
+        do_uct_am_short(&g_progress_lock, ep, id, 0, NULL, 0);
+        free(task->respond);
     }
 
-    ep_close(session->ucp_worker, session->client_ep);
-    ucp_worker_destroy(session->ucp_worker);
+    uct_ep_destroy(ep);
 }
 
-void* my_worker_func(void* arg) {
+void* rpc_task_worker_func(void* arg) {
     int tid = *((int*)arg);
-    my_session_t *session = NULL;
+    rpc_task_t *task = NULL;
     while(g_server_running) {
 
-        pthread_mutex_lock(&g_my_workers[tid].lock);
-        session = g_my_workers[tid].sessions;
-        if(session)
-            DL_DELETE(g_my_workers[tid].sessions, session);
-        pthread_mutex_unlock(&g_my_workers[tid].lock);
+        pthread_mutex_lock(&g_workers[tid].lock);
+        task = g_workers[tid].tasks;
+        if(task)
+            DL_DELETE(g_workers[tid].tasks, task);
+        pthread_mutex_unlock(&g_workers[tid].lock);
 
-        if(session) {
-            handle_one_session(session);
-            free(session);
+        if(task) {
+            handle_one_task(task);
+            free(task->data);
+            free(task);
         }
     }
 
-    // At this point, we should have handled all sessions.
-    // i.e., g_my_workers[tid].sessions should be empty.
+    // At this point, we should have handled all tasks.
+    // i.e., g_workers[tid].tasks should be empty.
     //
     // But it is possible that client stoped the server
     // before all their requests have been finished.
     int count;
-    DL_COUNT(g_my_workers[tid].sessions, session, count);
+    DL_COUNT(g_workers[tid].tasks, task, count);
     assert(count == 0);
 }
 
-void run_server() {
-    ucs_status_t status;
 
-    /*
-     * Every time a connection request comes, the conn_cb()
-     * function will spawn a new pthread to handle the request.
-     */
+void tangram_ucx_server_init(const char* persist_dir) {
+    ucs_status_t status;
+    ucs_async_context_create(UCS_ASYNC_MODE_THREAD_SPINLOCK, &g_server_context);
+
+    init_uct_listener_info(g_server_context, "enp6s0", "tcp", true, &g_info);
+
+    status = uct_iface_set_am_handler(g_info.iface, AM_ID_QUERY_REQUEST, am_query_listener, NULL, 0);
+    assert(status == UCS_OK);
+    status = uct_iface_set_am_handler(g_info.iface, AM_ID_POST_REQUEST, am_post_listener, NULL, 0);
+    assert(status == UCS_OK);
+    status = uct_iface_set_am_handler(g_info.iface, AM_ID_STOP_REQUEST, am_stop_listener, NULL, 0);
+    assert(status == UCS_OK);
+    status = uct_iface_set_am_handler(g_info.iface, AM_ID_CLIENT_ADDR, am_client_addr_listener, NULL, 0);
+    assert(status == UCS_OK);
+
+    for(int i = 0; i < NUM_THREADS; i++) {
+        g_workers[i].tid = i;
+        g_workers[i].tasks = NULL;
+        int err = pthread_mutex_init(&g_workers[i].lock, NULL);
+        assert(err == 0);
+        pthread_create(&(g_workers[i].thread), NULL, rpc_task_worker_func, &g_workers[i].tid);
+    }
+}
+
+void tangram_ucx_server_register_rpc(void* (*user_handler)(int8_t, void*, size_t*)) {
+    user_am_data_handler = user_handler;
+}
+
+
+void tangram_ucx_server_start() {
+
     while(g_server_running) {
-        ucp_worker_progress(g_ucp_worker);
+        pthread_mutex_lock(&g_progress_lock);
+        uct_worker_progress(g_info.worker);
+        pthread_mutex_unlock(&g_progress_lock);
     }
 
     // Clean up
     for(int i = 0; i < NUM_THREADS; i++) {
-        pthread_join(g_my_workers[i].thread, NULL);
+        pthread_join(g_workers[i].thread, NULL);
     }
-    ucp_worker_release_address(g_ucp_worker, g_server_addr);
-    ucp_worker_destroy(g_ucp_worker);
-    ucp_cleanup(g_ucp_context);
-}
 
-void tangram_ucx_server_init(const char* persist_dir) {
-    ucs_status_t status;
-    init_context(&g_ucp_context);
-    init_worker(g_ucp_context, &g_ucp_worker, false);
-
-    // Set up Active Message data handler
-    ucp_am_handler_param_t am_param;
-    am_param.field_mask = UCP_AM_HANDLER_PARAM_FIELD_ID |
-                          UCP_AM_HANDLER_PARAM_FIELD_CB;
-    am_param.id         = UCX_AM_ID_DATA;   // This id should match the one in am_send_nbx()
-    am_param.cb         = server_am_cb_data;
-    status              = ucp_worker_set_am_recv_handler(g_ucp_worker, &am_param);
-    assert(status == UCS_OK);
-
-    ucp_am_handler_param_t am_param2;
-    am_param2.field_mask = UCP_AM_HANDLER_PARAM_FIELD_ID |
-                           UCP_AM_HANDLER_PARAM_FIELD_CB;
-    am_param2.id         = UCX_AM_ID_CMD;   // This id should match the one in am_send_nbx()
-    am_param2.cb         = server_am_cb_cmd;
-    status               = ucp_worker_set_am_recv_handler(g_ucp_worker, &am_param2);
-    assert(status == UCS_OK);
-
-    // get server worker address
-    size_t addr_len;
-    status = ucp_worker_get_address(g_ucp_worker, &g_server_addr, &addr_len);
-    assert(status == UCS_OK);
-    tangram_write_server_addr(persist_dir, g_server_addr, addr_len);
-
-    for(int i = 0; i < NUM_THREADS; i++) {
-        g_my_workers[i].tid = i;
-        g_my_workers[i].sessions = NULL;
-        int err = pthread_mutex_init(&g_my_workers[i].lock, NULL);
-        assert(err == 0);
-        pthread_create(&(g_my_workers[i].thread), NULL, my_worker_func, &g_my_workers[i].tid);
-    }
-}
-
-void tangram_ucx_server_register_rpc(void* (*user_handler)(int, void*, size_t*)) {
-    user_am_data_handler = user_handler;
-}
-
-void tangram_ucx_server_start() {
-    run_server();
+    destroy_uct_listener_info(&g_info);
+    ucs_async_context_destroy(g_server_context);
 }

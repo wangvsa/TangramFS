@@ -86,7 +86,7 @@ static void rpc_in_free(rpc_in_t *in) {
 }
 
 
-void tangram_issue_rpc_rma(int op, char* filename, int my_rank, int dest_rank, size_t *offsets, size_t *counts, int len, void* respond);
+void tangram_issue_rpc_rma(uint8_t id, char* filename, int my_rank, int dest_rank, size_t *offsets, size_t *counts, int len, void* respond);
 void tangram_rma_service_start(void* (*serve_rma_data)(void*, size_t*));
 void tangram_rma_service_stop();
 void tangram_rpc_service_start(const char* persist_dir);

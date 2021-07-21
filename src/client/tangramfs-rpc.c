@@ -18,7 +18,7 @@ static double rma_time;
  * int dest_rank is only required for RMA operation
  *
  */
-void tangram_issue_rpc_rma(int op, char* filename, int my_rank, int dest_rank,
+void tangram_issue_rpc_rma(uint8_t id, char* filename, int my_rank, int dest_rank,
                             size_t *offsets, size_t *counts, int num_intervals, void* respond) {
 
     size_t data_size;
@@ -28,14 +28,14 @@ void tangram_issue_rpc_rma(int op, char* filename, int my_rank, int dest_rank,
 
     double t1 = MPI_Wtime();
 
-    switch(op) {
-        case OP_RPC_POST:
-            tangram_ucx_sendrecv(op, user_data, data_size, &ack);
+    switch(id) {
+        case AM_ID_POST_REQUEST:
+            tangram_ucx_sendrecv(id, user_data, data_size, &ack);
             break;
-        case OP_RPC_QUERY:
-            tangram_ucx_sendrecv(op, user_data, data_size, respond);
+        case AM_ID_QUERY_REQUEST:
+            tangram_ucx_sendrecv(id, user_data, data_size, respond);
             break;
-        case OP_RMA_REQUEST:
+        case AM_ID_RMA_REQUEST:
             for(int i = 0; i < num_intervals; i++)
                 total_recv_size += counts[i];
             tangram_ucx_rma_request(dest_rank, user_data, data_size, respond, total_recv_size);

@@ -34,7 +34,6 @@ static pthread_t g_progress_thread;
 
 
 typedef struct ptrs_to_free {
-    int op;
     ucp_address_t *peer_worker_addr;
     ucp_rkey_h *rkey_p;
     void* rma_data;
@@ -185,22 +184,9 @@ void rma_respond(void* data) {
     // actual RMA
     size_t rma_data_size;
     ptrs->rma_data = g_serve_rma_data(user_arg, &rma_data_size);
-    ucp_put_nbi(ep, ptrs->rma_data, rma_data_size, remote_addr, *(ptrs->rkey_p));
+    void* request = ucp_put_nbi(ep, ptrs->rma_data, rma_data_size, remote_addr, *(ptrs->rkey_p));
 
-    // Make sure the RMA operation completes before the following ACK message.
-    ucp_worker_fence(g_respond_worker);
-
-    // Send ACK
-    ucp_request_param_t am_param;
-    am_param.op_attr_mask = UCP_OP_ATTR_FIELD_FLAGS    |
-                            UCP_OP_ATTR_FIELD_CALLBACK |
-                            UCP_OP_ATTR_FIELD_USER_DATA;
-    am_param.flags        = UCP_AM_SEND_FLAG_EAGER;
-    am_param.cb.send      = pthread_sent_respond_cb;
-    am_param.user_data    = ptrs;
-    ptrs->op = OP_RMA_RESPOND;      // cant use a stack variable as the send call maybe delayed
-    g_current_reqs++;
-    void *request = ucp_am_send_nbx(ep, UCX_AM_ID_RMA, &ptrs->op, sizeof(int), NULL, 0, &am_param);
+    void *request = ucp_am_send_nbx(ep, AM_ID_RMA_RESPOND, NULL, 0, NULL, 0, &am_param);
     // complete in place, the callback will not be called.
     if(request == NULL) {
         free(ptrs->peer_worker_addr);
@@ -209,6 +195,8 @@ void rma_respond(void* data) {
         free(ptrs->rma_data);
         free(ptrs);
         g_current_reqs--;
+
+        tangram_ucx_sendrecv_peer(AM_ID_RMA_RESPOND, dest_rank, NULL, 0, NULL);
     }
 }
 
@@ -216,9 +204,6 @@ void rma_respond(void* data) {
 static ucs_status_t rma_request_listener(void *arg, const void *header, size_t header_length,
                               void *data, size_t length,
                               const ucp_am_recv_param_t *param) {
-
-    int op = *((int*)header);
-    assert(op == OP_RMA_REQUEST);
 
     // Pthread worker
     // 1. Received an RMA request
@@ -232,9 +217,6 @@ static ucs_status_t rma_request_listener(void *arg, const void *header, size_t h
 static ucs_status_t rma_respond_listener(void *arg, const void *header, size_t header_length,
                               void *data, size_t length,
                               const ucp_am_recv_param_t *param) {
-
-    int op = *((int*)header);
-    assert(op == OP_RMA_RESPOND);
 
     // Main thread worker
     // 2. Received the respond for my previous RMA request
@@ -261,18 +243,6 @@ static ucs_status_t rma_respond_listener(void *arg, const void *header, size_t h
  */
 void tangram_ucx_rma_request(int dest_rank, void* user_arg, size_t user_arg_size, void* recv_buf, size_t recv_size) {
     // TODO: should directly put data to user's buffer
-    g_received_respond = false;
-
-    ucp_am_handler_param_t am_handler_param;
-    am_handler_param.field_mask = UCP_AM_HANDLER_PARAM_FIELD_ID |
-                                  UCP_AM_HANDLER_PARAM_FIELD_CB;
-    am_handler_param.id         = UCX_AM_ID_RMA;
-    am_handler_param.cb         = rma_respond_listener;
-    ucs_status_t status         = ucp_worker_set_am_recv_handler(g_request_worker, &am_handler_param);
-    assert(status == UCS_OK);
-
-    ucp_ep_h ep;
-    ep_connect(g_respond_addrs[dest_rank], g_request_worker, &ep);
 
     // mem map
     ucp_mem_map_params_t params;
@@ -303,18 +273,14 @@ void tangram_ucx_rma_request(int dest_rank, void* user_arg, size_t user_arg_size
     size_t total_buf_size;
     void* sendbuf = pack_request_arg(g_request_addr, g_worker_addrlen, mem_addr, rkey_buf, rkey_buf_size, user_arg, user_arg_size, &total_buf_size);
 
-    ucp_request_param_t am_param;
-    am_param.op_attr_mask = UCP_OP_ATTR_FIELD_FLAGS;
-    am_param.flags        = UCP_AM_SEND_FLAG_EAGER;
-    int op = OP_RMA_REQUEST;
-    void *request = ucp_am_send_nbx(ep, UCX_AM_ID_RMA, &op, sizeof(int), sendbuf, total_buf_size, &am_param);
-    request_finalize(g_request_worker, request);
-    free(sendbuf);
+    volatile bool ack;
+    tangram_ucx_sendrecv_peer(AM_ID_RMA_REQUEST, dest_rank, sendbuf, total_buf_sizes, ack);
+
 
     // Wait for the respond
-    while(!g_received_respond) {
-        ucp_worker_progress(g_request_worker);
+    while(!ack) {
     }
+    free(sendbuf);
 
     // Now we should have the data ready
     memcpy(recv_buf, attr.address, recv_size);
@@ -322,7 +288,6 @@ void tangram_ucx_rma_request(int dest_rank, void* user_arg, size_t user_arg_size
     status = ucp_mem_unmap(g_ucp_context, memh);
     assert(status == UCS_OK);
 
-    ep_close(g_request_worker, ep);
 }
 
 void exchange_address(void* addr, size_t addr_len) {
@@ -341,7 +306,7 @@ void exchange_address(void* addr, size_t addr_len) {
     free(all_addrs);
 }
 
-void* progress_loop(void* arg) {
+void* rma_progress_loop(void* arg) {
     while(g_running) {
         ucp_worker_progress(g_respond_worker);
     }
@@ -364,14 +329,7 @@ void tangram_ucx_rma_service_start(void* (serve_rma_data)(void*, size_t*)) {
     assert(status == UCS_OK && addr);
     exchange_address(addr, addr_len);
 
-    ucp_am_handler_param_t am_param;
-    am_param.field_mask = UCP_AM_HANDLER_PARAM_FIELD_ID | UCP_AM_HANDLER_PARAM_FIELD_CB;
-    am_param.id         = UCX_AM_ID_RMA;
-    am_param.cb         = rma_request_listener;
-    status              = ucp_worker_set_am_recv_handler(g_respond_worker, &am_param);
-    assert(status == UCS_OK);
-
-    pthread_create(&g_progress_thread, NULL, progress_loop, NULL);
+    pthread_create(&g_progress_thread, NULL, rma_progress_loop, NULL);
 }
 
 void tangram_ucx_rma_service_stop() {
@@ -396,4 +354,3 @@ void tangram_ucx_rma_service_stop() {
     ucp_worker_destroy(g_respond_worker);
     ucp_cleanup(g_ucp_context);
 }
-

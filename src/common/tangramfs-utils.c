@@ -37,6 +37,37 @@ void tangram_read_server_addr(const char* persist_dir, void** addr, size_t* addr
     fclose(f);
 }
 
+void tangram_write_uct_server_addr(const char* persist_dir, void* dev_addr, size_t dev_addr_len,
+                                    void* iface_addr, size_t iface_addr_len) {
+    char cfg_path[512] = {0};
+    sprintf(cfg_path, "%s/tfs.cfg", persist_dir);
+
+    FILE* f = fopen(cfg_path, "wb");
+    fwrite(&dev_addr_len, sizeof(dev_addr_len), 1, f);
+    fwrite(dev_addr, 1, dev_addr_len, f);
+    fwrite(&iface_addr_len, sizeof(iface_addr_len), 1, f);
+    fwrite(iface_addr, 1, iface_addr_len, f);
+
+    fclose(f);
+}
+void tangram_read_uct_server_addr(const char* persist_dir, void** dev_addr, void** iface_addr) {
+    char cfg_path[512] = {0};
+    sprintf(cfg_path, "%s/tfs.cfg", persist_dir);
+
+    size_t addr_len;
+    FILE* f = fopen(cfg_path, "r");
+
+    fread(&addr_len, sizeof(size_t), 1, f);
+    *dev_addr = malloc(addr_len);
+    fread(*dev_addr, 1, addr_len, f);
+
+    fread(&addr_len, sizeof(size_t), 1, f);
+    *iface_addr = malloc(addr_len);
+    fread(*iface_addr, 1, addr_len, f);
+    fclose(f);
+}
+
+
 double tangram_wtime() {
     struct timeval time;
     gettimeofday(&time, NULL);
