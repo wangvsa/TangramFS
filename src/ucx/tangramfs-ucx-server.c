@@ -12,8 +12,11 @@
 #define NUM_THREADS 8
 
 volatile static bool g_server_running = true;
-static ucs_async_context_t  *g_server_context;
-static uct_listener_info_t g_info;
+static ucs_async_context_t  *g_server_async;
+static tangram_uct_context_t g_server_context;
+
+static uct_device_addr_t**   g_client_dev_addrs;
+static uct_iface_addr_t**    g_client_iface_addrs;
 
 
 typedef struct rpc_task {
@@ -89,24 +92,24 @@ static ucs_status_t am_client_addr_listener(void *arg, void *data, size_t length
     size_t dev_addr_len, iface_addr_len;
     int rank = *(uint64_t*)data;
     assert(rank >= 0);
-    if(g_info.client_dev_addrs[rank]) {
-        free(g_info.client_dev_addrs[rank]);
-        g_info.client_dev_addrs[rank] = NULL;
+    if(g_client_dev_addrs[rank]) {
+        free(g_client_dev_addrs[rank]);
+        g_client_dev_addrs[rank] = NULL;
     }
-    if(g_info.client_iface_addrs[rank]) {
-        free(g_info.client_iface_addrs[rank]);
-        g_info.client_iface_addrs[rank] = NULL;
+    if(g_client_iface_addrs[rank]) {
+        free(g_client_iface_addrs[rank]);
+        g_client_iface_addrs[rank] = NULL;
     }
 
     void* ptr = data + sizeof(uint64_t);
 
     memcpy(&dev_addr_len, ptr, sizeof(size_t));
-    g_info.client_dev_addrs[rank] = malloc(dev_addr_len);
-    memcpy(g_info.client_dev_addrs[rank], ptr+sizeof(size_t), dev_addr_len);
+    g_client_dev_addrs[rank] = malloc(dev_addr_len);
+    memcpy(g_client_dev_addrs[rank], ptr+sizeof(size_t), dev_addr_len);
 
     memcpy(&iface_addr_len, ptr+sizeof(size_t)+dev_addr_len, sizeof(size_t));
-    g_info.client_iface_addrs[rank] = malloc(iface_addr_len);
-    memcpy(g_info.client_iface_addrs[rank], ptr+2*sizeof(size_t)+dev_addr_len, iface_addr_len);
+    g_client_iface_addrs[rank] = malloc(iface_addr_len);
+    memcpy(g_client_iface_addrs[rank], ptr+2*sizeof(size_t)+dev_addr_len, iface_addr_len);
 
     return UCS_OK;
 }
@@ -114,8 +117,8 @@ static ucs_status_t am_client_addr_listener(void *arg, void *data, size_t length
 void handle_one_task(rpc_task_t* task) {
     pthread_mutex_lock(&g_progress_lock);
     uct_ep_h ep;
-    uct_ep_create_connect(g_info.iface, g_info.client_dev_addrs[task->client_rank],
-                          g_info.client_iface_addrs[task->client_rank], &ep);
+    uct_ep_create_connect(g_server_context.iface, g_client_dev_addrs[task->client_rank],
+                          g_client_iface_addrs[task->client_rank], &ep);
     pthread_mutex_unlock(&g_progress_lock);
 
     task->respond = (*user_am_data_handler)(task->id, task->data, &task->respond_len);
@@ -165,19 +168,23 @@ void* rpc_task_worker_func(void* arg) {
 
 void tangram_ucx_server_init(const char* persist_dir) {
     ucs_status_t status;
-    ucs_async_context_create(UCS_ASYNC_MODE_THREAD_SPINLOCK, &g_server_context);
+    ucs_async_context_create(UCS_ASYNC_MODE_THREAD_SPINLOCK, &g_server_async);
 
-    //init_uct_listener_info(g_server_context, "enp6s0", "tcp", true, &g_info);
-    init_uct_listener_info(g_server_context, "hsi0", "tcp", true, &g_info);
-    //init_uct_listener_info(g_server_context, "qib0:1", "ud_verbs", true, &g_info);
+    tangram_uct_context_init(g_server_async, "hsi0", "tcp", true, &g_server_context);
+    g_client_dev_addrs = malloc(sizeof(uct_device_addr_t*)*64);
+    g_client_iface_addrs = malloc(sizeof(uct_iface_addr_t*)*64);
+    for(int i = 0; i < 64; i++) {
+        g_client_dev_addrs[i] = NULL;
+        g_client_iface_addrs[i] = NULL;
+    }
 
-    status = uct_iface_set_am_handler(g_info.iface, AM_ID_QUERY_REQUEST, am_query_listener, NULL, 0);
+    status = uct_iface_set_am_handler(g_server_context.iface, AM_ID_QUERY_REQUEST, am_query_listener, NULL, 0);
     assert(status == UCS_OK);
-    status = uct_iface_set_am_handler(g_info.iface, AM_ID_POST_REQUEST, am_post_listener, NULL, 0);
+    status = uct_iface_set_am_handler(g_server_context.iface, AM_ID_POST_REQUEST, am_post_listener, NULL, 0);
     assert(status == UCS_OK);
-    status = uct_iface_set_am_handler(g_info.iface, AM_ID_STOP_REQUEST, am_stop_listener, NULL, 0);
+    status = uct_iface_set_am_handler(g_server_context.iface, AM_ID_STOP_REQUEST, am_stop_listener, NULL, 0);
     assert(status == UCS_OK);
-    status = uct_iface_set_am_handler(g_info.iface, AM_ID_CLIENT_ADDR, am_client_addr_listener, NULL, 0);
+    status = uct_iface_set_am_handler(g_server_context.iface, AM_ID_CLIENT_ADDR, am_client_addr_listener, NULL, 0);
     assert(status == UCS_OK);
 
     for(int i = 0; i < NUM_THREADS; i++) {
@@ -198,7 +205,7 @@ void tangram_ucx_server_start() {
 
     while(g_server_running) {
         pthread_mutex_lock(&g_progress_lock);
-        uct_worker_progress(g_info.worker);
+        uct_worker_progress(g_server_context.worker);
         pthread_mutex_unlock(&g_progress_lock);
     }
 
@@ -207,6 +214,16 @@ void tangram_ucx_server_start() {
         pthread_join(g_workers[i].thread, NULL);
     }
 
-    destroy_uct_listener_info(&g_info);
-    ucs_async_context_destroy(g_server_context);
+
+    for(int i = 0; i < 64; i++) {
+        if(g_client_dev_addrs[i])
+            free(g_client_dev_addrs[i]);
+        if(g_client_iface_addrs[i])
+            free(g_client_iface_addrs[i]);
+    }
+    free(g_client_dev_addrs);
+    free(g_client_iface_addrs);
+
+    tangram_uct_context_destroy(&g_server_context);
+    ucs_async_context_destroy(g_server_async);
 }

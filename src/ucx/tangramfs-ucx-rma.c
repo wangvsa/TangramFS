@@ -11,16 +11,19 @@
 #include "tangramfs-ucx-comm.h"
 
 
-static int                  g_mpi_rank;
+static int                  g_mpi_rank, g_mpi_size;
 
 static volatile bool        g_received_respond = false;
 static volatile bool        g_received_ep_addr = false;
-uct_ep_addr_t*       g_peer_ep_addr;
+uct_ep_addr_t*              g_peer_ep_addr;
 
-static ucs_async_context_t* g_rma_context;
 
-static uct_listener_info_t  g_request_info;
-static uct_listener_info_t  g_respond_info;
+static ucs_async_context_t* g_rma_async;
+
+static tangram_uct_context_t  g_request_context;
+static tangram_uct_context_t  g_respond_context;
+uct_device_addr_t**         g_respond_dev_addrs;
+uct_device_addr_t**         g_request_dev_addrs;
 
 
 typedef struct zcopy_comp {
@@ -42,7 +45,7 @@ void* pack_request_arg(void* ep_addr, void* my_addr, void* rkey_buf, size_t rkey
     // format:
     // | my rank | ep_addr_len | ep_addr | my_addr | rkey_buf_size | rkey_buf | user_arg_size | user_arg |
     *total_size = sizeof(int) + sizeof(uint64_t) + sizeof(size_t)*3 +
-        g_request_info.iface_attr.ep_addr_len + rkey_buf_size + user_arg_size;
+        g_request_context.iface_attr.ep_addr_len + rkey_buf_size + user_arg_size;
 
     int pos = 0;
     void* send_buf = malloc(*total_size);
@@ -50,11 +53,11 @@ void* pack_request_arg(void* ep_addr, void* my_addr, void* rkey_buf, size_t rkey
     memcpy(send_buf+pos, &g_mpi_rank, sizeof(int));
     pos += sizeof(int);
 
-    memcpy(send_buf+pos, &g_request_info.iface_attr.ep_addr_len, sizeof(size_t));
+    memcpy(send_buf+pos, &g_request_context.iface_attr.ep_addr_len, sizeof(size_t));
     pos += sizeof(size_t);
 
-    memcpy(send_buf+pos, ep_addr, g_request_info.iface_attr.ep_addr_len);
-    pos += g_request_info.iface_attr.ep_addr_len;
+    memcpy(send_buf+pos, ep_addr, g_request_context.iface_attr.ep_addr_len);
+    pos += g_request_context.iface_attr.ep_addr_len;
 
     uint64_t tmp_addr = (uint64_t)my_addr;
     memcpy(send_buf+pos, &tmp_addr, sizeof(uint64_t));
@@ -75,7 +78,7 @@ void* pack_request_arg(void* ep_addr, void* my_addr, void* rkey_buf, size_t rkey
     return send_buf;
 }
 
-void ep_create_get_address(uct_listener_info_t* info, uct_ep_h *ep, uct_ep_addr_t* ep_addr) {
+void ep_create_get_address(tangram_uct_context_t* info, uct_ep_h *ep, uct_ep_addr_t* ep_addr) {
     uct_ep_params_t ep_params;
     ep_params.field_mask = UCT_EP_PARAM_FIELD_IFACE;
     ep_params.iface      = info->iface;
@@ -100,7 +103,7 @@ void build_zcopy_comp(zcopy_comp_t *comp) {
     comp->done            = false;
 }
 
-void build_iov_and_zcopy_comp(uct_iov_t *iov, zcopy_comp_t *comp, uct_listener_info_t* info, void* buf, size_t buf_len) {
+void build_iov_and_zcopy_comp(uct_iov_t *iov, zcopy_comp_t *comp, tangram_uct_context_t* info, void* buf, size_t buf_len) {
     uct_mem_h memh;
     if (info->md_attr.cap.flags & UCT_MD_FLAG_NEED_MEMH)
         uct_md_mem_reg(info->md, buf, buf_len, UCT_MD_MEM_ACCESS_RMA, &memh);
@@ -119,7 +122,7 @@ void build_iov_and_zcopy_comp(uct_iov_t *iov, zcopy_comp_t *comp, uct_listener_i
 }
 
 // User am zcopy as qib0:1/rc_verbs does not support am short.
-void do_am_zcopy(uct_ep_h ep, uct_listener_info_t* info, uint8_t id, void* data, size_t len) {
+void do_am_zcopy(uct_ep_h ep, tangram_uct_context_t* info, uint8_t id, void* data, size_t len) {
     uct_iov_t iov;
     zcopy_comp_t comp;
     build_iov_and_zcopy_comp(&iov, &comp, info, data, len);
@@ -137,7 +140,7 @@ void do_am_zcopy(uct_ep_h ep, uct_listener_info_t* info, uint8_t id, void* data,
     }
 }
 
-void do_put_zcopy(uct_ep_h ep, uct_listener_info_t* info, uint64_t remote_addr, uct_rkey_t rkey, void* buf, size_t buf_len) {
+void do_put_zcopy(uct_ep_h ep, tangram_uct_context_t* info, uint64_t remote_addr, uct_rkey_t rkey, void* buf, size_t buf_len) {
     uct_iov_t iov;
     zcopy_comp_t comp;
     build_iov_and_zcopy_comp(&iov, &comp, info, buf, buf_len);
@@ -190,30 +193,30 @@ void* rma_respond(void* data) {
 
     // Get rkey
     uct_rkey_bundle_t rkey_ob;
-    uct_rkey_unpack(g_respond_info.component, rkey_buf, &rkey_ob);
+    uct_rkey_unpack(g_respond_context.component, rkey_buf, &rkey_ob);
 
     // First send back my ep address
     uct_ep_h ep;
-    uct_ep_addr_t* ep_addr = alloca(g_respond_info.iface_attr.ep_addr_len);
-    ep_create_get_address(&g_respond_info, &ep, ep_addr);
+    uct_ep_addr_t* ep_addr = alloca(g_respond_context.iface_attr.ep_addr_len);
+    ep_create_get_address(&g_respond_context, &ep, ep_addr);
 
-    tangram_ucx_send_peer(AM_ID_RMA_EP_ADDR, dest_rank, ep_addr, g_respond_info.iface_attr.ep_addr_len);
+    tangram_ucx_send_peer(AM_ID_RMA_EP_ADDR, dest_rank, ep_addr, g_respond_context.iface_attr.ep_addr_len);
 
-    ucs_status_t status = uct_ep_connect_to_ep(ep, g_request_info.client_dev_addrs[dest_rank], peer_ep_addr);
+    ucs_status_t status = uct_ep_connect_to_ep(ep, g_request_dev_addrs[dest_rank], peer_ep_addr);
     assert(status == UCS_OK);
 
     // RMA
     size_t buf_len;
     void* buf = g_serve_rma_data(user_arg, &buf_len);
-    do_put_zcopy(ep, &g_respond_info, remote_addr, rkey_ob.rkey, buf, buf_len);
+    do_put_zcopy(ep, &g_respond_context, remote_addr, rkey_ob.rkey, buf, buf_len);
 
     // Send ACK
     int garbage_data;
-    do_am_zcopy(ep, &g_respond_info, AM_ID_RMA_RESPOND, &garbage_data, sizeof(int));
+    do_am_zcopy(ep, &g_respond_context, AM_ID_RMA_RESPOND, &garbage_data, sizeof(int));
 
     uct_ep_destroy(ep);
 
-    uct_rkey_release(g_respond_info.component, &rkey_ob);
+    uct_rkey_release(g_respond_context.component, &rkey_ob);
     free(buf);
     return NULL;
 }
@@ -249,8 +252,8 @@ void tangram_ucx_rma_request(int dest_rank, void* user_arg, size_t user_arg_size
     g_received_respond = false;
 
     uct_ep_h ep;
-    uct_ep_addr_t* ep_addr = alloca(g_request_info.iface_attr.ep_addr_len);
-    ep_create_get_address(&g_request_info, &ep, ep_addr);
+    uct_ep_addr_t* ep_addr = alloca(g_request_context.iface_attr.ep_addr_len);
+    ep_create_get_address(&g_request_context, &ep, ep_addr);
 
     uct_mem_alloc_params_t params;
     params.field_mask = UCT_MEM_ALLOC_PARAM_FIELD_ADDRESS  |
@@ -265,16 +268,16 @@ void tangram_ucx_rma_request(int dest_rank, void* user_arg, size_t user_arg_size
 
     uct_mem_h memh;
     if(mem.method != UCT_ALLOC_METHOD_MD) {
-        uct_md_mem_reg(g_request_info.md, mem.address, mem.length, UCT_MD_MEM_ACCESS_RMA, &memh);
+        uct_md_mem_reg(g_request_context.md, mem.address, mem.length, UCT_MD_MEM_ACCESS_RMA, &memh);
     }
 
     // pack rkey buf
-    void* rkey_buf = alloca(g_request_info.md_attr.rkey_packed_size);
-    uct_md_mkey_pack(g_request_info.md, memh, rkey_buf);
+    void* rkey_buf = alloca(g_request_context.md_attr.rkey_packed_size);
+    uct_md_mkey_pack(g_request_context.md, memh, rkey_buf);
 
     // send to peer and get peer ep address to connect
     size_t sendbuf_size;
-    void* sendbuf = pack_request_arg(ep_addr, mem.address, rkey_buf, g_request_info.md_attr.rkey_packed_size,
+    void* sendbuf = pack_request_arg(ep_addr, mem.address, rkey_buf, g_request_context.md_attr.rkey_packed_size,
                                     user_arg, user_arg_size, &sendbuf_size);
 
     g_received_respond = false;
@@ -286,12 +289,12 @@ void tangram_ucx_rma_request(int dest_rank, void* user_arg, size_t user_arg_size
     while(!g_received_ep_addr) {
     }
 
-    status = uct_ep_connect_to_ep(ep, g_respond_info.client_dev_addrs[dest_rank], g_peer_ep_addr);
+    status = uct_ep_connect_to_ep(ep, g_respond_dev_addrs[dest_rank], g_peer_ep_addr);
     assert(status == UCS_OK);
 
     // Wait for the peer to finish its rma put
     while(!g_received_respond) {
-        uct_worker_progress(g_request_info.worker);
+        uct_worker_progress(g_request_context.worker);
     }
     // Now we should have the data ready
     memcpy(recv_buf, mem.address, recv_size);
@@ -299,33 +302,43 @@ void tangram_ucx_rma_request(int dest_rank, void* user_arg, size_t user_arg_size
     uct_ep_destroy(ep);
 
     if(mem.method != UCT_ALLOC_METHOD_MD)
-        uct_md_mem_dereg(g_request_info.md, memh);
+        uct_md_mem_dereg(g_request_context.md, memh);
     uct_mem_free(&mem);
 }
 
 void tangram_ucx_rma_service_start(void* (serve_rma_data)(void*, size_t*)) {
     MPI_Comm_rank(MPI_COMM_WORLD, &g_mpi_rank);
+    MPI_Comm_size(MPI_COMM_WORLD, &g_mpi_size);
+
     g_serve_rma_data = serve_rma_data;
 
     ucs_status_t status;
-    ucs_async_context_create(UCS_ASYNC_MODE_THREAD_SPINLOCK, &g_rma_context);
+    ucs_async_context_create(UCS_ASYNC_MODE_THREAD_SPINLOCK, &g_rma_async);
 
-    //init_uct_listener_info(g_rma_context, "enp6s0", "tcp", false, &g_request_info);
-    //init_uct_listener_info(g_rma_context, "enp6s0", "tcp", false, &g_respond_info);
-    //init_uct_listener_info(g_rma_context, "hsi0", "tcp", false, &g_request_info);
-    //init_uct_listener_info(g_rma_context, "hsi0", "tcp", false, &g_respond_info);
-    init_uct_listener_info(g_rma_context, "qib0:1", "rc_verbs", false, &g_request_info);
-    init_uct_listener_info(g_rma_context, "qib0:1", "rc_verbs", false, &g_respond_info);
+    tangram_uct_context_init(g_rma_async, "qib0:1", "rc_verbs", false, &g_request_context);
+    tangram_uct_context_init(g_rma_async, "qib0:1", "rc_verbs", false, &g_respond_context);
 
-    status = uct_iface_set_am_handler(g_request_info.iface, AM_ID_RMA_RESPOND, am_rma_respond_listener, NULL, 0);
+    g_respond_dev_addrs = malloc(g_mpi_size * sizeof(uct_device_addr_t*));
+    g_request_dev_addrs = malloc(g_mpi_size * sizeof(uct_device_addr_t*));
+    exchange_dev_iface_addr(&g_respond_context, g_respond_dev_addrs, NULL);
+    exchange_dev_iface_addr(&g_request_context, g_request_dev_addrs, NULL);
+
+    status = uct_iface_set_am_handler(g_request_context.iface, AM_ID_RMA_RESPOND, am_rma_respond_listener, NULL, 0);
     assert(status == UCS_OK);
 }
 
 void tangram_ucx_rma_service_stop() {
     MPI_Barrier(MPI_COMM_WORLD);
 
-    destroy_uct_listener_info(&g_request_info);
-    destroy_uct_listener_info(&g_respond_info);
+    for(int i = 0; i < g_mpi_size; i++) {
+        free(g_respond_dev_addrs[i]);
+        free(g_request_dev_addrs[i]);
+    }
+    free(g_respond_dev_addrs);
+    free(g_request_dev_addrs);
 
-    ucs_async_context_destroy(g_rma_context);
+    tangram_uct_context_destroy(&g_request_context);
+    tangram_uct_context_destroy(&g_respond_context);
+
+    ucs_async_context_destroy(g_rma_async);
 }
