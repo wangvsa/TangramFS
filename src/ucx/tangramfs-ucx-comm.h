@@ -45,5 +45,6 @@ void destroy_uct_listener_info(uct_listener_info_t* info);
 void uct_ep_create_connect(uct_iface_h iface, uct_device_addr_t* dev_addr, uct_iface_addr_t* iface_addr, uct_ep_h* ep);
 
 void do_uct_am_short(pthread_mutex_t *lock, uct_ep_h ep, uint8_t id, int header, void* data, size_t length);
+void do_uct_am_short_progress(uct_worker_h worker, uct_ep_h ep, uint8_t id, int header, void* data, size_t length);
 
 #endif

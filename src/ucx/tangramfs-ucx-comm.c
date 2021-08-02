@@ -15,6 +15,8 @@
 #include "tangramfs-utils.h"
 #include "tangramfs-ucx-comm.h"
 
+#define MPI_SIZE 64
+
 
 void init_context(ucp_context_h *ucp_context) {
     ucp_params_t ucp_params;
@@ -219,9 +221,8 @@ void dev_tl_lookup(char* dev_name, char* tl_name, uct_listener_info_t *info) {
 }
 
 void exchange_dev_iface_addr(void* dev_addr, void* iface_addr, uct_listener_info_t* info) {
-    int mpi_size, mpi_rank;
+    int mpi_size;
     MPI_Comm_size(MPI_COMM_WORLD, &mpi_size);
-    MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
 
     size_t addr_len;
     void*  all_addrs;
@@ -261,7 +262,6 @@ void init_uct_listener_info(ucs_async_context_t* context, char* dev_name, char* 
     // This will open the info->iface and set info->iface_attr
     init_iface(dev_name, tl_name, info);
 
-
     if(server) {
         info->server_dev_addr = malloc(info->iface_attr.device_addr_len);
         uct_iface_get_device_address(info->iface, info->server_dev_addr);
@@ -270,10 +270,10 @@ void init_uct_listener_info(ucs_async_context_t* context, char* dev_name, char* 
         tangram_write_uct_server_addr("./", info->server_dev_addr, info->iface_attr.device_addr_len,
                             info->server_iface_addr, info->iface_attr.iface_addr_len);
 
-        int mpi_size = 32;
-        info->client_dev_addrs = malloc(sizeof(uct_device_addr_t*) * 32);
-        info->client_iface_addrs = malloc(sizeof(uct_iface_addr_t*) * 32);
-        for(int i = 0; i < 32; i++) {
+        int mpi_size = MPI_SIZE;
+        info->client_dev_addrs = malloc(sizeof(uct_device_addr_t*) * mpi_size);
+        info->client_iface_addrs = malloc(sizeof(uct_iface_addr_t*) * mpi_size);
+        for(int i = 0; i < mpi_size; i++) {
             info->client_dev_addrs[i] = NULL;
             info->client_iface_addrs[i] = NULL;
         }
@@ -283,7 +283,6 @@ void init_uct_listener_info(ucs_async_context_t* context, char* dev_name, char* 
         uct_iface_get_device_address(info->iface, dev_addr);
         void* iface_addr = alloca(info->iface_attr.iface_addr_len);
         uct_iface_get_address(info->iface, iface_addr);
-        void* ep_addr = alloca(info->iface_attr.ep_addr_len);
         exchange_dev_iface_addr(dev_addr, iface_addr, info);
         tangram_read_uct_server_addr("./", (void**)&info->server_dev_addr, (void**)&info->server_iface_addr);
     }
@@ -292,7 +291,7 @@ void init_uct_listener_info(ucs_async_context_t* context, char* dev_name, char* 
 void destroy_uct_listener_info(uct_listener_info_t *info) {
 
     /*
-    for(int rank = 0; rank < 32; rank++) {
+    for(int rank = 0; rank < MPI_SIZE; rank++) {
         if(info->client_dev_addrs[rank])
             free(info->client_dev_addrs[rank]);
         if(info->client_iface_addrs[rank])
@@ -308,7 +307,7 @@ void destroy_uct_listener_info(uct_listener_info_t *info) {
 }
 
 
-// Create and connect to all other rank's endpoint
+// Create and connect to the remote iface
 void uct_ep_create_connect(uct_iface_h iface, uct_device_addr_t* dev_addr, uct_iface_addr_t* iface_addr, uct_ep_h* ep) {
     //assert(info->iface_attr.cap.flags & UCT_IFACE_FLAG_CONNECT_TO_IFACE);
     ucs_status_t status;
@@ -332,5 +331,16 @@ void do_uct_am_short(pthread_mutex_t *lock, uct_ep_h ep, uint8_t id, int header,
         status = uct_ep_am_short(ep, id, header, data, length);
         pthread_mutex_unlock(lock);
     } while (status == UCS_ERR_NO_RESOURCE);
+    assert(status == UCS_OK);
 }
+
+void do_uct_am_short_progress(uct_worker_h worker, uct_ep_h ep, uint8_t id, int header, void* data, size_t length) {
+    ucs_status_t status = UCS_OK;
+    do {
+        status = uct_ep_am_short(ep, id, header, data, length);
+        uct_worker_progress(worker);
+    } while (status == UCS_ERR_NO_RESOURCE);
+    assert(status == UCS_OK);
+}
+
 

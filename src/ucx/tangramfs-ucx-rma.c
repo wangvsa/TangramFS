@@ -12,8 +12,11 @@
 
 
 static int                  g_mpi_rank;
+
 static volatile bool        g_received_respond = false;
-static uct_ep_addr_t*       g_peer_ep_addr;
+static volatile bool        g_received_ep_addr = false;
+uct_ep_addr_t*       g_peer_ep_addr;
+
 static ucs_async_context_t* g_rma_context;
 
 static uct_listener_info_t  g_request_info;
@@ -95,7 +98,6 @@ void build_zcopy_comp(zcopy_comp_t *comp) {
     comp->uct_comp.count  = 1;
     comp->uct_comp.status = UCS_OK;
     comp->done            = false;
-    comp->memh            = UCT_MEM_HANDLE_NULL;
 }
 
 void build_iov_and_zcopy_comp(uct_iov_t *iov, zcopy_comp_t *comp, uct_listener_info_t* info, void* buf, size_t buf_len) {
@@ -116,12 +118,23 @@ void build_iov_and_zcopy_comp(uct_iov_t *iov, zcopy_comp_t *comp, uct_listener_i
     comp->memh            = iov->memh;
 }
 
-void do_am_short(uct_ep_h ep, uct_listener_info_t* info, uint8_t id, void* data, size_t len) {
+// User am zcopy as qib0:1/rc_verbs does not support am short.
+void do_am_zcopy(uct_ep_h ep, uct_listener_info_t* info, uint8_t id, void* data, size_t len) {
+    uct_iov_t iov;
+    zcopy_comp_t comp;
+    build_iov_and_zcopy_comp(&iov, &comp, info, data, len);
+
     ucs_status_t status = UCS_OK;
     do {
-        status = uct_ep_am_short(ep, id, 0, data, len);
+        status = uct_ep_am_zcopy(ep, id, NULL, 0, &iov, 1, 0,  (uct_completion_t *)&comp);
         uct_worker_progress(info->worker);
     } while (status == UCS_ERR_NO_RESOURCE);
+
+    if (status == UCS_INPROGRESS) {
+        while (!comp.done) {
+            uct_worker_progress(info->worker);
+        }
+    }
 }
 
 void do_put_zcopy(uct_ep_h ep, uct_listener_info_t* info, uint64_t remote_addr, uct_rkey_t rkey, void* buf, size_t buf_len) {
@@ -143,7 +156,6 @@ void do_put_zcopy(uct_ep_h ep, uct_listener_info_t* info, uint64_t remote_addr, 
 }
 
 void* rma_respond(void* data) {
-
     int dest_rank;
     uint64_t remote_addr;
     size_t rkey_buf_size, user_arg_size;
@@ -184,25 +196,25 @@ void* rma_respond(void* data) {
     uct_ep_h ep;
     uct_ep_addr_t* ep_addr = alloca(g_respond_info.iface_attr.ep_addr_len);
     ep_create_get_address(&g_respond_info, &ep, ep_addr);
-    tangram_ucx_sendrecv_peer(AM_ID_RMA_EP_ADDR, dest_rank, ep_addr, g_respond_info.iface_attr.ep_addr_len, NULL);
+
+    tangram_ucx_send_peer(AM_ID_RMA_EP_ADDR, dest_rank, ep_addr, g_respond_info.iface_attr.ep_addr_len);
 
     ucs_status_t status = uct_ep_connect_to_ep(ep, g_request_info.client_dev_addrs[dest_rank], peer_ep_addr);
     assert(status == UCS_OK);
 
     // RMA
-    /*
     size_t buf_len;
     void* buf = g_serve_rma_data(user_arg, &buf_len);
     do_put_zcopy(ep, &g_respond_info, remote_addr, rkey_ob.rkey, buf, buf_len);
-    free(buf);
-    */
 
     // Send ACK
-    do_am_short(ep, &g_respond_info, AM_ID_RMA_RESPOND, NULL, 0);
+    int garbage_data;
+    do_am_zcopy(ep, &g_respond_info, AM_ID_RMA_RESPOND, &garbage_data, sizeof(int));
 
     uct_ep_destroy(ep);
-    uct_rkey_release(g_respond_info.component, &rkey_ob);
 
+    uct_rkey_release(g_respond_info.component, &rkey_ob);
+    free(buf);
     return NULL;
 }
 
@@ -213,6 +225,7 @@ static ucs_status_t am_rma_respond_listener(void *arg, void *data, size_t length
 
 void set_peer_ep_addr(uct_ep_addr_t* peer_ep_addr) {
     g_peer_ep_addr = peer_ep_addr;
+    g_received_ep_addr = true;
 }
 
 
@@ -227,7 +240,7 @@ void set_peer_ep_addr(uct_ep_addr_t* peer_ep_addr) {
  * will use it directly for RMA.
  * if not we let UCX to allocate memory for RMA
  * and copy it to user's buffer.
- *
+ m
  * this function should be called by the main thread.
  */
 void tangram_ucx_rma_request(int dest_rank, void* user_arg, size_t user_arg_size, void* recv_buf, size_t recv_size) {
@@ -247,7 +260,8 @@ void tangram_ucx_rma_request(int dest_rank, void* user_arg, size_t user_arg_size
     // TODO which one is the best?
     uct_alloc_method_t methods[] = {UCT_ALLOC_METHOD_MD, UCT_ALLOC_METHOD_HEAP};
     uct_allocated_memory_t mem;
-    uct_mem_alloc(recv_size, methods, 2, &params, &mem);
+    status = uct_mem_alloc(recv_size, methods, 2, &params, &mem);
+    assert(mem.address && status == UCS_OK);
 
     uct_mem_h memh;
     if(mem.method != UCT_ALLOC_METHOD_MD) {
@@ -264,12 +278,14 @@ void tangram_ucx_rma_request(int dest_rank, void* user_arg, size_t user_arg_size
                                     user_arg, user_arg_size, &sendbuf_size);
 
     g_received_respond = false;
+    g_received_ep_addr = false;
     g_peer_ep_addr = NULL;
-    tangram_ucx_sendrecv_peer(AM_ID_RMA_REQUEST, dest_rank, sendbuf, sendbuf_size, NULL);
+    tangram_ucx_send_peer(AM_ID_RMA_REQUEST, dest_rank, sendbuf, sendbuf_size);
 
     // Wait for the peer to send back its ep addr
-    while(g_peer_ep_addr == NULL) {
+    while(!g_received_ep_addr) {
     }
+
     status = uct_ep_connect_to_ep(ep, g_respond_info.client_dev_addrs[dest_rank], g_peer_ep_addr);
     assert(status == UCS_OK);
 
@@ -281,6 +297,7 @@ void tangram_ucx_rma_request(int dest_rank, void* user_arg, size_t user_arg_size
     memcpy(recv_buf, mem.address, recv_size);
 
     uct_ep_destroy(ep);
+
     if(mem.method != UCT_ALLOC_METHOD_MD)
         uct_md_mem_dereg(g_request_info.md, memh);
     uct_mem_free(&mem);
@@ -293,8 +310,12 @@ void tangram_ucx_rma_service_start(void* (serve_rma_data)(void*, size_t*)) {
     ucs_status_t status;
     ucs_async_context_create(UCS_ASYNC_MODE_THREAD_SPINLOCK, &g_rma_context);
 
-    init_uct_listener_info(g_rma_context, "enp6s0", "tcp", false, &g_request_info);
-    init_uct_listener_info(g_rma_context, "enp6s0", "tcp", false, &g_respond_info);
+    //init_uct_listener_info(g_rma_context, "enp6s0", "tcp", false, &g_request_info);
+    //init_uct_listener_info(g_rma_context, "enp6s0", "tcp", false, &g_respond_info);
+    //init_uct_listener_info(g_rma_context, "hsi0", "tcp", false, &g_request_info);
+    //init_uct_listener_info(g_rma_context, "hsi0", "tcp", false, &g_respond_info);
+    init_uct_listener_info(g_rma_context, "qib0:1", "rc_verbs", false, &g_request_info);
+    init_uct_listener_info(g_rma_context, "qib0:1", "rc_verbs", false, &g_respond_info);
 
     status = uct_iface_set_am_handler(g_request_info.iface, AM_ID_RMA_RESPOND, am_rma_respond_listener, NULL, 0);
     assert(status == UCS_OK);

@@ -112,9 +112,11 @@ static ucs_status_t am_client_addr_listener(void *arg, void *data, size_t length
 }
 
 void handle_one_task(rpc_task_t* task) {
+    pthread_mutex_lock(&g_progress_lock);
     uct_ep_h ep;
     uct_ep_create_connect(g_info.iface, g_info.client_dev_addrs[task->client_rank],
                           g_info.client_iface_addrs[task->client_rank], &ep);
+    pthread_mutex_unlock(&g_progress_lock);
 
     task->respond = (*user_am_data_handler)(task->id, task->data, &task->respond_len);
 
@@ -125,7 +127,7 @@ void handle_one_task(rpc_task_t* task) {
             id = AM_ID_QUERY_RESPOND;
         if(task->id == AM_ID_POST_REQUEST)
             id = AM_ID_POST_RESPOND;
-        do_uct_am_short(&g_progress_lock, ep, id, 0, NULL, 0);
+        do_uct_am_short(&g_progress_lock, ep, id, 0, task->respond, task->respond_len);
         free(task->respond);
     }
 
@@ -165,7 +167,9 @@ void tangram_ucx_server_init(const char* persist_dir) {
     ucs_status_t status;
     ucs_async_context_create(UCS_ASYNC_MODE_THREAD_SPINLOCK, &g_server_context);
 
-    init_uct_listener_info(g_server_context, "enp6s0", "tcp", true, &g_info);
+    //init_uct_listener_info(g_server_context, "enp6s0", "tcp", true, &g_info);
+    init_uct_listener_info(g_server_context, "hsi0", "tcp", true, &g_info);
+    //init_uct_listener_info(g_server_context, "qib0:1", "ud_verbs", true, &g_info);
 
     status = uct_iface_set_am_handler(g_info.iface, AM_ID_QUERY_REQUEST, am_query_listener, NULL, 0);
     assert(status == UCS_OK);

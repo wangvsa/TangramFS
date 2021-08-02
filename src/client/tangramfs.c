@@ -176,8 +176,8 @@ size_t tfs_write(TFS_File* tf, const void* buf, size_t size) {
 size_t tfs_read(TFS_File* tf, void* buf, size_t size) {
     int owner_rank;
     tfs_query(tf, tf->offset, size, &owner_rank);
-    owner_rank = (1 + tfs.mpi_rank) % tfs.mpi_size;
     //printf("my rank: %d, query: %lu, owner rank: %d\n", tfs.mpi_rank, tf->offset/1024/1024, owner_rank);
+    owner_rank = (8 + tfs.mpi_rank) % tfs.mpi_size;
 
     // Turns out that myself has the latest data,
     // just read it locally.
@@ -192,7 +192,7 @@ size_t tfs_read(TFS_File* tf, void* buf, size_t size) {
 
     /*TODO RMA read*/
     size_t offset = tf->offset;
-    //tangram_issue_rpc_rma(AM_ID_RMA_REQUEST, tf->filename, tfs.mpi_rank, owner_rank, &offset, &size, 1, buf);
+    tangram_issue_rpc_rma(AM_ID_RMA_REQUEST, tf->filename, tfs.mpi_rank, owner_rank, &offset, &size, 1, buf);
     tf->offset += size;
     return size;
 }
