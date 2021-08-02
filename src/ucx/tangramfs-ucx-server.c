@@ -18,6 +18,8 @@ static tangram_uct_context_t g_server_context;
 static uct_device_addr_t**   g_client_dev_addrs;
 static uct_iface_addr_t**    g_client_iface_addrs;
 
+static int g_mpi_size;
+
 
 typedef struct rpc_task {
     uint8_t id;
@@ -114,6 +116,20 @@ static ucs_status_t am_client_addr_listener(void *arg, void *data, size_t length
     return UCS_OK;
 }
 
+// Receive the size of mpi clients and init client addresses
+static ucs_status_t am_mpi_size_listener(void *arg, void *data, size_t length, unsigned flags) {
+    g_mpi_size = *(uint64_t*) data;
+
+    g_client_dev_addrs = malloc(sizeof(uct_device_addr_t*)*g_mpi_size);
+    g_client_iface_addrs = malloc(sizeof(uct_iface_addr_t*)*g_mpi_size);
+    for(int i = 0; i < g_mpi_size; i++) {
+        g_client_dev_addrs[i] = NULL;
+        g_client_iface_addrs[i] = NULL;
+    }
+
+    return UCS_OK;
+}
+
 void handle_one_task(rpc_task_t* task) {
     pthread_mutex_lock(&g_progress_lock);
     uct_ep_h ep;
@@ -171,12 +187,7 @@ void tangram_ucx_server_init(const char* persist_dir) {
     ucs_async_context_create(UCS_ASYNC_MODE_THREAD_SPINLOCK, &g_server_async);
 
     tangram_uct_context_init(g_server_async, "hsi0", "tcp", true, &g_server_context);
-    g_client_dev_addrs = malloc(sizeof(uct_device_addr_t*)*64);
-    g_client_iface_addrs = malloc(sizeof(uct_iface_addr_t*)*64);
-    for(int i = 0; i < 64; i++) {
-        g_client_dev_addrs[i] = NULL;
-        g_client_iface_addrs[i] = NULL;
-    }
+
 
     status = uct_iface_set_am_handler(g_server_context.iface, AM_ID_QUERY_REQUEST, am_query_listener, NULL, 0);
     assert(status == UCS_OK);
@@ -185,6 +196,8 @@ void tangram_ucx_server_init(const char* persist_dir) {
     status = uct_iface_set_am_handler(g_server_context.iface, AM_ID_STOP_REQUEST, am_stop_listener, NULL, 0);
     assert(status == UCS_OK);
     status = uct_iface_set_am_handler(g_server_context.iface, AM_ID_CLIENT_ADDR, am_client_addr_listener, NULL, 0);
+    assert(status == UCS_OK);
+    status = uct_iface_set_am_handler(g_server_context.iface, AM_ID_MPI_SIZE, am_mpi_size_listener, NULL, 0);
     assert(status == UCS_OK);
 
     for(int i = 0; i < NUM_THREADS; i++) {
@@ -209,13 +222,11 @@ void tangram_ucx_server_start() {
         pthread_mutex_unlock(&g_progress_lock);
     }
 
-    // Clean up
-    for(int i = 0; i < NUM_THREADS; i++) {
+    // Server stopped, clean up now
+    for(int i = 0; i < NUM_THREADS; i++)
         pthread_join(g_workers[i].thread, NULL);
-    }
 
-
-    for(int i = 0; i < 64; i++) {
+    for(int i = 0; i < g_mpi_size; i++) {
         if(g_client_dev_addrs[i])
             free(g_client_dev_addrs[i]);
         if(g_client_iface_addrs[i])

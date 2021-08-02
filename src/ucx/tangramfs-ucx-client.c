@@ -103,12 +103,23 @@ void tangram_ucx_send_peer(uint8_t id, int dest, void* data, size_t length) {
     pthread_mutex_unlock(&g_sendpeer_lock);
 }
 
-void tangram_ucx_stop_server() {
+/**
+ * Send to server a short message with only header
+ * And do not require a resopnd from server
+ *
+ * This is used to send server the mpi size, and stop server signal
+ */
+void tangram_ucx_send_server(uint8_t id, int header) {
     uct_ep_h ep;
     uct_ep_create_connect(g_send_context.iface, g_send_context.server_dev_addr, g_send_context.server_iface_addr, &ep);
-    do_uct_am_short_progress(g_send_context.worker, ep, AM_ID_STOP_REQUEST, g_mpi_rank, NULL, 0);
+    do_uct_am_short_progress(g_send_context.worker, ep, id, header, NULL, 0);
     uct_ep_destroy(ep);
 }
+
+void tangram_ucx_stop_server() {
+    tangram_ucx_send_server(AM_ID_STOP_REQUEST, g_mpi_rank);
+}
+
 
 void send_address_to_server() {
     uct_ep_h ep;
@@ -152,6 +163,10 @@ void tangram_ucx_rpc_service_start(const char* persist_dir) {
     assert(status == UCS_OK);
 
     pthread_create(&g_client_progress_thread, NULL, client_progress_loop, NULL);
+
+    if(g_mpi_rank == 0)
+        tangram_ucx_send_server(AM_ID_MPI_SIZE, g_mpi_size);
+    MPI_Barrier(MPI_COMM_WORLD);
 
     send_address_to_server();
 }

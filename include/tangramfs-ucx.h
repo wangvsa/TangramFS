@@ -15,6 +15,7 @@
 #define AM_ID_STOP_REQUEST   8
 #define AM_ID_STOP_RESPOND   9
 #define AM_ID_CLIENT_ADDR    10
+#define AM_ID_MPI_SIZE       11
 
 
 // Server
