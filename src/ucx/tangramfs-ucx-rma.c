@@ -15,7 +15,7 @@ static int                  g_mpi_rank, g_mpi_size;
 
 static volatile bool        g_received_respond = false;
 static volatile bool        g_received_ep_addr = false;
-uct_ep_addr_t*              g_peer_ep_addr;
+static uct_ep_addr_t*       g_peer_ep_addr;
 
 
 static ucs_async_context_t* g_rma_async;
@@ -24,6 +24,9 @@ static tangram_uct_context_t  g_request_context;
 static tangram_uct_context_t  g_respond_context;
 uct_device_addr_t**         g_respond_dev_addrs;
 uct_device_addr_t**         g_request_dev_addrs;
+
+
+uct_ep_h g_request_ep;
 
 
 typedef struct zcopy_comp {
@@ -140,7 +143,8 @@ void do_am_zcopy(uct_ep_h ep, tangram_uct_context_t* info, uint8_t id, void* dat
     }
 }
 
-void do_put_zcopy(uct_ep_h ep, tangram_uct_context_t* info, uint64_t remote_addr, uct_rkey_t rkey, void* buf, size_t buf_len) {
+void do_put_zcopy(uct_ep_h ep, tangram_uct_context_t* info, uint64_t remote_addr,
+                    uct_rkey_t rkey, void* buf, size_t buf_len) {
     uct_iov_t iov;
     zcopy_comp_t comp;
     build_iov_and_zcopy_comp(&iov, &comp, info, buf, buf_len);
@@ -159,6 +163,7 @@ void do_put_zcopy(uct_ep_h ep, tangram_uct_context_t* info, uint64_t remote_addr
 }
 
 void* rma_respond(void* data) {
+    double t1 = MPI_Wtime();
     int dest_rank;
     uint64_t remote_addr;
     size_t rkey_buf_size, user_arg_size;
@@ -201,6 +206,8 @@ void* rma_respond(void* data) {
     ep_create_get_address(&g_respond_context, &ep, ep_addr);
 
     tangram_ucx_send_peer(AM_ID_RMA_EP_ADDR, dest_rank, ep_addr, g_respond_context.iface_attr.ep_addr_len);
+    double t2 = MPI_Wtime();
+    //printf("%d, send back ep addr time: %.4f\n", g_mpi_rank, t2-t1);
 
     ucs_status_t status = uct_ep_connect_to_ep(ep, g_request_dev_addrs[dest_rank], peer_ep_addr);
     assert(status == UCS_OK);
@@ -238,7 +245,7 @@ void set_peer_ep_addr(uct_ep_addr_t* peer_ep_addr) {
  * (3) send my rkey
  * (4) wait for ack
  *
- * void* recv_buf is the user's buffer in tfs_read()
+ * void* recv_buf is the user's buffer in fs_read()
  * we will check if it is page-aligned, if so we
  * will use it directly for RMA.
  * if not we let UCX to allocate memory for RMA
@@ -249,11 +256,10 @@ void set_peer_ep_addr(uct_ep_addr_t* peer_ep_addr) {
 void tangram_ucx_rma_request(int dest_rank, void* user_arg, size_t user_arg_size, void* recv_buf, size_t recv_size) {
     ucs_status_t status;
     // TODO: should directly put data to user's buffer
-    g_received_respond = false;
 
-    uct_ep_h ep;
+    //uct_ep_h ep;
     uct_ep_addr_t* ep_addr = alloca(g_request_context.iface_attr.ep_addr_len);
-    ep_create_get_address(&g_request_context, &ep, ep_addr);
+    ep_create_get_address(&g_request_context, &g_request_ep, ep_addr);
 
     uct_mem_alloc_params_t params;
     params.field_mask = UCT_MEM_ALLOC_PARAM_FIELD_ADDRESS  |
@@ -267,9 +273,8 @@ void tangram_ucx_rma_request(int dest_rank, void* user_arg, size_t user_arg_size
     assert(mem.address && status == UCS_OK);
 
     uct_mem_h memh;
-    if(mem.method != UCT_ALLOC_METHOD_MD) {
+    if(mem.method != UCT_ALLOC_METHOD_MD)
         uct_md_mem_reg(g_request_context.md, mem.address, mem.length, UCT_MD_MEM_ACCESS_RMA, &memh);
-    }
 
     // pack rkey buf
     void* rkey_buf = alloca(g_request_context.md_attr.rkey_packed_size);
@@ -285,25 +290,33 @@ void tangram_ucx_rma_request(int dest_rank, void* user_arg, size_t user_arg_size
     g_peer_ep_addr = NULL;
     tangram_ucx_send_peer(AM_ID_RMA_REQUEST, dest_rank, sendbuf, sendbuf_size);
 
+    double t1 = MPI_Wtime();
     // Wait for the peer to send back its ep addr
     while(!g_received_ep_addr) {
     }
 
-    status = uct_ep_connect_to_ep(ep, g_respond_dev_addrs[dest_rank], g_peer_ep_addr);
+    assert(g_peer_ep_addr);
+    status = uct_ep_connect_to_ep(g_request_ep, g_respond_dev_addrs[dest_rank], g_peer_ep_addr);
     assert(status == UCS_OK);
+    free(g_peer_ep_addr);
 
+    double t2 = MPI_Wtime();
     // Wait for the peer to finish its rma put
     while(!g_received_respond) {
         uct_worker_progress(g_request_context.worker);
     }
     // Now we should have the data ready
     memcpy(recv_buf, mem.address, recv_size);
+    double t3 = MPI_Wtime();
 
-    uct_ep_destroy(ep);
+    //uct_ep_destroy(g_request_ep);
 
     if(mem.method != UCT_ALLOC_METHOD_MD)
         uct_md_mem_dereg(g_request_context.md, memh);
     uct_mem_free(&mem);
+
+    double t4= MPI_Wtime();
+    //printf("%d, rma time: %.4f, %.4f, %.4f\n", g_mpi_rank, t2-t1, t3-t2, t4-t3);
 }
 
 void tangram_ucx_rma_service_start(void* (serve_rma_data)(void*, size_t*)) {
@@ -317,6 +330,8 @@ void tangram_ucx_rma_service_start(void* (serve_rma_data)(void*, size_t*)) {
 
     tangram_uct_context_init(g_rma_async, "qib0:1", "rc_verbs", false, &g_request_context);
     tangram_uct_context_init(g_rma_async, "qib0:1", "rc_verbs", false, &g_respond_context);
+    //tangram_uct_context_init(g_rma_async, "hsi1", "tcp", false, &g_request_context);
+    //tangram_uct_context_init(g_rma_async, "hsi1", "tcp", false, &g_respond_context);
 
     g_respond_dev_addrs = malloc(g_mpi_size * sizeof(uct_device_addr_t*));
     g_request_dev_addrs = malloc(g_mpi_size * sizeof(uct_device_addr_t*));
@@ -329,6 +344,8 @@ void tangram_ucx_rma_service_start(void* (serve_rma_data)(void*, size_t*)) {
 
 void tangram_ucx_rma_service_stop() {
     MPI_Barrier(MPI_COMM_WORLD);
+
+    uct_ep_destroy(g_request_ep);
 
     for(int i = 0; i < g_mpi_size; i++) {
         free(g_respond_dev_addrs[i]);

@@ -95,9 +95,9 @@ void tangram_ucx_send_peer(uint8_t id, int dest, void* data, size_t length) {
 
     do_uct_am_short_progress(g_send_context.worker, ep, id, g_mpi_rank, data, length);
 
-    uct_iface_fence(g_send_context.iface, 0);
-    ucs_status_t status = uct_ep_flush(ep, UCT_FLUSH_FLAG_LOCAL, NULL);
-    assert(status == UCS_OK);
+    //uct_iface_fence(g_send_context.iface, 0);
+    //ucs_status_t status = uct_ep_flush(ep, UCT_FLUSH_FLAG_LOCAL, NULL);
+    //assert(status == UCS_OK);
     uct_ep_destroy(ep);
 
     pthread_mutex_unlock(&g_sendpeer_lock);

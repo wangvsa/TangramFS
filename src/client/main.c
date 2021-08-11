@@ -11,17 +11,17 @@
 
 #define MB (1024*1024)
 
-static size_t DATA_SIZE = 1*MB;
+static size_t DATA_SIZE = 2*MB;
 static int N = 1;
 
-int size, rank;
+int mpi_size, mpi_rank;
 double write_bandwidth, read_bandwidth;
 
 void write_phase() {
     TFS_File* tf = tfs_open("./test.txt");
 
     char* data = malloc(sizeof(char)*DATA_SIZE);
-    size_t offset = rank*DATA_SIZE*N;
+    size_t offset = mpi_rank*DATA_SIZE*N;
 
     MPI_Barrier(MPI_COMM_WORLD);
     double tstart = MPI_Wtime();
@@ -36,7 +36,7 @@ void write_phase() {
     MPI_Barrier(MPI_COMM_WORLD);
     double tend = MPI_Wtime();
 
-    write_bandwidth = DATA_SIZE/MB*size*N/(tend-tstart);
+    write_bandwidth = 1.0*DATA_SIZE*mpi_size*N/MB/(tend-tstart);
 
     free(data);
     tfs_close(tf);
@@ -49,7 +49,7 @@ void read_phase() {
     char* data = malloc(sizeof(char)*DATA_SIZE);
 
     // read neighbor rank's data
-    int neighbor_rank = (rank + 8) % size;
+    int neighbor_rank = (mpi_rank + 8) % mpi_size;
     size_t offset = neighbor_rank * DATA_SIZE * N;
     tfs_seek(tf, offset, SEEK_SET);
 
@@ -62,7 +62,7 @@ void read_phase() {
     MPI_Barrier(MPI_COMM_WORLD);
     double tend = MPI_Wtime();
 
-    read_bandwidth = DATA_SIZE/MB*size*N/(tend-tstart);
+    read_bandwidth = 1.0*DATA_SIZE/MB*mpi_size*N/(tend-tstart);
 
     free(data);
     tfs_close(tf);
@@ -82,8 +82,8 @@ int main(int argc, char* argv[]) {
     //signal(SIGSEGV, error_handler);
 
     MPI_Init(&argc, &argv);
-    MPI_Comm_size(MPI_COMM_WORLD, &size);
-    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    MPI_Comm_size(MPI_COMM_WORLD, &mpi_size);
+    MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
 
     tfs_init("./", "/l/ssd");
     //tfs_init("./", "/tmp");
@@ -98,7 +98,8 @@ int main(int argc, char* argv[]) {
         read_phase();
     }
 
-    if(rank == 0) {
+    MPI_Barrier(MPI_COMM_WORLD);
+    if(mpi_rank == 0) {
         printf("Write Bandwidth: %.2f MB/s\t\tRead Bandwidth: %.2f\n", write_bandwidth, read_bandwidth);
     }
 
