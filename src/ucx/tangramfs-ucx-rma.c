@@ -309,7 +309,7 @@ void tangram_ucx_rma_request(int dest_rank, void* user_arg, size_t user_arg_size
     memcpy(recv_buf, mem.address, recv_size);
     double t3 = MPI_Wtime();
 
-    //uct_ep_destroy(g_request_ep);
+    uct_ep_destroy(g_request_ep);
 
     if(mem.method != UCT_ALLOC_METHOD_MD)
         uct_md_mem_dereg(g_request_context.md, memh);
@@ -328,10 +328,10 @@ void tangram_ucx_rma_service_start(void* (serve_rma_data)(void*, size_t*)) {
     ucs_status_t status;
     ucs_async_context_create(UCS_ASYNC_MODE_THREAD_SPINLOCK, &g_rma_async);
 
-    tangram_uct_context_init(g_rma_async, "qib0:1", "rc_verbs", false, &g_request_context);
-    tangram_uct_context_init(g_rma_async, "qib0:1", "rc_verbs", false, &g_respond_context);
-    //tangram_uct_context_init(g_rma_async, "hsi1", "tcp", false, &g_request_context);
-    //tangram_uct_context_init(g_rma_async, "hsi1", "tcp", false, &g_respond_context);
+    //tangram_uct_context_init(g_rma_async, "qib0:1", "rc_verbs", false, &g_request_context);
+    //tangram_uct_context_init(g_rma_async, "qib0:1", "rc_verbs", false, &g_respond_context);
+    tangram_uct_context_init(g_rma_async, "hsi1", "tcp", false, &g_request_context);
+    tangram_uct_context_init(g_rma_async, "hsi1", "tcp", false, &g_respond_context);
 
     g_respond_dev_addrs = malloc(g_mpi_size * sizeof(uct_device_addr_t*));
     g_request_dev_addrs = malloc(g_mpi_size * sizeof(uct_device_addr_t*));
@@ -344,8 +344,6 @@ void tangram_ucx_rma_service_start(void* (serve_rma_data)(void*, size_t*)) {
 
 void tangram_ucx_rma_service_stop() {
     MPI_Barrier(MPI_COMM_WORLD);
-
-    uct_ep_destroy(g_request_ep);
 
     for(int i = 0; i < g_mpi_size; i++) {
         free(g_respond_dev_addrs[i]);

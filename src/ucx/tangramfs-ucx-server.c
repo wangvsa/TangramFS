@@ -133,13 +133,13 @@ static ucs_status_t am_mpi_size_listener(void *arg, void *data, size_t length, u
 void handle_one_task(rpc_task_t* task) {
     pthread_mutex_lock(&g_progress_lock);
     uct_ep_h ep;
+
     uct_ep_create_connect(g_server_context.iface, g_client_dev_addrs[task->client_rank],
                           g_client_iface_addrs[task->client_rank], &ep);
     pthread_mutex_unlock(&g_progress_lock);
 
     task->respond = (*user_am_data_handler)(task->id, task->data, &task->respond_len);
 
-    // TODO Send respond to client
     if(task->respond) {
         uint8_t id;
         if(task->id == AM_ID_QUERY_REQUEST)
@@ -150,7 +150,9 @@ void handle_one_task(rpc_task_t* task) {
         free(task->respond);
     }
 
+    pthread_mutex_lock(&g_progress_lock);
     uct_ep_destroy(ep);
+    pthread_mutex_unlock(&g_progress_lock);
 }
 
 void* rpc_task_worker_func(void* arg) {
