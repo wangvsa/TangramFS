@@ -30,10 +30,9 @@ pthread_mutex_t g_sendpeer_lock = PTHREAD_MUTEX_INITIALIZER;
 
 
 static ucs_status_t am_query_respond_listener(void *arg, void *data, size_t length, unsigned flags) {
-    g_received_respond = true;
-    if(g_server_respond) {
+    if(g_server_respond)
         memcpy(g_server_respond, data+sizeof(uint64_t), length-sizeof(uint64_t));
-    }
+    g_received_respond = true;
     return UCS_OK;
 }
 
