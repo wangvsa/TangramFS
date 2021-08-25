@@ -24,13 +24,12 @@ void tangram_issue_rpc_rma(uint8_t id, char* filename, int my_rank, int dest_ran
     size_t data_size;
     size_t total_recv_size = 0;     // RMA only
     void* user_data = rpc_in_pack(filename, my_rank, num_intervals, offsets, counts, &data_size);
-    int ack;
 
     double t1 = MPI_Wtime();
 
     switch(id) {
         case AM_ID_POST_REQUEST:
-            tangram_ucx_sendrecv(id, user_data, data_size, &ack);
+            tangram_ucx_sendrecv(id, user_data, data_size, respond);
             break;
         case AM_ID_QUERY_REQUEST:
             tangram_ucx_sendrecv(id, user_data, data_size, respond);

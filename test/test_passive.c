@@ -54,10 +54,8 @@ void test_passive_mode() {
 
 
 int main(int argc, char* argv[]) {
-    int provided;
+    MPI_Init(&argc, &argv);
 
-    // Have to use MPI_THREAD_MULTIPLE for Mercury+pthread to work
-    MPI_Init_thread(&argc, &argv, MPI_THREAD_MULTIPLE, &provided);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
 

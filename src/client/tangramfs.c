@@ -42,17 +42,15 @@ void tfs_init(const char* persist_dir, const char* tfs_dir) {
     realpath(persist_dir, tfs.persist_dir);
     realpath(tfs_dir, tfs.tfs_dir);
 
+    tfs.semantics = TANGRAM_STRONG_SEMANTICS;
     const char* semantics_str = getenv("TANGRAM_SEMANTICS");
     if(semantics_str)
         tfs.semantics = atoi(semantics_str);
 
+    tangram_map_real_calls();
     tangram_rpc_service_start("./");
     tangram_rma_service_start(serve_rma_data);
 
-    MAP_OR_FAIL(open);
-    MAP_OR_FAIL(close);
-    MAP_OR_FAIL(fsync);
-    MAP_OR_FAIL(lseek);
     MPI_Barrier(tfs.mpi_comm);
     tfs.initialized = true;
 
@@ -225,7 +223,8 @@ void tfs_post(TFS_File* tf, size_t offset, size_t count) {
     int num_covered;
     Interval** covered = tangram_it_covers(tf->it, offset, count, &num_covered);
 
-    tangram_issue_rpc_rma(AM_ID_POST_REQUEST, tf->filename, tfs.mpi_rank, 0, &offset, &count, 1, NULL);
+    int ack;
+    tangram_issue_rpc_rma(AM_ID_POST_REQUEST, tf->filename, tfs.mpi_rank, 0, &offset, &count, 1, &ack);
 
     int i;
     for(i = 0; i < num_covered; i++)
@@ -234,7 +233,7 @@ void tfs_post(TFS_File* tf, size_t offset, size_t count) {
 }
 
 void tfs_post_all(TFS_File* tf) {
-    int num, i;
+    int num, i, ack;
     Interval** unposted = tangram_it_unposted(tf->it, &num);
 
     size_t offsets[num];
@@ -245,7 +244,7 @@ void tfs_post_all(TFS_File* tf) {
     }
 
     tangram_free(unposted, num*sizeof(Interval*));
-    tangram_issue_rpc_rma(AM_ID_POST_REQUEST, tf->filename, tfs.mpi_rank, 0, offsets, counts, num, NULL);
+    tangram_issue_rpc_rma(AM_ID_POST_REQUEST, tf->filename, tfs.mpi_rank, 0, offsets, counts, num, &ack);
 }
 
 void tfs_query(TFS_File* tf, size_t offset, size_t size, int *out_rank) {

@@ -13,7 +13,7 @@ dist_noinst_SCRIPTS = autogen.sh
 bin_PROGRAMS = main.out server.out server.out
 lib_LTLIBRARIES = libtangramfs.la
 
-AM_CPPFLAGS = -fPIC -I./include -Wno-unused-result -D_LARGEFILE64_SOURCE -DTANGRAM_PRELOADHH
+AM_CPPFLAGS = -fPIC -I./include -Wno-unused-result -D_LARGEFILE64_SOURCE -DTANGRAM_PRELOAD
 
 libtangramfs_la_SOURCES = src/client/tangramfs.c \
 						  src/client/tangramfs-interval-tree.c \
@@ -46,4 +46,4 @@ server_out_SOURCES = src/server/tangramfs-metadata.c \
 					 src/client/tangramfs-rpc.c
 
 server_out_CFLAGS  = -I./include -I${UCX_DIR}/include -std=c99
-server_out_LDADD   = -L${UCX_DIR}/lib -lucp -lucs -luct
+server_out_LDADD   = -L${UCX_DIR}/lib -lucp -lucs -luct -ldl

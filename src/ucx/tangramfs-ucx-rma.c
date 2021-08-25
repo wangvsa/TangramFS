@@ -330,8 +330,10 @@ void tangram_ucx_rma_service_start(void* (serve_rma_data)(void*, size_t*)) {
 
     //tangram_uct_context_init(g_rma_async, "qib0:1", "rc_verbs", false, &g_request_context);
     //tangram_uct_context_init(g_rma_async, "qib0:1", "rc_verbs", false, &g_respond_context);
-    tangram_uct_context_init(g_rma_async, "hsi1", "tcp", false, &g_request_context);
-    tangram_uct_context_init(g_rma_async, "hsi1", "tcp", false, &g_respond_context);
+    //tangram_uct_context_init(g_rma_async, "hsi1", "tcp", false, &g_request_context);
+    //tangram_uct_context_init(g_rma_async, "hsi1", "tcp", false, &g_respond_context);
+    tangram_uct_context_init(g_rma_async, "enp6s0", "tcp", false, &g_request_context);
+    tangram_uct_context_init(g_rma_async, "enp6s0", "tcp", false, &g_respond_context);
 
     g_respond_dev_addrs = malloc(g_mpi_size * sizeof(uct_device_addr_t*));
     g_request_dev_addrs = malloc(g_mpi_size * sizeof(uct_device_addr_t*));

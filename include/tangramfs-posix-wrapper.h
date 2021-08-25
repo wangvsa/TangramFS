@@ -1,7 +1,14 @@
 #ifndef _TANGRAMFS_POSIX_WRAPPER_H_
 #define _TANGRAMFS_POSIX_WRAPPER_H_
+#include <unistd.h>
+#include <sys/stat.h>
 #include <dlfcn.h>
 #include <fcntl.h>
+
+/**
+ * Note, whoever include this header file need to
+ * put #define _GNU_SOURCE as their first line
+ */
 
 #ifdef TANGRAM_PRELOAD
     #define TANGRAM_WRAP(func) func
@@ -15,7 +22,7 @@
         }                                                                   \
     }
 
-    #define TANGRAM_DECL_REAL_CALL(name, ret, args) ret(*__real_##name) args;
+    #define TANGRAM_DECL_REAL_CALL(name, ret, args)  ret(*__real_##name) args;
 
     /*
     * Call the real funciton
@@ -48,5 +55,22 @@ TANGRAM_DECL_REAL_CALL(close, int, (int fd));
 TANGRAM_DECL_REAL_CALL(fsync, int, (int fd));
 TANGRAM_DECL_REAL_CALL(__xstat, int, (int vers, const char* path, struct stat* buf));
 
-#endif
 
+static inline
+void tangram_map_real_calls() {
+    MAP_OR_FAIL(fopen);
+    MAP_OR_FAIL(fseek);
+    MAP_OR_FAIL(fwrite);
+    MAP_OR_FAIL(fread);
+    MAP_OR_FAIL(fclose);
+    MAP_OR_FAIL(open);
+    MAP_OR_FAIL(open64);
+    MAP_OR_FAIL(lseek);
+    MAP_OR_FAIL(write);
+    MAP_OR_FAIL(read);
+    MAP_OR_FAIL(close);
+    MAP_OR_FAIL(fsync);
+    MAP_OR_FAIL(__xstat);
+}
+
+#endif

@@ -47,7 +47,6 @@ int main(int argc, char* argv[]) {
     MPI_Init(&argc, &argv);
 
     if( strcmp(argv[1], "start") == 0 ) {
-
         tangram_ucx_server_init("./");
         printf("Server started\n");
         tangram_ucx_server_register_rpc(rpc_handler);

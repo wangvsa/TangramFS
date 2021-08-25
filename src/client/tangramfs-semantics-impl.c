@@ -30,6 +30,6 @@ int tangram_commit_impl(TFS_File* tf) {
 
 int tangram_close_impl(TFS_File *tf) {
     // For all three semantics
-    tfs_post_all(tf);
+    //tfs_post_all(tf);
     return tfs_close(tf);
 }

@@ -27,17 +27,22 @@ static uct_iface_addr_t**  g_peer_iface_addrs;
 
 static pthread_t g_client_progress_thread;
 pthread_mutex_t g_sendpeer_lock = PTHREAD_MUTEX_INITIALIZER;
+pthread_cond_t  g_server_respond_cond = PTHREAD_COND_INITIALIZER;
 
 
 static ucs_status_t am_query_respond_listener(void *arg, void *data, size_t length, unsigned flags) {
     if(g_server_respond)
         memcpy(g_server_respond, data+sizeof(uint64_t), length-sizeof(uint64_t));
     g_received_respond = true;
+    pthread_cond_signal(&g_server_respond_cond);
     return UCS_OK;
 }
 
 static ucs_status_t am_post_respond_listener(void *arg, void *data, size_t length, unsigned flags) {
+    if(g_server_respond)
+        memcpy(g_server_respond, data+sizeof(uint64_t), length-sizeof(uint64_t));
     g_received_respond = true;
+    pthread_cond_signal(&g_server_respond_cond);
     return UCS_OK;
 }
 
@@ -75,9 +80,10 @@ void tangram_ucx_sendrecv(uint8_t id, void* data, size_t length, void* respond) 
     uct_ep_h ep;
     uct_ep_create_connect(g_send_context.iface, g_send_context.server_dev_addr, g_send_context.server_iface_addr, &ep);
 
+    // TODO not sure if the cond is necessary
     do_uct_am_short_progress(g_send_context.worker, ep, id, g_mpi_rank, data, length);
-    while(!g_received_respond) {
-    }
+    while(!g_received_respond)
+        pthread_cond_wait(&g_server_respond_cond, &g_sendpeer_lock);
 
     uct_ep_destroy(ep);
     pthread_mutex_unlock(&g_sendpeer_lock);
@@ -93,7 +99,6 @@ void tangram_ucx_send_peer(uint8_t id, int dest, void* data, size_t length) {
     uct_ep_create_connect(g_send_context.iface, g_peer_dev_addrs[dest], g_peer_iface_addrs[dest], &ep);
 
     do_uct_am_short_progress(g_send_context.worker, ep, id, g_mpi_rank, data, length);
-
     //uct_iface_fence(g_send_context.iface, 0);
     //ucs_status_t status = uct_ep_flush(ep, UCT_FLUSH_FLAG_LOCAL, NULL);
     //assert(status == UCS_OK);
@@ -109,10 +114,12 @@ void tangram_ucx_send_peer(uint8_t id, int dest, void* data, size_t length) {
  * This is used to send server the mpi size, and stop server signal
  */
 void tangram_ucx_send_server(uint8_t id, int header) {
+    pthread_mutex_lock(&g_sendpeer_lock);
     uct_ep_h ep;
     uct_ep_create_connect(g_send_context.iface, g_send_context.server_dev_addr, g_send_context.server_iface_addr, &ep);
     do_uct_am_short_progress(g_send_context.worker, ep, id, header, NULL, 0);
     uct_ep_destroy(ep);
+    pthread_mutex_unlock(&g_sendpeer_lock);
 }
 
 void tangram_ucx_stop_server() {
@@ -147,8 +154,10 @@ void tangram_ucx_rpc_service_start(const char* persist_dir) {
     ucs_status_t status;
     ucs_async_context_create(UCS_ASYNC_MODE_THREAD_SPINLOCK, &g_client_async);
 
-    tangram_uct_context_init(g_client_async, "hsi0", "tcp", false, &g_send_context);
-    tangram_uct_context_init(g_client_async, "hsi0", "tcp", false, &g_recv_context);
+    //tangram_uct_context_init(g_client_async, "hsi0", "tcp", false, &g_send_context);
+    //tangram_uct_context_init(g_client_async, "hsi0", "tcp", false, &g_recv_context);
+    tangram_uct_context_init(g_client_async, "enp6s0", "tcp", false, &g_send_context);
+    tangram_uct_context_init(g_client_async, "enp6s0", "tcp", false, &g_recv_context);
 
     g_peer_dev_addrs   = malloc(g_mpi_size * sizeof(uct_device_addr_t*));
     g_peer_iface_addrs = malloc(g_mpi_size * sizeof(uct_iface_addr_t*));
