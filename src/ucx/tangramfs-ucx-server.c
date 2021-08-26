@@ -11,16 +11,17 @@
 
 #define NUM_THREADS 8
 
-volatile static bool g_server_running = true;
-static ucs_async_context_t  *g_server_async;
+volatile static bool         g_server_running = true;
+static int                   g_mpi_size;
+static ucs_async_context_t*  g_server_async;
 static tangram_uct_context_t g_server_context;
 
 static uct_device_addr_t**   g_client_dev_addrs;
 static uct_iface_addr_t**    g_client_iface_addrs;
+pthread_mutex_t              g_progress_lock = PTHREAD_MUTEX_INITIALIZER;
 
-static int g_mpi_size;
 
-
+/* Represents one RPC request */
 typedef struct rpc_task {
     uint8_t id;
     void*   respond;
@@ -33,28 +34,33 @@ typedef struct rpc_task {
 } rpc_task_t;
 
 
-struct rpc_task_worker {
+/*
+ * Each worker maintains a FIFO queue of RPC tasks
+ * Server will insert tasks worker's queue in a
+ * round-robin manner.
+ */
+typedef struct rpc_task_worker {
     int tid;
     pthread_t thread;
     pthread_mutex_t lock;
+    pthread_cond_t cond;
     rpc_task_t *tasks;
-};
-
-
-// A thread pool, where each worker handles a list of rpc_task_t*
-static struct rpc_task_worker g_workers[NUM_THREADS];
+} rpc_task_worker_t;
+static rpc_task_worker_t g_workers[NUM_THREADS];
 static int who = 0;
-
-// progress lock
-pthread_mutex_t g_progress_lock = PTHREAD_MUTEX_INITIALIZER;
 
 
 void* (*user_am_data_handler)(int8_t, void* data, size_t *respond_len);
 
 
+/**
+ * Insert a task into one worker's task queue,
+ * then notify that worker.
+ *
+ * uint64_t is the header in am_short();
+ *  we use it to send client rank
+ */
 void append_task(uint8_t id, void* data, size_t length) {
-    // uint64_t is the header in am_short();
-    // we use it to send client rank
 
     rpc_task_t *task = malloc(sizeof(rpc_task_t));
     task->id = id;
@@ -66,7 +72,7 @@ void append_task(uint8_t id, void* data, size_t length) {
 
     pthread_mutex_lock(&g_workers[who].lock);
     DL_APPEND(g_workers[who].tasks, task);
-    assert(g_workers[who].tasks != NULL);
+    pthread_cond_signal(&g_workers[who].cond);
     pthread_mutex_unlock(&g_workers[who].lock);
 }
 
@@ -157,20 +163,31 @@ void handle_one_task(rpc_task_t* task) {
 
 void* rpc_task_worker_func(void* arg) {
     int tid = *((int*)arg);
-    rpc_task_t *task = NULL;
+    rpc_task_worker_t *me = &g_workers[tid];
+
     while(g_server_running) {
 
-        pthread_mutex_lock(&g_workers[tid].lock);
-        task = g_workers[tid].tasks;
-        if(task)
-            DL_DELETE(g_workers[tid].tasks, task);
-        pthread_mutex_unlock(&g_workers[tid].lock);
+        pthread_mutex_lock(&me->lock);
 
-        if(task) {
-            handle_one_task(task);
-            free(task->data);
-            free(task);
-        }
+        // If no task available, go to sleep
+        // Server will insert a task and wake us up later.
+        if (me->tasks == NULL)
+            pthread_cond_wait(&me->cond, &me->lock);
+
+        // Possible get the signal because server stoped
+        if (!g_server_running)
+            break;
+
+        // FIFO manner
+        rpc_task_t *task = me->tasks;
+        assert(task != NULL);
+        DL_DELETE(me->tasks, task);
+
+        pthread_mutex_unlock(&me->lock);
+
+        handle_one_task(task);
+        free(task->data);
+        free(task);
     }
 
     // At this point, we should have handled all tasks.
@@ -178,9 +195,6 @@ void* rpc_task_worker_func(void* arg) {
     //
     // But it is possible that client stoped the server
     // before all their requests have been finished.
-    int count;
-    DL_COUNT(g_workers[tid].tasks, task, count);
-    assert(count == 0);
 }
 
 
@@ -226,8 +240,10 @@ void tangram_ucx_server_start() {
     }
 
     // Server stopped, clean up now
-    for(int i = 0; i < NUM_THREADS; i++)
+    for(int i = 0; i < NUM_THREADS; i++) {
+        pthread_cond_signal(&g_workers[i].cond);
         pthread_join(g_workers[i].thread, NULL);
+    }
 
     for(int i = 0; i < g_mpi_size; i++) {
         if(g_client_dev_addrs[i])
