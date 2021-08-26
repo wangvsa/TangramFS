@@ -124,7 +124,7 @@ void build_iov_and_zcopy_comp(uct_iov_t *iov, zcopy_comp_t *comp, tangram_uct_co
     comp->memh            = iov->memh;
 }
 
-// User am zcopy as qib0:1/rc_verbs does not support am short.
+// Use am zcopy as qib0:1/rc_verbs does not support am short.
 void do_am_zcopy(uct_ep_h ep, tangram_uct_context_t* info, uint8_t id, void* data, size_t len) {
     uct_iov_t iov;
     zcopy_comp_t comp;
@@ -196,11 +196,9 @@ void* rma_respond(void* data) {
     pos += sizeof(size_t);
     user_arg = data+pos;
 
-    // Get rkey
-    uct_rkey_bundle_t rkey_ob;
-    uct_rkey_unpack(g_respond_context.component, rkey_buf, &rkey_ob);
 
     // First send back my ep address
+    ucs_status_t status;
     uct_ep_h ep;
     uct_ep_addr_t* ep_addr = alloca(g_respond_context.iface_attr.ep_addr_len);
     ep_create_get_address(&g_respond_context, &ep, ep_addr);
@@ -209,7 +207,12 @@ void* rma_respond(void* data) {
     double t2 = MPI_Wtime();
     //printf("%d, send back ep addr time: %.4f\n", g_mpi_rank, t2-t1);
 
-    ucs_status_t status = uct_ep_connect_to_ep(ep, g_request_dev_addrs[dest_rank], peer_ep_addr);
+    status = uct_ep_connect_to_ep(ep, g_request_dev_addrs[dest_rank], peer_ep_addr);
+    assert(status == UCS_OK);
+
+    // Get rkey
+    uct_rkey_bundle_t rkey_ob;
+    status = uct_rkey_unpack(g_respond_context.component, rkey_buf, &rkey_ob);
     assert(status == UCS_OK);
 
     // RMA
@@ -221,9 +224,8 @@ void* rma_respond(void* data) {
     int garbage_data;
     do_am_zcopy(ep, &g_respond_context, AM_ID_RMA_RESPOND, &garbage_data, sizeof(int));
 
-    uct_ep_destroy(ep);
-
     uct_rkey_release(g_respond_context.component, &rkey_ob);
+    uct_ep_destroy(ep);
     free(buf);
     return NULL;
 }

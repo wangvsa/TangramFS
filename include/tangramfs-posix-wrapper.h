@@ -22,7 +22,7 @@
         }                                                                   \
     }
 
-    #define TANGRAM_DECL_REAL_CALL(name, ret, args)  ret(*__real_##name) args;
+    #define TANGRAM_DECL_REAL_CALL(name, ret, args)  static ret(*__real_##name) args;
 
     /*
     * Call the real funciton
