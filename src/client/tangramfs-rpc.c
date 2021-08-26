@@ -29,10 +29,10 @@ void tangram_issue_rpc_rma(uint8_t id, char* filename, int my_rank, int dest_ran
 
     switch(id) {
         case AM_ID_POST_REQUEST:
-            tangram_ucx_sendrecv(id, user_data, data_size, respond);
+            tangram_ucx_sendrecv_server(id, user_data, data_size, respond);
             break;
         case AM_ID_QUERY_REQUEST:
-            tangram_ucx_sendrecv(id, user_data, data_size, respond);
+            tangram_ucx_sendrecv_server(id, user_data, data_size, respond);
             break;
         case AM_ID_RMA_REQUEST:
             for(int i = 0; i < num_intervals; i++)

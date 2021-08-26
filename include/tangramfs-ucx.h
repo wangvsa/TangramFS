@@ -24,8 +24,8 @@ void tangram_ucx_server_register_rpc(void* (*user_handler)(int8_t, void*, size_t
 void tangram_ucx_server_start();
 
 // Client
-void tangram_ucx_sendrecv(uint8_t id, void* data, size_t length, void* respond);
-void tangram_ucx_send_peer(uint8_t id, int dest, void* data, size_t length);
+void tangram_ucx_sendrecv_server(uint8_t id, void* data, size_t length, void* respond);
+void tangram_ucx_sendrecv_peer(uint8_t id, int dest, void* data, size_t length, void* respond);
 void tangram_ucx_stop_server();
 void tangram_ucx_rpc_service_start(const char* persist_dir);
 void tangram_ucx_rpc_service_stop();

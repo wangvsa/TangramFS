@@ -9,42 +9,58 @@
 #include "tangramfs-ucx.h"
 #include "tangramfs-ucx-comm.h"
 
-static bool                 g_running = true;
-static int                  g_mpi_rank, g_mpi_size;
+static bool                  g_running = true;
+static int                   g_mpi_rank, g_mpi_size;
 
-
-static void*                g_server_respond;
-static volatile bool        g_received_respond;
 
 static ucs_async_context_t*  g_client_async;
 
-static tangram_uct_context_t g_send_context;
+
+static uct_device_addr_t**   g_peer_dev_addrs;
+static uct_iface_addr_t**    g_peer_iface_addrs;
+
+/*
+ * Dedicated thread to make progress
+ * for the recv_context
+ */
 static tangram_uct_context_t g_recv_context;
-
-static uct_device_addr_t** g_peer_dev_addrs;
-static uct_iface_addr_t**  g_peer_iface_addrs;
+static pthread_t             g_client_progress_thread;
 
 
-static pthread_t g_client_progress_thread;
-pthread_mutex_t g_sendpeer_lock = PTHREAD_MUTEX_INITIALIZER;
-pthread_cond_t  g_server_respond_cond = PTHREAD_COND_INITIALIZER;
+/*
+ * Send RPC calls and wait for the respond.
+ *
+ * Uses send_context.
+ * Only one outgoing RPC request at a time
+ */
+static tangram_uct_context_t g_send_context;
+pthread_mutex_t              g_lock = PTHREAD_MUTEX_INITIALIZER;
+pthread_cond_t               g_cond = PTHREAD_COND_INITIALIZER;
+static void*                 g_server_respond;
+static volatile bool         g_server_respond_flag;
+static void*                 g_peer_respond;
+static volatile bool         g_peer_respond_flag;
 
 
-static ucs_status_t am_query_respond_listener(void *arg, void *data, size_t length, unsigned flags) {
+static inline void copy_respond_and_signal(void* data, size_t length) {
+    pthread_mutex_lock(&g_lock);
     if(g_server_respond)
         memcpy(g_server_respond, data+sizeof(uint64_t), length-sizeof(uint64_t));
-    g_received_respond = true;
-    pthread_cond_signal(&g_server_respond_cond);
+    g_server_respond_flag = true;
+    pthread_cond_signal(&g_cond);
+    pthread_mutex_unlock(&g_lock);
+}
+
+static ucs_status_t am_query_respond_listener(void *arg, void *data, size_t length, unsigned flags) {
+    copy_respond_and_signal(data, length);
     return UCS_OK;
 }
 
 static ucs_status_t am_post_respond_listener(void *arg, void *data, size_t length, unsigned flags) {
-    if(g_server_respond)
-        memcpy(g_server_respond, data+sizeof(uint64_t), length-sizeof(uint64_t));
-    g_received_respond = true;
-    pthread_cond_signal(&g_server_respond_cond);
+    copy_respond_and_signal(data, length);
     return UCS_OK;
 }
+
 
 /* Note this am handler func is called by pthread-progress funciton.
  * we can not do am_send here as no one will perform the progress
@@ -59,9 +75,12 @@ static ucs_status_t am_rma_request_listener(void *arg, void *data, size_t length
 }
 
 static ucs_status_t am_ep_addr_listener(void *arg, void *data, size_t length, unsigned flags) {
-    void* peer_ep_addr = malloc(length-sizeof(uint64_t));
-    memcpy(peer_ep_addr, data+sizeof(uint64_t), length-sizeof(uint64_t));
-    set_peer_ep_addr(peer_ep_addr);
+    pthread_mutex_lock(&g_lock);
+    if (g_peer_respond)
+        memcpy(g_peer_respond, data+sizeof(uint64_t), length-sizeof(uint64_t));
+    g_peer_respond_flag = true;
+    pthread_cond_signal(&g_cond);
+    pthread_mutex_unlock(&g_lock);
     return UCS_OK;
 }
 
@@ -72,54 +91,69 @@ void* client_progress_loop(void* arg) {
     }
 }
 
-void tangram_ucx_sendrecv(uint8_t id, void* data, size_t length, void* respond) {
-    pthread_mutex_lock(&g_sendpeer_lock);
+/**
+ * Send server a RPC request and wait for the respond
+ *
+ * Used to send post/query request
+ */
+void tangram_ucx_sendrecv_server(uint8_t id, void* data, size_t length, void* respond) {
+    pthread_mutex_lock(&g_lock);
     g_server_respond = respond;
-    g_received_respond = false;
+    g_server_respond_flag = false;
 
     uct_ep_h ep;
     uct_ep_create_connect(g_send_context.iface, g_send_context.server_dev_addr, g_send_context.server_iface_addr, &ep);
 
-    // TODO not sure if the cond is necessary
     do_uct_am_short_progress(g_send_context.worker, ep, id, g_mpi_rank, data, length);
-    while(!g_received_respond)
-        pthread_cond_wait(&g_server_respond_cond, &g_sendpeer_lock);
+    while(!g_server_respond_flag)
+        pthread_cond_wait(&g_cond, &g_lock);
 
     uct_ep_destroy(ep);
-    pthread_mutex_unlock(&g_sendpeer_lock);
-}
-
-
-
-void tangram_ucx_send_peer(uint8_t id, int dest, void* data, size_t length) {
-    // TODO how to optimize the mutex lock here?
-    pthread_mutex_lock(&g_sendpeer_lock);
-    uct_ep_h ep;
-
-    uct_ep_create_connect(g_send_context.iface, g_peer_dev_addrs[dest], g_peer_iface_addrs[dest], &ep);
-
-    do_uct_am_short_progress(g_send_context.worker, ep, id, g_mpi_rank, data, length);
-    //uct_iface_fence(g_send_context.iface, 0);
-    //ucs_status_t status = uct_ep_flush(ep, UCT_FLUSH_FLAG_LOCAL, NULL);
-    //assert(status == UCS_OK);
-    uct_ep_destroy(ep);
-
-    pthread_mutex_unlock(&g_sendpeer_lock);
+    pthread_mutex_unlock(&g_lock);
 }
 
 /**
- * Send to server a short message with only header
- * And do not require a resopnd from server
+ * Send other clients a RPC request and wait for the respond
  *
- * This is used to send server the mpi size, and stop server signal
+ * Used to send RMA request
+ */
+void tangram_ucx_sendrecv_peer(uint8_t id, int dest, void* data, size_t length, void* respond) {
+    pthread_mutex_lock(&g_lock);
+    g_peer_respond = respond;
+    g_peer_respond_flag = false;
+
+    uct_ep_h ep;
+    uct_ep_create_connect(g_send_context.iface, g_peer_dev_addrs[dest], g_peer_iface_addrs[dest], &ep);
+
+    do_uct_am_short_progress(g_send_context.worker, ep, id, g_mpi_rank, data, length);
+
+    // Need to wait for a respond
+    if(respond != NULL) {
+        while(!g_peer_respond_flag)
+            pthread_cond_wait(&g_cond, &g_lock);
+    }
+
+    uct_ep_destroy(ep);
+    pthread_mutex_unlock(&g_lock);
+}
+
+
+/**
+ * Send server a short message that contains only the header
+ * Do not require a resopnd from server
+ *
+ * This is used to send server the mpi size, and the stop server signal
  */
 void tangram_ucx_send_server(uint8_t id, int header) {
-    pthread_mutex_lock(&g_sendpeer_lock);
+    pthread_mutex_lock(&g_lock);
+
     uct_ep_h ep;
     uct_ep_create_connect(g_send_context.iface, g_send_context.server_dev_addr, g_send_context.server_iface_addr, &ep);
+
     do_uct_am_short_progress(g_send_context.worker, ep, id, header, NULL, 0);
     uct_ep_destroy(ep);
-    pthread_mutex_unlock(&g_sendpeer_lock);
+
+    pthread_mutex_unlock(&g_lock);
 }
 
 void tangram_ucx_stop_server() {
@@ -135,14 +169,15 @@ void send_address_to_server() {
     memcpy(data+sizeof(size_t)+g_recv_context.iface_attr.device_addr_len, &g_recv_context.iface_attr.iface_addr_len, sizeof(size_t));
     memcpy(data+2*sizeof(size_t)+g_recv_context.iface_attr.device_addr_len, g_recv_context.iface_addr, g_recv_context.iface_attr.iface_addr_len);
 
-    pthread_mutex_lock(&g_sendpeer_lock);
+    pthread_mutex_lock(&g_lock);
 
     uct_ep_h ep;
     uct_ep_create_connect(g_send_context.iface, g_send_context.server_dev_addr, g_send_context.server_iface_addr, &ep);
-    do_uct_am_short_progress(g_send_context.worker, ep, AM_ID_CLIENT_ADDR, g_mpi_rank, data, len);
 
+    do_uct_am_short_progress(g_send_context.worker, ep, AM_ID_CLIENT_ADDR, g_mpi_rank, data, len);
     uct_ep_destroy(ep);
-    pthread_mutex_unlock(&g_sendpeer_lock);
+
+    pthread_mutex_unlock(&g_lock);
 
     free(data);
 }
