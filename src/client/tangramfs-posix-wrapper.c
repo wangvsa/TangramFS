@@ -203,8 +203,6 @@ int TANGRAM_WRAP(fsync)(int fd) {
     return TANGRAM_REAL_CALL(fsync)(fd);
 }
 
-
-
 int TANGRAM_WRAP(__xstat)(int vers, const char *path, struct stat *buf)
 {
     // TODO: stat() call not implemented yet.
@@ -217,9 +215,23 @@ int TANGRAM_WRAP(__xstat)(int vers, const char *path, struct stat *buf)
     return TANGRAM_REAL_CALL(__xstat)(vers, path, buf);
 }
 
+int TANGRAM_WRAP(access)(const char *pathname, int mode) {
+    // TODO
+    if(tangram_should_intercept(pathname)) {
+        return 0;
+    }
+    MAP_OR_FAIL(access);
+    return TANGRAM_REAL_CALL(access)(pathname, mode);
+}
 
-
-
+int TANGRAM_WRAP(unlink)(const char *pathname) {
+    // TODO
+    if(tangram_should_intercept(pathname)) {
+        return 0;
+    }
+    MAP_OR_FAIL(unlink);
+    return TANGRAM_REAL_CALL(unlink)(pathname);
+}
 
 
 int TANGRAM_WRAP(MPI_Init)(int *argc, char ***argv) {
