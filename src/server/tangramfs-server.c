@@ -25,7 +25,6 @@ void* rpc_handler(int8_t id, void* data, size_t *respond_len) {
         rpc_in_free(in);
         respond = malloc(sizeof(int));
         *respond_len = sizeof(int);
-        return respond;
     } else if(id == AM_ID_QUERY_REQUEST) {
         rpc_in_t* in = rpc_in_unpack(data);
         *respond_len = sizeof(rpc_out_t);
@@ -36,6 +35,11 @@ void* rpc_handler(int8_t id, void* data, size_t *respond_len) {
         assert(found);
         rpc_in_free(in);
         respond = out;
+    } else if(id == AM_ID_STAT_REQUEST) {
+        char* path = data;
+        *respond_len = sizeof(struct stat);
+        respond = malloc(*respond_len);
+        tangram_ms_handle_stat(path, (struct stat*) respond);
     }
 
     return respond;

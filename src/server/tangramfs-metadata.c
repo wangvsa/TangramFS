@@ -77,3 +77,17 @@ bool tangram_ms_handle_query(char* filename, size_t offset, size_t count, int *r
 
     return false;
 }
+
+void tangram_ms_handle_stat(char* filename, struct stat *buf) {
+    GlobalIntervalTreeEntry *entry = NULL;
+    HASH_FIND_STR(global_it_table, filename, entry);
+    size_t size = 0;
+    if(entry) {
+        GlobalInterval *i;
+        LL_FOREACH(entry->global_it.head, i) {
+            if((i->offset+i->count) > size)
+                size = i->offset+i->count;
+        }
+    }
+    buf->st_size = size;
+}

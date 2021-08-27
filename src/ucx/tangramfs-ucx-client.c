@@ -219,6 +219,8 @@ void tangram_ucx_rpc_service_start(TFS_Info *tfs_info) {
     assert(status == UCS_OK);
     status = uct_iface_set_am_handler(g_recv_context.iface, AM_ID_POST_RESPOND, am_server_respond_listener, NULL, 0);
     assert(status == UCS_OK);
+    status = uct_iface_set_am_handler(g_recv_context.iface, AM_ID_STAT_RESPOND, am_server_respond_listener, NULL, 0);
+    assert(status == UCS_OK);
     status = uct_iface_set_am_handler(g_recv_context.iface, AM_ID_RMA_REQUEST, am_rma_request_listener, NULL, 0);
     assert(status == UCS_OK);
     status = uct_iface_set_am_handler(g_recv_context.iface, AM_ID_RMA_EP_ADDR, am_ep_addr_listener, NULL, 0);

@@ -25,8 +25,6 @@ void tangram_issue_rpc_rma(uint8_t id, char* filename, int my_rank, int dest_ran
     size_t total_recv_size = 0;     // RMA only
     void* user_data = rpc_in_pack(filename, my_rank, num_intervals, offsets, counts, &data_size);
 
-    double t1 = MPI_Wtime();
-
     switch(id) {
         case AM_ID_POST_REQUEST:
             tangram_ucx_sendrecv_server(id, user_data, data_size, respond);
@@ -44,9 +42,17 @@ void tangram_issue_rpc_rma(uint8_t id, char* filename, int my_rank, int dest_ran
     }
 
     free(user_data);
-    double t2 = MPI_Wtime();
+}
 
-    rma_time += (t2-t1);
+void tangram_issue_metadata_rpc(uint8_t id, const char* path, void* respond) {
+    void* data = (void*) path;
+    switch(id) {
+        case AM_ID_STAT_REQUEST:
+            tangram_ucx_sendrecv_server(id, data, 1+strlen(path), respond);
+            break;
+        default:
+            break;
+    }
 }
 
 void tangram_rpc_service_start(TFS_Info *tfs_info){

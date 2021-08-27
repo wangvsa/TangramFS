@@ -73,19 +73,22 @@ void append_task(uint8_t id, void* data, size_t length) {
     DL_APPEND(g_workers[who].tasks, task);
     pthread_cond_signal(&g_workers[who].cond);
     pthread_mutex_unlock(&g_workers[who].lock);
+
+    who = (who + 1) % NUM_THREADS;
 }
 
 static ucs_status_t am_query_listener(void *arg, void *data, size_t length, unsigned flags) {
     // TODO can directly use the data and return UCS_INPROGRESS
     // then free it later.
     append_task(AM_ID_QUERY_REQUEST, data, length);
-    who = (who + 1) % NUM_THREADS;
     return UCS_OK;
 }
-
 static ucs_status_t am_post_listener(void *arg, void *data, size_t length, unsigned flags) {
     append_task(AM_ID_POST_REQUEST, data, length);
-    who = (who + 1) % NUM_THREADS;
+    return UCS_OK;
+}
+static ucs_status_t am_stat_listener(void *arg, void *data, size_t length, unsigned flags) {
+    append_task(AM_ID_STAT_REQUEST, data, length);
     return UCS_OK;
 }
 
@@ -151,6 +154,8 @@ void handle_one_task(rpc_task_t* task) {
             id = AM_ID_QUERY_RESPOND;
         if(task->id == AM_ID_POST_REQUEST)
             id = AM_ID_POST_RESPOND;
+        if(task->id == AM_ID_STAT_REQUEST)
+            id = AM_ID_STAT_RESPOND;
         do_uct_am_short(&g_server_context.mutex, ep, id, 0, task->respond, task->respond_len);
         free(task->respond);
     }
@@ -207,6 +212,8 @@ void tangram_ucx_server_init(TFS_Info *tfs_info) {
     status = uct_iface_set_am_handler(g_server_context.iface, AM_ID_QUERY_REQUEST, am_query_listener, NULL, 0);
     assert(status == UCS_OK);
     status = uct_iface_set_am_handler(g_server_context.iface, AM_ID_POST_REQUEST, am_post_listener, NULL, 0);
+    assert(status == UCS_OK);
+    status = uct_iface_set_am_handler(g_server_context.iface, AM_ID_STAT_REQUEST, am_stat_listener, NULL, 0);
     assert(status == UCS_OK);
     status = uct_iface_set_am_handler(g_server_context.iface, AM_ID_STOP_REQUEST, am_stop_listener, NULL, 0);
     assert(status == UCS_OK);

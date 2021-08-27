@@ -10,6 +10,7 @@
 #include <mpi.h>
 #include "uthash.h"
 #include "tangramfs.h"
+#include "tangramfs-rpc.h"
 #include "tangramfs-posix-wrapper.h"
 #include "tangramfs-semantics-impl.h"
 
@@ -207,8 +208,10 @@ int TANGRAM_WRAP(fsync)(int fd) {
 int TANGRAM_WRAP(__xstat)(int vers, const char *path, struct stat *buf)
 {
     // TODO: stat() call not implemented yet.
-    if(tangram_should_intercept(path))
+    if(tangram_should_intercept(path)) {
+        tangram_issue_metadata_rpc(AM_ID_STAT_REQUEST, path, buf);
         return 0;
+    }
 
     MAP_OR_FAIL(__xstat);
     return TANGRAM_REAL_CALL(__xstat)(vers, path, buf);
