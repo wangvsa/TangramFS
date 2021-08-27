@@ -18,7 +18,6 @@ static tangram_uct_context_t g_server_context;
 
 static uct_device_addr_t**   g_client_dev_addrs;
 static uct_iface_addr_t**    g_client_iface_addrs;
-pthread_mutex_t              g_progress_lock = PTHREAD_MUTEX_INITIALIZER;
 
 
 /* Represents one RPC request */
@@ -137,12 +136,12 @@ static ucs_status_t am_mpi_size_listener(void *arg, void *data, size_t length, u
 }
 
 void handle_one_task(rpc_task_t* task) {
-    pthread_mutex_lock(&g_progress_lock);
+    pthread_mutex_lock(&g_server_context.mutex);
     uct_ep_h ep;
 
     uct_ep_create_connect(g_server_context.iface, g_client_dev_addrs[task->client_rank],
                           g_client_iface_addrs[task->client_rank], &ep);
-    pthread_mutex_unlock(&g_progress_lock);
+    pthread_mutex_unlock(&g_server_context.mutex);
 
     task->respond = (*user_am_data_handler)(task->id, task->data, &task->respond_len);
 
@@ -152,13 +151,13 @@ void handle_one_task(rpc_task_t* task) {
             id = AM_ID_QUERY_RESPOND;
         if(task->id == AM_ID_POST_REQUEST)
             id = AM_ID_POST_RESPOND;
-        do_uct_am_short(&g_progress_lock, ep, id, 0, task->respond, task->respond_len);
+        do_uct_am_short(&g_server_context.mutex, ep, id, 0, task->respond, task->respond_len);
         free(task->respond);
     }
 
-    pthread_mutex_lock(&g_progress_lock);
+    pthread_mutex_lock(&g_server_context.mutex);
     uct_ep_destroy(ep);
-    pthread_mutex_unlock(&g_progress_lock);
+    pthread_mutex_unlock(&g_server_context.mutex);
 }
 
 void* rpc_task_worker_func(void* arg) {
@@ -234,9 +233,9 @@ void tangram_ucx_server_register_rpc(void* (*user_handler)(int8_t, void*, size_t
 void tangram_ucx_server_start() {
 
     while(g_server_running) {
-        pthread_mutex_lock(&g_progress_lock);
+        pthread_mutex_lock(&g_server_context.mutex);
         uct_worker_progress(g_server_context.worker);
-        pthread_mutex_unlock(&g_progress_lock);
+        pthread_mutex_unlock(&g_server_context.mutex);
     }
 
     // Server stopped, clean up now

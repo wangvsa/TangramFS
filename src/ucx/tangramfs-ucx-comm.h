@@ -16,6 +16,15 @@ typedef struct tangram_uct_context {
     uct_iface_addr_t*  iface_addr;
     uct_device_addr_t* server_dev_addr;
     uct_iface_addr_t*  server_iface_addr;
+
+    // Make sure a context is only used by one thread at a time
+    pthread_mutex_t    mutex;
+    pthread_mutex_t    cond_mutex;
+    pthread_cond_t     cond;
+
+    // Used to recieve respond from server or peers.
+    void*              respond;
+    volatile bool      respond_flag;
 } tangram_uct_context_t;
 
 

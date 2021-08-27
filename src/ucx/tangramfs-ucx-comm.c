@@ -148,6 +148,10 @@ void tangram_uct_context_init(ucs_async_context_t* async, char* dev_name, char* 
     } else {
         tangram_read_uct_server_addr("./", (void**)&context->server_dev_addr, (void**)&context->server_iface_addr);
     }
+
+    pthread_mutex_init(&context->mutex, NULL);
+    pthread_mutex_init(&context->cond_mutex, NULL);
+    pthread_cond_init(&context->cond, NULL);
 }
 
 
@@ -159,6 +163,10 @@ void tangram_uct_context_destroy(tangram_uct_context_t *context) {
     free(context->server_dev_addr);
     free(context->server_iface_addr);
     uct_worker_destroy(context->worker);
+
+    pthread_mutex_destroy(&context->mutex);
+    pthread_mutex_destroy(&context->cond_mutex);
+    pthread_cond_destroy(&context->cond);
 }
 
 

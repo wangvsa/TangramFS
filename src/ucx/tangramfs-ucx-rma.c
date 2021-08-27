@@ -13,7 +13,6 @@
 
 static ucs_async_context_t* g_rma_async;
 static int                  g_mpi_rank, g_mpi_size;
-static volatile bool        g_peer_rma_done = false;
 
 /**
  * Request context is for sending RMA request
@@ -29,8 +28,6 @@ static volatile bool        g_peer_rma_done = false;
  */
 static tangram_uct_context_t  g_request_context;
 static tangram_uct_context_t  g_respond_context;
-pthread_mutex_t               g_request_lock = PTHREAD_MUTEX_INITIALIZER;
-pthread_mutex_t               g_respond_lock = PTHREAD_MUTEX_INITIALIZER;
 
 uct_device_addr_t**           g_respond_dev_addrs;
 uct_device_addr_t**           g_request_dev_addrs;
@@ -171,7 +168,7 @@ void do_put_zcopy(uct_ep_h ep, tangram_uct_context_t* info, uint64_t remote_addr
 }
 
 void* rma_respond(void* data) {
-    pthread_mutex_lock(&g_respond_lock);
+    pthread_mutex_lock(&g_respond_context.mutex);
     int dest_rank;
     uint64_t remote_addr;
     size_t rkey_buf_size, user_arg_size;
@@ -204,13 +201,12 @@ void* rma_respond(void* data) {
     pos += sizeof(size_t);
     user_arg = data+pos;
 
-
     // First send back my ep address
     ucs_status_t status;
     uct_ep_h ep;
     uct_ep_addr_t* ep_addr = alloca(g_respond_context.iface_attr.ep_addr_len);
     ep_create_get_address(&g_respond_context, &ep, ep_addr);
-    tangram_ucx_sendrecv_peer(AM_ID_RMA_EP_ADDR, dest_rank, ep_addr, g_respond_context.iface_attr.ep_addr_len, NULL);
+    tangram_ucx_send_ep_addr(AM_ID_RMA_EP_ADDR, dest_rank, ep_addr, g_respond_context.iface_attr.ep_addr_len);
 
     status = uct_ep_connect_to_ep(ep, g_request_dev_addrs[dest_rank], peer_ep_addr);
     assert(status == UCS_OK);
@@ -233,12 +229,12 @@ void* rma_respond(void* data) {
     uct_ep_destroy(ep);
     free(buf);
 
-    pthread_mutex_unlock(&g_respond_lock);
+    pthread_mutex_unlock(&g_respond_context.mutex);
     return NULL;
 }
 
 static ucs_status_t am_rma_respond_listener(void *arg, void *data, size_t length, unsigned flags) {
-    g_peer_rma_done = true;
+    g_request_context.respond_flag = true;
     return UCS_OK;
 }
 
@@ -260,7 +256,7 @@ static ucs_status_t am_rma_respond_listener(void *arg, void *data, size_t length
  * this function should be called by the main thread.
  */
 void tangram_ucx_rma_request(int dest_rank, void* user_arg, size_t user_arg_size, void* recv_buf, size_t recv_size) {
-    pthread_mutex_lock(&g_request_lock);
+    pthread_mutex_lock(&g_request_context.mutex);
     ucs_status_t status;
     // TODO: should directly put data to user's buffer
 
@@ -292,19 +288,18 @@ void tangram_ucx_rma_request(int dest_rank, void* user_arg, size_t user_arg_size
     void* sendbuf = pack_request_arg(ep_addr, mem.address, rkey_buf, g_request_context.md_attr.rkey_packed_size,
                                     user_arg, user_arg_size, &sendbuf_size);
 
-
     // Send RMA request to the destination client and wait
     // it to send back the ep address.
+    g_request_context.respond_flag = false;
     uct_ep_addr_t* peer_ep_addr = alloca(g_request_context.iface_attr.ep_addr_len);
     tangram_ucx_sendrecv_peer(AM_ID_RMA_REQUEST, dest_rank, sendbuf, sendbuf_size, peer_ep_addr);
 
-    g_peer_rma_done = false;
     status = uct_ep_connect_to_ep(ep, g_respond_dev_addrs[dest_rank], peer_ep_addr);
     assert(status == UCS_OK);
 
     // Once we made the connection with the dest clien,
     // we wait for it to finish the RMA put
-    while(!g_peer_rma_done)
+    while(!g_request_context.respond_flag)
         uct_worker_progress(g_request_context.worker);
     memcpy(recv_buf, mem.address, recv_size);
 
@@ -313,7 +308,7 @@ void tangram_ucx_rma_request(int dest_rank, void* user_arg, size_t user_arg_size
     if(mem.method != UCT_ALLOC_METHOD_MD)
         uct_md_mem_dereg(g_request_context.md, memh);
     uct_mem_free(&mem);
-    pthread_mutex_unlock(&g_request_lock);
+    pthread_mutex_unlock(&g_request_context.mutex);
 }
 
 void tangram_ucx_rma_service_start(void* (serve_rma_data)(void*, size_t*)) {
