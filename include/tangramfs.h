@@ -9,6 +9,19 @@
 #define TANGRAM_CUSTOM_SEMANTICS        4
 
 
+/**
+ * A list of environment variables that can be set
+ *
+ */
+#define TANGRAM_PERSIST_DIR_ENV         "TANGRAM_PERSIST_DIR"
+#define TANGRAM_BUFFER_DIR_ENV          "TANGRAM_BUFFER_DIR"
+#define TANGRAM_SEMANTICS_ENV           "TANGRAM_SEMANTICS"
+#define TANGRAM_UCX_RPC_DEV_ENV         "TANGRAM_RPC_DEV"
+#define TANGRAM_UCX_RPC_TL_ENV          "TANGRAM_RPC_TL"
+#define TANGRAM_UCX_RMA_DEV_ENV         "TANGRAM_RMA_DEV"
+#define TANGRAM_UCX_RMA_TL_ENV          "TANGRAM_RMA_TL"
+
+
 typedef struct TFS_File_t {
     char filename[256]; // file name of the targeting file
     size_t offset;      // offset of the targeting file in this process
@@ -19,7 +32,7 @@ typedef struct TFS_File_t {
     UT_hash_handle hh;
 } TFS_File;
 
-void tfs_init(const char* persist_dir, const char* tfs_dir);
+void tfs_init();
 void tfs_finalize();
 
 TFS_File* tfs_open(const char* pathname);

@@ -49,16 +49,16 @@ void tangram_issue_rpc_rma(uint8_t id, char* filename, int my_rank, int dest_ran
     rma_time += (t2-t1);
 }
 
-void tangram_rpc_service_start(const char* persist_dir){
-    tangram_ucx_rpc_service_start(persist_dir);
+void tangram_rpc_service_start(TFS_Info *tfs_info){
+    tangram_ucx_rpc_service_start(tfs_info);
 }
 
 void tangram_rpc_service_stop() {
     tangram_ucx_rpc_service_stop();
 }
 
-void tangram_rma_service_start(void* (*serve_rma_data)(void*, size_t*)) {
-    tangram_ucx_rma_service_start(serve_rma_data);
+void tangram_rma_service_start(TFS_Info *tfs_info, void* (*serve_rma_data)(void*, size_t*)) {
+    tangram_ucx_rma_service_start(tfs_info, serve_rma_data);
 }
 
 void tangram_rma_service_stop() {

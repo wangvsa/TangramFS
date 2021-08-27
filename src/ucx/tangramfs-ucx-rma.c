@@ -4,7 +4,6 @@
 #include <string.h>
 #include <unistd.h>
 #include <stdbool.h>
-#include <mpi.h>
 #include <alloca.h>
 #include <uct/api/uct.h>
 #include "tangramfs-ucx.h"
@@ -12,7 +11,7 @@
 
 
 static ucs_async_context_t* g_rma_async;
-static int                  g_mpi_rank, g_mpi_size;
+TFS_Info*                   g_tfs_info;
 
 /**
  * Request context is for sending RMA request
@@ -58,7 +57,7 @@ void* pack_request_arg(void* ep_addr, void* my_addr, void* rkey_buf, size_t rkey
     int pos = 0;
     void* send_buf = malloc(*total_size);
 
-    memcpy(send_buf+pos, &g_mpi_rank, sizeof(int));
+    memcpy(send_buf+pos, &g_tfs_info->mpi_rank, sizeof(int));
     pos += sizeof(int);
 
     memcpy(send_buf+pos, &g_request_context.iface_attr.ep_addr_len, sizeof(size_t));
@@ -311,24 +310,19 @@ void tangram_ucx_rma_request(int dest_rank, void* user_arg, size_t user_arg_size
     pthread_mutex_unlock(&g_request_context.mutex);
 }
 
-void tangram_ucx_rma_service_start(void* (serve_rma_data)(void*, size_t*)) {
-    MPI_Comm_rank(MPI_COMM_WORLD, &g_mpi_rank);
-    MPI_Comm_size(MPI_COMM_WORLD, &g_mpi_size);
+void tangram_ucx_rma_service_start(TFS_Info* tfs_info, void* (serve_rma_data)(void*, size_t*)) {
+    g_tfs_info = tfs_info;
 
     g_serve_rma_data = serve_rma_data;
 
     ucs_status_t status;
     ucs_async_context_create(UCS_ASYNC_MODE_THREAD_SPINLOCK, &g_rma_async);
 
-    //tangram_uct_context_init(g_rma_async, "qib0:1", "rc_verbs", false, &g_request_context);
-    //tangram_uct_context_init(g_rma_async, "qib0:1", "rc_verbs", false, &g_respond_context);
-    //tangram_uct_context_init(g_rma_async, "hsi1", "tcp", false, &g_request_context);
-    //tangram_uct_context_init(g_rma_async, "hsi1", "tcp", false, &g_respond_context);
-    tangram_uct_context_init(g_rma_async, "enp6s0", "tcp", false, &g_request_context);
-    tangram_uct_context_init(g_rma_async, "enp6s0", "tcp", false, &g_respond_context);
+    tangram_uct_context_init(g_rma_async, g_tfs_info->rma_dev_name, g_tfs_info->rma_tl_name, false, &g_request_context);
+    tangram_uct_context_init(g_rma_async, g_tfs_info->rma_dev_name, g_tfs_info->rma_tl_name, false, &g_respond_context);
 
-    g_respond_dev_addrs = malloc(g_mpi_size * sizeof(uct_device_addr_t*));
-    g_request_dev_addrs = malloc(g_mpi_size * sizeof(uct_device_addr_t*));
+    g_respond_dev_addrs = malloc(g_tfs_info->mpi_size * sizeof(uct_device_addr_t*));
+    g_request_dev_addrs = malloc(g_tfs_info->mpi_size * sizeof(uct_device_addr_t*));
     exchange_dev_iface_addr(&g_respond_context, g_respond_dev_addrs, NULL);
     exchange_dev_iface_addr(&g_request_context, g_request_dev_addrs, NULL);
 
@@ -337,9 +331,9 @@ void tangram_ucx_rma_service_start(void* (serve_rma_data)(void*, size_t*)) {
 }
 
 void tangram_ucx_rma_service_stop() {
-    MPI_Barrier(MPI_COMM_WORLD);
+    MPI_Barrier(g_tfs_info->mpi_comm);
 
-    for(int i = 0; i < g_mpi_size; i++) {
+    for(int i = 0; i < g_tfs_info->mpi_size; i++) {
         free(g_respond_dev_addrs[i]);
         free(g_request_dev_addrs[i]);
     }

@@ -142,12 +142,11 @@ void tangram_uct_context_init(ucs_async_context_t* async, char* dev_name, char* 
     uct_iface_get_device_address(context->iface, context->dev_addr);
     uct_iface_get_address(context->iface, context->iface_addr);
 
-    if(server) {
-        tangram_write_uct_server_addr("./", context->dev_addr, context->iface_attr.device_addr_len,
-                            context->iface_addr, context->iface_attr.iface_addr_len);
-    } else {
-        tangram_read_uct_server_addr("./", (void**)&context->server_dev_addr, (void**)&context->server_iface_addr);
-    }
+    if(server)
+        tangram_write_uct_server_addr(context->dev_addr, context->iface_attr.device_addr_len,
+                                      context->iface_addr, context->iface_attr.iface_addr_len);
+    else
+        tangram_read_uct_server_addr((void**)&context->server_dev_addr, (void**)&context->server_iface_addr);
 
     pthread_mutex_init(&context->mutex, NULL);
     pthread_mutex_init(&context->cond_mutex, NULL);

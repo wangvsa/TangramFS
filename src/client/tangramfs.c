@@ -11,19 +11,6 @@
 #include "tangramfs-rpc.h"
 #include "tangramfs-posix-wrapper.h"
 
-#define PATH_MAX 4096
-
-typedef struct TFS_Info_t {
-    int mpi_rank;
-    int mpi_size;
-    MPI_Comm mpi_comm;
-    char tfs_dir[PATH_MAX];
-    char persist_dir[PATH_MAX];
-
-    int semantics;  // Strong, Session or Commit; only needed in passive mode.
-    bool initialized;
-
-} TFS_Info;
 
 
 static TFS_File *tfs_files;   // hash map of currently opened files
@@ -32,28 +19,15 @@ static TFS_Info tfs;
 
 void* serve_rma_data(void* in_arg, size_t* size);
 
-
-
-void tfs_init(const char* persist_dir, const char* tfs_dir) {
-    MPI_Comm_dup(MPI_COMM_WORLD, &tfs.mpi_comm);
-    MPI_Comm_rank(tfs.mpi_comm, &tfs.mpi_rank);
-    MPI_Comm_size(tfs.mpi_comm, &tfs.mpi_size);
-
-    realpath(persist_dir, tfs.persist_dir);
-    realpath(tfs_dir, tfs.tfs_dir);
-
-    tfs.semantics = TANGRAM_STRONG_SEMANTICS;
-    const char* semantics_str = getenv("TANGRAM_SEMANTICS");
-    if(semantics_str)
-        tfs.semantics = atoi(semantics_str);
+void tfs_init() {
+    tangram_get_info(&tfs);
 
     tangram_map_real_calls();
-    tangram_rpc_service_start("./");
-    tangram_rma_service_start(serve_rma_data);
+    tangram_rpc_service_start(&tfs);
+    tangram_rma_service_start(&tfs, serve_rma_data);
 
     MPI_Barrier(tfs.mpi_comm);
     tfs.initialized = true;
-
 }
 
 void tfs_finalize() {
@@ -63,8 +37,6 @@ void tfs_finalize() {
     // Need to have a barrier here because we can not allow
     // server stoped before all other clients
     MPI_Barrier(tfs.mpi_comm);
-
-    MPI_Comm_free(&tfs.mpi_comm);
 
     tangram_rma_service_stop();
     tangram_rpc_service_stop();
@@ -77,6 +49,8 @@ void tfs_finalize() {
         tangram_free(tf->it, sizeof(IntervalTree));
         tangram_free(tf, sizeof(TFS_File));
     }
+
+    tangram_release_info(&tfs);
 }
 
 
