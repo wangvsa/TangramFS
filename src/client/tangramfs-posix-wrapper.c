@@ -217,20 +217,34 @@ int TANGRAM_WRAP(__xstat)(int vers, const char *path, struct stat *buf)
 
 int TANGRAM_WRAP(access)(const char *pathname, int mode) {
     // TODO
-    if(tangram_should_intercept(pathname)) {
+    if(tangram_should_intercept(pathname))
         return 0;
-    }
     MAP_OR_FAIL(access);
     return TANGRAM_REAL_CALL(access)(pathname, mode);
 }
 
 int TANGRAM_WRAP(unlink)(const char *pathname) {
     // TODO
-    if(tangram_should_intercept(pathname)) {
+    if(tangram_should_intercept(pathname))
         return 0;
-    }
     MAP_OR_FAIL(unlink);
     return TANGRAM_REAL_CALL(unlink)(pathname);
+}
+
+int TANGRAM_WRAP(mkdir)(const char *pathname, mode_t mode) {
+    // TODO
+    if(tangram_should_intercept(pathname))
+        return 0;
+    MAP_OR_FAIL(mkdir);
+    return TANGRAM_REAL_CALL(mkdir)(pathname, mode);
+}
+
+int TANGRAM_WRAP(rmdir)(const char *pathname) {
+    // TODO
+    if(tangram_should_intercept(pathname))
+        return 0;
+    MAP_OR_FAIL(rmdir);
+    return TANGRAM_REAL_CALL(rmdir)(pathname);
 }
 
 

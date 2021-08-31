@@ -246,7 +246,13 @@ bool tangram_should_intercept(const char* filename) {
 
     char abs_path[PATH_MAX];
     realpath(filename, abs_path);
-    return strncmp(tfs.persist_dir, abs_path, strlen(tfs.persist_dir)) == 0;
+    // file in buffer directory and not exist in the backend file system.
+    if ( strncmp(tfs.persist_dir, abs_path, strlen(tfs.persist_dir)) == 0 ) {
+        if(TANGRAM_REAL_CALL(access)(filename, F_OK) != 0)
+            return true;
+    }
+
+    return false;
 }
 
 int tangram_get_semantics() {

@@ -45,7 +45,6 @@ TANGRAM_DECL_REAL_CALL(fread, size_t, (void * ptr, size_t size, size_t count, FI
 TANGRAM_DECL_REAL_CALL(fclose, int, (FILE* stream));
 TANGRAM_DECL_REAL_CALL(access, int, (const char *pathname, int mode));
 TANGRAM_DECL_REAL_CALL(unlink, int, (const char* pathname));
-
 // TODO on my local machine, this signature only intercepts calls with the 3rd argument
 // Id does not intercept calls with two arguments like: open(filename, flag)
 TANGRAM_DECL_REAL_CALL(open, int, (const char *pathname, int flags, ...));
@@ -56,6 +55,9 @@ TANGRAM_DECL_REAL_CALL(read, ssize_t, (int fd, void *buf, size_t count));
 TANGRAM_DECL_REAL_CALL(close, int, (int fd));
 TANGRAM_DECL_REAL_CALL(fsync, int, (int fd));
 TANGRAM_DECL_REAL_CALL(__xstat, int, (int vers, const char* path, struct stat* buf));
+TANGRAM_DECL_REAL_CALL(mkdir, int, (const char *pathname, mode_t mode));
+TANGRAM_DECL_REAL_CALL(rmdir, int, (const char *pathname));
+
 
 
 static inline
@@ -75,6 +77,8 @@ void tangram_map_real_calls() {
     MAP_OR_FAIL(close);
     MAP_OR_FAIL(fsync);
     MAP_OR_FAIL(__xstat);
+    MAP_OR_FAIL(mkdir);
+    MAP_OR_FAIL(rmdir);
 }
 
 #endif
