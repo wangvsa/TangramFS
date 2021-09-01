@@ -16,7 +16,7 @@
 
 typedef struct TFSStreamMap_t {
     TFS_File *tf;
-    FILE* fake_stream;  // key
+    FILE* stream;  // key
     UT_hash_handle hh;
 } TFSStreamMap;
 
@@ -32,35 +32,36 @@ typedef struct TFSFdMap_t {
     UT_hash_handle hh;
 } TFSFdMap;
 
-static TFSStreamMap* tf_stream_map;
-static TFSPathMap* tf_path_map;     // TODO not realeased after use
-static TFSFdMap*   tf_fd_map;
+static TFSStreamMap* tf_stream_map = NULL;
+static TFSPathMap* tf_path_map = NULL;     // TODO not realeased after use
+static TFSFdMap*   tf_fd_map = NULL;
 
 
 TFS_File* stream2tf(FILE* stream) {
     TFSStreamMap *found = NULL;
-    HASH_FIND(hh, tf_stream_map, stream, sizeof(FILE), found);
-    if(!found) return NULL;
-
-    return found->tf;
+    HASH_FIND_PTR(tf_stream_map, &stream, found);
+    if(found)
+        return found->tf;
+    return NULL;
 }
 
 TFS_File* fd2tf(int fd) {
     TFSFdMap* found = NULL;
     HASH_FIND_INT(tf_fd_map, &fd, found);
-    if(!found) return NULL;
-
-    return found->tf;
+    if(found)
+        found->tf;
+    return NULL;
 }
 
 TFS_File* path2tf(const char* path) {
     char *key = realpath(path, NULL);
     TFSPathMap *found = NULL;
     HASH_FIND(hh, tf_path_map, key, strlen(key), found);
-    free(key);
-    if(!found) return NULL;
 
-    return found->tf;
+    free(key);
+    if(found)
+        found->tf;
+    return NULL;
 }
 
 
@@ -70,7 +71,9 @@ void* add_to_map(TFS_File* tf, const char* filename, int stream) {
     if(stream) {        // FILE* stream
         TFSStreamMap *entry = malloc(sizeof(TFSStreamMap));
         entry->tf = tf;
-        HASH_ADD_KEYPTR(hh, tf_stream_map, entry->fake_stream, sizeof(FILE), entry);
+        entry->stream = tf->local_stream;
+        HASH_ADD_PTR(tf_stream_map, stream, entry);
+        printf("add to map %s %p\n", filename, entry->stream);
         res = entry;
     } else {            // int fd
         TFSFdMap *entry = malloc(sizeof(TFSFdMap));
@@ -92,10 +95,18 @@ void* add_to_map(TFS_File* tf, const char* filename, int stream) {
 
 FILE* TANGRAM_WRAP(fopen)(const char *filename, const char *mode)
 {
+    printf("fopen: %s, mode: %s\n", filename, mode);
     if(tangram_should_intercept(filename)) {
-        TFS_File* tf = tfs_open(filename);
-        TFSStreamMap* entry =  add_to_map(tf, filename, true);
-        return entry->fake_stream;
+
+        // Check if already opened
+        TFS_File* tf = path2tf(filename);
+        if(!tf) tf = tfs_open(filename, mode);
+
+        if(tf->local_stream != NULL) {
+            TFSStreamMap* entry = add_to_map(tf, filename, true);
+            return entry->stream;
+        }
+        return NULL;
     }
 
     MAP_OR_FAIL(fopen);
@@ -105,18 +116,35 @@ FILE* TANGRAM_WRAP(fopen)(const char *filename, const char *mode)
 int TANGRAM_WRAP(fseek)(FILE *stream, long int offset, int origin)
 {
     TFS_File* tf = stream2tf(stream);
-    if(tf)
-        return tfs_seek(tf, offset, origin);
+    if(tf) {
+        tfs_seek(tf, offset, origin);
+        return 0;   // unlike lseek(), fseek on success, return 0
+    }
 
     MAP_OR_FAIL(fseek);
     return TANGRAM_REAL_CALL(fseek)(stream, offset, origin);
 }
 
+long int TANGRAM_WRAP(ftell)(FILE *stream)
+{
+    // TODO
+    MAP_OR_FAIL(ftell);
+    long int res = TANGRAM_REAL_CALL(ftell)(stream);
+    return res;
+}
+
 size_t TANGRAM_WRAP(fwrite)(const void *ptr, size_t size, size_t count, FILE * stream)
 {
+    printf("fwrite out, %lu %lu %p\n", size, count, stream);
     TFS_File *tf = stream2tf(stream);
-    if(tf)
-        return tangram_write_impl(tf, ptr, count*size);
+    if(tf) {
+        size_t res = tangram_write_impl(tf, ptr, count*size);
+        printf("fwrite %s, %lu %lu\n", tf->filename, size, count);
+        // Note that fwrite on success returns the count not total bytes.
+        if(res == size * count)
+            return count;
+        return res;
+    }
 
     MAP_OR_FAIL(fwrite);
     return TANGRAM_REAL_CALL(fwrite)(ptr, size, count, stream);
@@ -126,7 +154,11 @@ size_t TANGRAM_WRAP(fread)(void * ptr, size_t size, size_t count, FILE * stream)
 {
     TFS_File *tf = stream2tf(stream);
     if(tf) {
-        return tangram_read_impl(tf, ptr, count*size);
+        printf("fread %s, %lu %lu\n", tf->filename, size, count);
+        size_t res = tangram_read_impl(tf, ptr, count*size);
+        if(res == size * count)
+            return count;
+        return size;
     }
 
     MAP_OR_FAIL(fread);
@@ -151,7 +183,7 @@ int TANGRAM_WRAP(fclose)(FILE * stream)
 int TANGRAM_WRAP(open)(const char *pathname, int flags, ...)
 {
     if(tangram_should_intercept(pathname)) {
-        TFS_File* tf = tfs_open(pathname);
+        TFS_File* tf = tfs_open(pathname, "w+");
         TFSFdMap* entry = add_to_map(tf, pathname, false);
         return entry->fd;
     }
@@ -171,7 +203,7 @@ int TANGRAM_WRAP(open)(const char *pathname, int flags, ...)
 int TANGRAM_WRAP(open64)(const char *pathname, int flags, ...)
 {
     if(tangram_should_intercept(pathname)) {
-        TFS_File* tf = tfs_open(pathname);
+        TFS_File* tf = tfs_open(pathname, "w+");
         TFSFdMap* entry = add_to_map(tf, pathname, false);
         return entry->fd;
     }

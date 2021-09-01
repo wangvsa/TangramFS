@@ -27,6 +27,7 @@ typedef struct TFS_File_t {
     size_t offset;      // offset of the targeting file in this process
 
     int local_fd;
+    FILE* local_stream;
     IntervalTree *it;
 
     UT_hash_handle hh;
@@ -35,7 +36,7 @@ typedef struct TFS_File_t {
 void tfs_init();
 void tfs_finalize();
 
-TFS_File* tfs_open(const char* pathname);
+TFS_File* tfs_open(const char* pathname, const char* mode);
 int tfs_close(TFS_File* tf);
 
 size_t tfs_write(TFS_File* tf, const void* buf, size_t size);

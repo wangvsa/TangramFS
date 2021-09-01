@@ -54,7 +54,7 @@ void tfs_finalize() {
 }
 
 
-TFS_File* tfs_open(const char* pathname) {
+TFS_File* tfs_open(const char* pathname, const char* mode) {
 
     char abs_filename[PATH_MAX+64];
     sprintf(abs_filename, "%s/_tfs_tmpfile.%d", tfs.tfs_dir, tfs.mpi_rank);
@@ -74,8 +74,13 @@ TFS_File* tfs_open(const char* pathname) {
     }
 
     // open local file as buffer
-    tf->local_fd = TANGRAM_REAL_CALL(open)(abs_filename, O_CREAT|O_RDWR, S_IRWXU);
-
+    //tf->local_fd = TANGRAM_REAL_CALL(open)(abs_filename, O_CREAT|O_RDWR, S_IRWXU);
+    tf->local_stream = TANGRAM_REAL_CALL(fopen)(abs_filename, mode);
+    if(tf->local_stream == NULL) {
+        tf->local_fd = -1;
+    } else {
+        tf->local_fd = fileno(tf->local_stream);
+    }
     return tf;
 }
 
@@ -189,6 +194,12 @@ size_t tfs_seek(TFS_File *tf, size_t offset, int whence) {
     if(whence == SEEK_CUR)
         tf->offset += offset;
     // TODO do not support SEEK_END For now.
+    // now seek to the end of the loca file
+    if(whence == SEEK_END) {
+        TANGRAM_REAL_CALL(fseek)(tf->local_stream, offset, SEEK_END);
+        tf->offset = TANGRAM_REAL_CALL(ftell)(tf->local_stream);
+    }
+
     return tf->offset;
 }
 
@@ -248,8 +259,9 @@ bool tangram_should_intercept(const char* filename) {
     realpath(filename, abs_path);
     // file in buffer directory and not exist in the backend file system.
     if ( strncmp(tfs.persist_dir, abs_path, strlen(tfs.persist_dir)) == 0 ) {
-        if(TANGRAM_REAL_CALL(access)(filename, F_OK) != 0)
+        if(TANGRAM_REAL_CALL(access)(filename, F_OK) != 0) {
             return true;
+        }
     }
 
     return false;

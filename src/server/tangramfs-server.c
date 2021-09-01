@@ -21,7 +21,7 @@ void* rpc_handler(int8_t id, void* data, size_t *respond_len) {
         rpc_in_t* in = rpc_in_unpack(data);
         for(int i = 0; i < in->num_intervals; i++)
             tangram_ms_handle_post(in->rank, in->filename, in->intervals[i].offset, in->intervals[i].count);
-        //printf("post in->rank: %d, filename: %s, offset:%lu, count: %lu\n", in->rank, in->filename, in->intervals[0].offset/1024/1024, in->intervals[0].count/1024/1024);
+        printf("post in->rank: %d, filename: %s, offset:%lu, count: %lu\n", in->rank, in->filename, in->intervals[0].offset, in->intervals[0].count);
         rpc_in_free(in);
         respond = malloc(sizeof(int));
         *respond_len = sizeof(int);
@@ -30,8 +30,8 @@ void* rpc_handler(int8_t id, void* data, size_t *respond_len) {
         *respond_len = sizeof(rpc_out_t);
         rpc_out_t *out = malloc(sizeof(rpc_out_t));
         bool found = tangram_ms_handle_query(in->filename, in->intervals[0].offset, in->intervals[0].count, &(out->rank));
-        //printf("query in->rank: %d, filename: %s, offset:%lu, count: %lu, out->rank: %d\n",
-        //        in->rank, in->filename, in->intervals[0].offset/1024/1024, in->intervals[0].count/1024/1024, out->rank);
+        printf("query in->rank: %d, filename: %s, offset:%lu, count: %lu, out->rank: %d\n",
+                in->rank, in->filename, in->intervals[0].offset, in->intervals[0].count, out->rank);
         assert(found);
         rpc_in_free(in);
         respond = out;
