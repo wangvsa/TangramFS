@@ -14,11 +14,17 @@
 #include "tangramfs-posix-wrapper.h"
 #include "tangramfs-semantics-impl.h"
 
-typedef struct TFSFileMap_t {
+typedef struct TFSStreamMap_t {
     TFS_File *tf;
     FILE* fake_stream;  // key
     UT_hash_handle hh;
-} TFSFileMap;
+} TFSStreamMap;
+
+typedef struct TFSPathMat_t {
+    TFS_File *tf;
+    char* pathname;     // key
+    UT_hash_handle hh;
+} TFSPathMap;
 
 typedef struct TFSFdMap_t {
     TFS_File *tf;
@@ -26,12 +32,14 @@ typedef struct TFSFdMap_t {
     UT_hash_handle hh;
 } TFSFdMap;
 
-static TFSFileMap* tf_map;
-static TFSFdMap* tf_fd_map;
+static TFSStreamMap* tf_stream_map;
+static TFSPathMap* tf_path_map;     // TODO not realeased after use
+static TFSFdMap*   tf_fd_map;
+
 
 TFS_File* stream2tf(FILE* stream) {
-    TFSFileMap *found = NULL;
-    HASH_FIND(hh, tf_map, stream, sizeof(FILE), found);
+    TFSStreamMap *found = NULL;
+    HASH_FIND(hh, tf_stream_map, stream, sizeof(FILE), found);
     if(!found) return NULL;
 
     return found->tf;
@@ -45,13 +53,48 @@ TFS_File* fd2tf(int fd) {
     return found->tf;
 }
 
+TFS_File* path2tf(const char* path) {
+    char *key = realpath(path, NULL);
+    TFSPathMap *found = NULL;
+    HASH_FIND(hh, tf_path_map, key, strlen(key), found);
+    free(key);
+    if(!found) return NULL;
+
+    return found->tf;
+}
+
+
+void* add_to_map(TFS_File* tf, const char* filename, int stream) {
+    void *res;
+
+    if(stream) {        // FILE* stream
+        TFSStreamMap *entry = malloc(sizeof(TFSStreamMap));
+        entry->tf = tf;
+        HASH_ADD_KEYPTR(hh, tf_stream_map, entry->fake_stream, sizeof(FILE), entry);
+        res = entry;
+    } else {            // int fd
+        TFSFdMap *entry = malloc(sizeof(TFSFdMap));
+        entry->tf = tf;
+        entry->fd = tf->local_fd;
+        HASH_ADD_INT(tf_fd_map, fd, entry);
+        res = entry;
+    }
+
+    TFSPathMap *e2 = malloc(sizeof(TFSPathMap));
+    e2->pathname = NULL;
+    e2->pathname = realpath(filename, NULL);
+    if(e2->pathname)
+        HASH_ADD_KEYPTR(hh, tf_path_map, e2->pathname, strlen(e2->pathname), e2);
+
+    return res;
+}
+
 
 FILE* TANGRAM_WRAP(fopen)(const char *filename, const char *mode)
 {
     if(tangram_should_intercept(filename)) {
-        TFSFileMap *entry = malloc(sizeof(TFSFileMap));
-        entry->tf = tfs_open(filename);
-        HASH_ADD_KEYPTR(hh, tf_map, entry->fake_stream, sizeof(FILE), entry);
+        TFS_File* tf = tfs_open(filename);
+        TFSStreamMap* entry =  add_to_map(tf, filename, true);
         return entry->fake_stream;
     }
 
@@ -92,11 +135,11 @@ size_t TANGRAM_WRAP(fread)(void * ptr, size_t size, size_t count, FILE * stream)
 
 int TANGRAM_WRAP(fclose)(FILE * stream)
 {
-    TFSFileMap *found = NULL;
-    HASH_FIND(hh, tf_map, stream, sizeof(FILE), found);
+    TFSStreamMap *found = NULL;
+    HASH_FIND(hh, tf_stream_map, stream, sizeof(FILE), found);
     if(found) {
         int res = tangram_close_impl(found->tf);
-        HASH_DEL(tf_map, found);
+        HASH_DEL(tf_stream_map, found);
         free(found);
         return res;
     }
@@ -108,10 +151,8 @@ int TANGRAM_WRAP(fclose)(FILE * stream)
 int TANGRAM_WRAP(open)(const char *pathname, int flags, ...)
 {
     if(tangram_should_intercept(pathname)) {
-        TFSFdMap *entry = malloc(sizeof(TFSFdMap));
-        entry->tf = tfs_open(pathname);
-        entry->fd = entry->tf->local_fd;
-        HASH_ADD_INT(tf_fd_map, fd, entry);
+        TFS_File* tf = tfs_open(pathname);
+        TFSFdMap* entry = add_to_map(tf, pathname, false);
         return entry->fd;
     }
 
@@ -130,10 +171,8 @@ int TANGRAM_WRAP(open)(const char *pathname, int flags, ...)
 int TANGRAM_WRAP(open64)(const char *pathname, int flags, ...)
 {
     if(tangram_should_intercept(pathname)) {
-        TFSFdMap *entry = malloc(sizeof(TFSFdMap));
-        entry->tf = tfs_open(pathname);
-        entry->fd = entry->tf->local_fd;
-        HASH_ADD_INT(tf_fd_map, fd, entry);
+        TFS_File* tf = tfs_open(pathname);
+        TFSFdMap* entry = add_to_map(tf, pathname, false);
         return entry->fd;
     }
 
@@ -217,16 +256,22 @@ int TANGRAM_WRAP(__xstat)(int vers, const char *path, struct stat *buf)
 
 int TANGRAM_WRAP(access)(const char *pathname, int mode) {
     // TODO
-    if(tangram_should_intercept(pathname))
-        return 0;
+    if(tangram_should_intercept(pathname)) {
+        TFS_File* tf = path2tf(pathname);
+        if (tf)
+            return 0;
+    }
     MAP_OR_FAIL(access);
     return TANGRAM_REAL_CALL(access)(pathname, mode);
 }
 
 int TANGRAM_WRAP(unlink)(const char *pathname) {
     // TODO
-    if(tangram_should_intercept(pathname))
-        return 0;
+    if(tangram_should_intercept(pathname)) {
+        TFS_File* tf = path2tf(pathname);
+        if (tf)
+            return 0;
+    }
     MAP_OR_FAIL(unlink);
     return TANGRAM_REAL_CALL(unlink)(pathname);
 }
