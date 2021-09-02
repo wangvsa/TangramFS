@@ -49,7 +49,7 @@ tfs_file_t* fd2tf(int fd) {
     TFSFdMap* found = NULL;
     HASH_FIND_INT(tf_fd_map, &fd, found);
     if(found)
-        found->tf;
+        return found->tf;
     return NULL;
 }
 
@@ -60,7 +60,7 @@ tfs_file_t* path2tf(const char* path) {
 
     free(key);
     if(found)
-        found->tf;
+        return found->tf;
     return NULL;
 }
 
@@ -73,7 +73,6 @@ void* add_to_map(tfs_file_t* tf, const char* filename, int stream) {
         entry->tf = tf;
         entry->stream = tf->local_stream;
         HASH_ADD_PTR(tf_stream_map, stream, entry);
-        printf("add to map %s %p\n", filename, entry->stream);
         res = entry;
     } else {            // int fd
         TFSFdMap *entry = malloc(sizeof(TFSFdMap));
@@ -95,10 +94,9 @@ void* add_to_map(tfs_file_t* tf, const char* filename, int stream) {
 
 FILE* TANGRAM_WRAP(fopen)(const char *filename, const char *mode)
 {
-    printf("fopen: %s, mode: %s\n", filename, mode);
     if(tangram_should_intercept(filename)) {
 
-        tfs_file_t* tf = tfs_open(filename, mode);
+        tfs_file_t* tf = tfs_open(filename);
 
         if(tf->local_stream != NULL) {
             TFSStreamMap* entry = add_to_map(tf, filename, true);
@@ -133,11 +131,9 @@ long int TANGRAM_WRAP(ftell)(FILE *stream)
 
 size_t TANGRAM_WRAP(fwrite)(const void *ptr, size_t size, size_t count, FILE * stream)
 {
-    printf("fwrite out, %lu %lu %p\n", size, count, stream);
     tfs_file_t *tf = stream2tf(stream);
     if(tf) {
         size_t res = tangram_write_impl(tf, ptr, count*size);
-        printf("fwrite %s, %lu %lu\n", tf->filename, size, count);
         // Note that fwrite on success returns the count not total bytes.
         if(res == size * count)
             return count;
@@ -152,7 +148,6 @@ size_t TANGRAM_WRAP(fread)(void * ptr, size_t size, size_t count, FILE * stream)
 {
     tfs_file_t *tf = stream2tf(stream);
     if(tf) {
-        printf("fread %s, %lu %lu\n", tf->filename, size, count);
         size_t res = tangram_read_impl(tf, ptr, count*size);
         if(res == size * count)
             return count;
@@ -181,7 +176,7 @@ int TANGRAM_WRAP(fclose)(FILE * stream)
 int TANGRAM_WRAP(open)(const char *pathname, int flags, ...)
 {
     if(tangram_should_intercept(pathname)) {
-        tfs_file_t* tf = tfs_open(pathname, "w+");
+        tfs_file_t* tf = tfs_open(pathname);
         TFSFdMap* entry = add_to_map(tf, pathname, false);
         return entry->fd;
     }
@@ -201,7 +196,7 @@ int TANGRAM_WRAP(open)(const char *pathname, int flags, ...)
 int TANGRAM_WRAP(open64)(const char *pathname, int flags, ...)
 {
     if(tangram_should_intercept(pathname)) {
-        tfs_file_t* tf = tfs_open(pathname, "w+");
+        tfs_file_t* tf = tfs_open(pathname);
         TFSFdMap* entry = add_to_map(tf, pathname, false);
         return entry->fd;
     }

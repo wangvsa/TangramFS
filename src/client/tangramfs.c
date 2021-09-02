@@ -58,7 +58,7 @@ void tfs_finalize() {
 }
 
 
-tfs_file_t* tfs_open(const char* pathname, const char* mode) {
+tfs_file_t* tfs_open(const char* pathname) {
 
     char abs_filename[PATH_MAX+64];
     sprintf(abs_filename, "%s/_tfs_tmpfile.%d", tfs.tfs_dir, tfs.mpi_rank);
@@ -78,13 +78,12 @@ tfs_file_t* tfs_open(const char* pathname, const char* mode) {
     }
 
     // open local file as buffer
-    //tf->local_fd = TANGRAM_REAL_CALL(open)(abs_filename, O_CREAT|O_RDWR, S_IRWXU);
-    tf->local_stream = TANGRAM_REAL_CALL(fopen)(abs_filename, mode);
-    if(tf->local_stream == NULL) {
-        tf->local_fd = -1;
-    } else {
-        tf->local_fd = fileno(tf->local_stream);
-    }
+    tf->local_fd = TANGRAM_REAL_CALL(open)(abs_filename, O_CREAT|O_RDWR, S_IRWXU);
+    if(tf->local_fd != -1)
+        tf->local_stream = TANGRAM_REAL_CALL(fdopen)(tf->local_fd, "r+");
+    else
+        tf->local_stream = NULL;
+
     return tf;
 }
 

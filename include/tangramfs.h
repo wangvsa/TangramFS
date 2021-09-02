@@ -34,7 +34,7 @@ typedef struct tfs_file {
 void tfs_init();
 void tfs_finalize();
 
-tfs_file_t * tfs_open(const char* pathname, const char* mode);
+tfs_file_t* tfs_open(const char* pathname);
 int tfs_close(tfs_file_t* tf);
 
 size_t tfs_write(tfs_file_t* tf, const void* buf, size_t size);

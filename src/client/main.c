@@ -18,7 +18,7 @@ int mpi_size, mpi_rank;
 double write_bandwidth, read_bandwidth;
 
 void write_phase() {
-    tfs_file_t* tf = tfs_open("./test.txt", "w+");
+    tfs_file_t* tf = tfs_open("./test.txt");
 
     char* data = malloc(sizeof(char)*DATA_SIZE);
     size_t offset = mpi_rank*DATA_SIZE*N;
@@ -43,7 +43,7 @@ void write_phase() {
 }
 
 void read_phase() {
-    tfs_file_t* tf = tfs_open("./test.txt", "r+");
+    tfs_file_t* tf = tfs_open("./test.txt");
     MPI_Barrier(MPI_COMM_WORLD);        // make sure everyone has opened the file first
 
     char* data = malloc(sizeof(char)*DATA_SIZE);
