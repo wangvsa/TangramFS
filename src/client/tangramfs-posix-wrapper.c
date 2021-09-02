@@ -98,9 +98,7 @@ FILE* TANGRAM_WRAP(fopen)(const char *filename, const char *mode)
     printf("fopen: %s, mode: %s\n", filename, mode);
     if(tangram_should_intercept(filename)) {
 
-        // Check if already opened
-        TFS_File* tf = path2tf(filename);
-        if(!tf) tf = tfs_open(filename, mode);
+        TFS_File* tf = tfs_open(filename, mode);
 
         if(tf->local_stream != NULL) {
             TFSStreamMap* entry = add_to_map(tf, filename, true);

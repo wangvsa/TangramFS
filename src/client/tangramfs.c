@@ -10,7 +10,7 @@
 #include "tangramfs-utils.h"
 #include "tangramfs-rpc.h"
 #include "tangramfs-posix-wrapper.h"
-
+#include "seg_tree.h"
 
 
 static TFS_File *tfs_files;   // hash map of currently opened files
@@ -25,6 +25,11 @@ void tfs_init() {
     tangram_map_real_calls();
     tangram_rpc_service_start(&tfs);
     tangram_rma_service_start(&tfs, serve_rma_data);
+
+
+    struct seg_tree tree;
+    seg_tree_init(&tree);
+    seg_tree_destroy(&tree);
 
     MPI_Barrier(tfs.mpi_comm);
     tfs.initialized = true;
@@ -177,6 +182,7 @@ size_t tfs_read_lazy(TFS_File* tf, void* buf, size_t size) {
     size_t res;
     size_t local_offset;
     bool found = tangram_it_query(tf->it, tf->offset, size, &local_offset);
+    assert(found);
 
     if(found) {
         res = pread(tf->local_fd, buf, size, local_offset);

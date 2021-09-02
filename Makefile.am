@@ -24,9 +24,10 @@ libtangramfs_la_SOURCES = src/client/tangramfs.c \
 						  src/ucx/tangramfs-ucx-comm.c \
 						  src/ucx/tangramfs-ucx-server.c \
 						  src/ucx/tangramfs-ucx-client.c \
-					 	  src/ucx/tangramfs-ucx-rma.c
+					 	  src/ucx/tangramfs-ucx-rma.c	\
+					 	  src/common/seg_tree.c
 
-libtangramfs_la_CFLAGS  = -I./include -I${UCX_DIR}/include -std=c99
+libtangramfs_la_CFLAGS  = -I./include -I${UCX_DIR}/include -std=gnu99
 libtangramfs_la_LDFLAGS = -Wl,-rpath,-L${UCX_DIR}/lib
 libtangramfs_la_LDFLAGS += -L${UCX_DIR}/lib -lucp -lucs -luct -pthread -lrt -version-info 0:0:0
 
