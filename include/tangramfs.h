@@ -22,7 +22,7 @@
 #define TANGRAM_UCX_RMA_TL_ENV          "TANGRAM_RMA_TL"
 
 
-typedef struct TFS_File_t {
+typedef struct tfs_file {
     char filename[256]; // file name of the targeting file
     size_t offset;      // offset of the targeting file in this process
 
@@ -31,22 +31,22 @@ typedef struct TFS_File_t {
     IntervalTree *it;
 
     UT_hash_handle hh;
-} TFS_File;
+} tfs_file_t;
 
 void tfs_init();
 void tfs_finalize();
 
-TFS_File* tfs_open(const char* pathname, const char* mode);
-int tfs_close(TFS_File* tf);
+tfs_file_t * tfs_open(const char* pathname, const char* mode);
+int tfs_close(tfs_file_t* tf);
 
-size_t tfs_write(TFS_File* tf, const void* buf, size_t size);
-size_t tfs_read(TFS_File* tf, void* buf, size_t size);
-size_t tfs_read_lazy(TFS_File* tf, void* buf, size_t size);
-size_t tfs_seek(TFS_File* tf, size_t offset, int whence);
+size_t tfs_write(tfs_file_t* tf, const void* buf, size_t size);
+size_t tfs_read(tfs_file_t* tf, void* buf, size_t size);
+size_t tfs_read_lazy(tfs_file_t* tf, void* buf, size_t size);
+size_t tfs_seek(tfs_file_t* tf, size_t offset, int whence);
 
-void tfs_post(TFS_File* tf, size_t offset, size_t count);
-void tfs_post_all(TFS_File* tf);
-void tfs_query(TFS_File* tf, size_t offset, size_t count, int* rank);
+void tfs_post(tfs_file_t* tf, size_t offset, size_t count);
+void tfs_post_all(tfs_file_t* tf);
+void tfs_query(tfs_file_t* tf, size_t offset, size_t count, int* rank);
 
 /*
  * Used by POSIX wrappers, tell if we should
@@ -55,6 +55,6 @@ void tfs_query(TFS_File* tf, size_t offset, size_t count, int* rank);
 bool tangram_should_intercept(const char* filename);
 int tangram_get_semantics();
 
-TFS_File* tangram_get_tfs_file(const char* filename);
+tfs_file_t* tangram_get_tfs_file(const char* filename);
 
 #endif

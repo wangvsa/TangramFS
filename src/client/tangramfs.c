@@ -13,7 +13,7 @@
 #include "seg_tree.h"
 
 
-static TFS_File *tfs_files;   // hash map of currently opened files
+tfs_file_t *tfs_files;   // hash map of currently opened files
 
 static TFS_Info tfs;
 
@@ -47,28 +47,28 @@ void tfs_finalize() {
     tangram_rpc_service_stop();
 
     // Clear all resources
-    TFS_File *tf, *tmp;
+    tfs_file_t *tf, *tmp;
     HASH_ITER(hh, tfs_files, tf, tmp) {
         HASH_DEL(tfs_files, tf);
         tangram_it_finalize(tf->it);
         tangram_free(tf->it, sizeof(IntervalTree));
-        tangram_free(tf, sizeof(TFS_File));
+        tangram_free(tf, sizeof(tfs_file_t));
     }
 
     tangram_release_info(&tfs);
 }
 
 
-TFS_File* tfs_open(const char* pathname, const char* mode) {
+tfs_file_t* tfs_open(const char* pathname, const char* mode) {
 
     char abs_filename[PATH_MAX+64];
     sprintf(abs_filename, "%s/_tfs_tmpfile.%d", tfs.tfs_dir, tfs.mpi_rank);
 
-    TFS_File *tf = tangram_get_tfs_file(pathname);
+    tfs_file_t *tf = tangram_get_tfs_file(pathname);
     if(tf) {
         tf->offset = 0;
     } else {
-        tf = tangram_malloc(sizeof(TFS_File));
+        tf = tangram_malloc(sizeof(tfs_file_t));
         strcpy(tf->filename, pathname);
         tf->it = tangram_malloc(sizeof(IntervalTree));
         tf->offset = 0;
@@ -89,7 +89,7 @@ TFS_File* tfs_open(const char* pathname, const char* mode) {
     return tf;
 }
 
-size_t tfs_write(TFS_File* tf, const void* buf, size_t size) {
+size_t tfs_write(tfs_file_t* tf, const void* buf, size_t size) {
 
     int num_overlaps, i, overlap_type;
 
@@ -155,7 +155,7 @@ size_t tfs_write(TFS_File* tf, const void* buf, size_t size) {
     return res;
 }
 
-size_t tfs_read(TFS_File* tf, void* buf, size_t size) {
+size_t tfs_read(tfs_file_t* tf, void* buf, size_t size) {
     int owner_rank;
     tfs_query(tf, tf->offset, size, &owner_rank);
     //printf("my rank: %d, query: %lu, owner rank: %d\n", tfs.mpi_rank, tf->offset/1024/1024, owner_rank);
@@ -178,7 +178,7 @@ size_t tfs_read(TFS_File* tf, void* buf, size_t size) {
     return size;
 }
 
-size_t tfs_read_lazy(TFS_File* tf, void* buf, size_t size) {
+size_t tfs_read_lazy(tfs_file_t* tf, void* buf, size_t size) {
     size_t res;
     size_t local_offset;
     bool found = tangram_it_query(tf->it, tf->offset, size, &local_offset);
@@ -194,7 +194,7 @@ size_t tfs_read_lazy(TFS_File* tf, void* buf, size_t size) {
     return res;
 }
 
-size_t tfs_seek(TFS_File *tf, size_t offset, int whence) {
+size_t tfs_seek(tfs_file_t *tf, size_t offset, int whence) {
     if(whence == SEEK_SET)
         tf->offset = offset;
     if(whence == SEEK_CUR)
@@ -210,7 +210,7 @@ size_t tfs_seek(TFS_File *tf, size_t offset, int whence) {
 }
 
 // TODO: need to check the range to make sure it is valid.
-void tfs_post(TFS_File* tf, size_t offset, size_t count) {
+void tfs_post(tfs_file_t* tf, size_t offset, size_t count) {
     int num_covered;
     Interval** covered = tangram_it_covers(tf->it, offset, count, &num_covered);
 
@@ -223,7 +223,7 @@ void tfs_post(TFS_File* tf, size_t offset, size_t count) {
     tangram_free(covered, sizeof(Interval*)*num_covered);
 }
 
-void tfs_post_all(TFS_File* tf) {
+void tfs_post_all(tfs_file_t* tf) {
     int num, i, ack;
     Interval** unposted = tangram_it_unposted(tf->it, &num);
 
@@ -238,16 +238,16 @@ void tfs_post_all(TFS_File* tf) {
     tangram_issue_rpc_rma(AM_ID_POST_REQUEST, tf->filename, tfs.mpi_rank, 0, offsets, counts, num, &ack);
 }
 
-void tfs_query(TFS_File* tf, size_t offset, size_t size, int *out_rank) {
+void tfs_query(tfs_file_t* tf, size_t offset, size_t size, int *out_rank) {
     rpc_out_t out;
     tangram_issue_rpc_rma(AM_ID_QUERY_REQUEST, tf->filename, tfs.mpi_rank, 0, &offset, &size, 1, &out);
     *out_rank = out.rank;
 }
 
-int tfs_close(TFS_File* tf) {
+int tfs_close(tfs_file_t* tf) {
     int res = TANGRAM_REAL_CALL(close)(tf->local_fd);
 
-    // The TFS_File and its interval tree is not released
+    // The tfs_file_t and its interval tree is not released
     // just like Linux page cache won't be cleared at close point
     // because the the same might be opened later for read.
     // We clean all resources at tfs_finalize();
@@ -277,8 +277,8 @@ int tangram_get_semantics() {
     return tfs.semantics;
 }
 
-TFS_File* tangram_get_tfs_file(const char* filename) {
-    TFS_File *tf= NULL;
+tfs_file_t* tangram_get_tfs_file(const char* filename) {
+    tfs_file_t *tf= NULL;
     HASH_FIND_STR(tfs_files, filename, tf);
     return tf;
 }
@@ -290,7 +290,7 @@ TFS_File* tangram_get_tfs_file(const char* filename) {
 void* serve_rma_data(void* in_arg, size_t* size) {
     rpc_in_t* in = rpc_in_unpack(in_arg);
 
-    TFS_File* tf = tangram_get_tfs_file(in->filename);
+    tfs_file_t* tf = tangram_get_tfs_file(in->filename);
     assert(tf != NULL);
 
     size_t local_offset;
