@@ -55,7 +55,7 @@ void tangram_issue_metadata_rpc(uint8_t id, const char* path, void* respond) {
     }
 }
 
-void tangram_rpc_service_start(TFS_Info *tfs_info){
+void tangram_rpc_service_start(tfs_info_t *tfs_info){
     tangram_ucx_rpc_service_start(tfs_info);
 }
 
@@ -63,7 +63,7 @@ void tangram_rpc_service_stop() {
     tangram_ucx_rpc_service_stop();
 }
 
-void tangram_rma_service_start(TFS_Info *tfs_info, void* (*serve_rma_data)(void*, size_t*)) {
+void tangram_rma_service_start(tfs_info_t *tfs_info, void* (*serve_rma_data)(void*, size_t*)) {
     tangram_ucx_rma_service_start(tfs_info, serve_rma_data);
 }
 

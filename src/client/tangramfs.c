@@ -14,8 +14,7 @@
 
 
 tfs_file_t *tfs_files;   // hash map of currently opened files
-
-static TFS_Info tfs;
+tfs_info_t tfs;
 
 void* serve_rma_data(void* in_arg, size_t* size);
 

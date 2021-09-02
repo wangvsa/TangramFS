@@ -202,7 +202,7 @@ void* rpc_task_worker_func(void* arg) {
 }
 
 
-void tangram_ucx_server_init(TFS_Info *tfs_info) {
+void tangram_ucx_server_init(tfs_info_t *tfs_info) {
     ucs_status_t status;
     ucs_async_context_create(UCS_ASYNC_MODE_THREAD_SPINLOCK, &g_server_async);
 

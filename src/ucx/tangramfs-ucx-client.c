@@ -9,7 +9,7 @@
 #include "tangramfs-ucx-comm.h"
 
 static bool                  g_running = true;
-TFS_Info*                    g_tfs_info;
+tfs_info_t*                    g_tfs_info;
 
 
 static ucs_async_context_t*  g_client_async;
@@ -201,7 +201,7 @@ void send_address_to_server() {
     free(data);
 }
 
-void tangram_ucx_rpc_service_start(TFS_Info *tfs_info) {
+void tangram_ucx_rpc_service_start(tfs_info_t *tfs_info) {
     g_tfs_info = tfs_info;
 
     ucs_status_t status;

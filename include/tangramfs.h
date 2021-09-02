@@ -23,13 +23,11 @@
 
 
 typedef struct tfs_file {
-    char filename[256]; // file name of the targeting file
+    char   filename[256]; // file name of the targeting file
     size_t offset;      // offset of the targeting file in this process
-
-    int local_fd;
-    FILE* local_stream;
+    int    local_fd;
+    FILE*  local_stream;
     IntervalTree *it;
-
     UT_hash_handle hh;
 } tfs_file_t;
 

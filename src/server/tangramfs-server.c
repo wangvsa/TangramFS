@@ -50,7 +50,7 @@ int main(int argc, char* argv[]) {
     assert(argc == 2);
     MPI_Init(&argc, &argv);
 
-    TFS_Info tfs_info;
+    tfs_info_t tfs_info;
     tangram_get_info(&tfs_info);
 
     if( strcmp(argv[1], "start") == 0 ) {

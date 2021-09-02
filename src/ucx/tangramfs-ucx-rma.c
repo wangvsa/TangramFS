@@ -11,7 +11,7 @@
 
 
 static ucs_async_context_t* g_rma_async;
-TFS_Info*                   g_tfs_info;
+tfs_info_t*                   g_tfs_info;
 
 /**
  * Request context is for sending RMA request
@@ -310,7 +310,7 @@ void tangram_ucx_rma_request(int dest_rank, void* user_arg, size_t user_arg_size
     pthread_mutex_unlock(&g_request_context.mutex);
 }
 
-void tangram_ucx_rma_service_start(TFS_Info* tfs_info, void* (serve_rma_data)(void*, size_t*)) {
+void tangram_ucx_rma_service_start(tfs_info_t* tfs_info, void* (serve_rma_data)(void*, size_t*)) {
     g_tfs_info = tfs_info;
 
     g_serve_rma_data = serve_rma_data;
