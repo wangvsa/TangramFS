@@ -161,8 +161,10 @@ size_t read_local(tfs_file_t* tf, void* buf, size_t req_start, size_t req_end) {
     /* TODO
      * if we can't fully satisfy the request, copy request to
      * output array, so it can be passed on to server */
-    if(!have_local)
+    if(!have_local) {
+        printf("[tangramfs] read_local() does not have the full content\n");
         return 0;
+    }
 
     /* otherwise we can copy the data locally, iterate
      * over the extents and copy data into request buffer.
@@ -183,6 +185,9 @@ size_t read_local(tfs_file_t* tf, void* buf, size_t req_start, size_t req_end) {
         pread(tf->local_fd, buf+off, this_length, this_pos);
 
         printf("read local %d %lu %lu %lu\n", off, ext_start, ext_length, ext_pos);
+        if(ext_pos == 0 && this_length == 10) {
+            printf("read header cookie: %s\n", (char*) buf);
+        }
 
         off += this_length;
         expected_start = next->end + 1;

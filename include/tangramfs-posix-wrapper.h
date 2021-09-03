@@ -42,6 +42,7 @@ TANGRAM_DECL_REAL_CALL(fopen, FILE*, (const char *filename, const char *mode));
 TANGRAM_DECL_REAL_CALL(fdopen, FILE*, (int fd, const char *mode));
 TANGRAM_DECL_REAL_CALL(fseek, int, (FILE *stream, long int offset, int origin));
 TANGRAM_DECL_REAL_CALL(ftell, long int, (FILE *stream));
+TANGRAM_DECL_REAL_CALL(rewind, void, (FILE *stream));
 TANGRAM_DECL_REAL_CALL(fwrite, size_t, (const void *ptr, size_t size, size_t count, FILE* stream));
 TANGRAM_DECL_REAL_CALL(fread, size_t, (void * ptr, size_t size, size_t count, FILE* stream));
 TANGRAM_DECL_REAL_CALL(fclose, int, (FILE* stream));
@@ -68,6 +69,7 @@ void tangram_map_real_calls() {
     MAP_OR_FAIL(fdopen);
     MAP_OR_FAIL(fseek);
     MAP_OR_FAIL(ftell);
+    MAP_OR_FAIL(rewind);
     MAP_OR_FAIL(fwrite);
     MAP_OR_FAIL(fread);
     MAP_OR_FAIL(fclose);

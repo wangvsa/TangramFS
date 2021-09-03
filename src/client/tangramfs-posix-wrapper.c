@@ -120,6 +120,17 @@ int TANGRAM_WRAP(fseek)(FILE *stream, long int offset, int origin)
     return TANGRAM_REAL_CALL(fseek)(stream, offset, origin);
 }
 
+void TANGRAM_WRAP(rewind)(FILE *stream)
+{
+    tfs_file_t* tf = stream2tf(stream);
+    if(tf) {
+        tfs_seek(tf, 0, SEEK_SET);
+    }
+
+    MAP_OR_FAIL(rewind);
+    return TANGRAM_REAL_CALL(rewind)(stream);
+}
+
 long int TANGRAM_WRAP(ftell)(FILE *stream)
 {
     // TODO now returns locally offset
@@ -156,11 +167,10 @@ size_t TANGRAM_WRAP(fread)(void * ptr, size_t size, size_t count, FILE * stream)
 {
     tfs_file_t *tf = stream2tf(stream);
     if(tf) {
-        printf("[tangramfs] fread %s (%lu, %lu)\n", tf->filename, size, count);
         size_t res = tangram_read_impl(tf, ptr, count*size);
-        if(res == size * count)
-            return count;
-        return size;
+        res = (res == size*count) ? count: res;
+        printf("[tangramfs] fread %s (%lu, %lu), return: %lu\n", tf->filename, size, count, res);
+        return res;
     }
 
     MAP_OR_FAIL(fread);
