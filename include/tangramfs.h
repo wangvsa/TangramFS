@@ -1,6 +1,7 @@
 #ifndef __TANGRAM_FS_H__
 #define __TANGRAM_FS_H__
 #include "tangramfs-interval-tree.h"
+#include "seg_tree.h"
 #include "uthash.h"
 
 #define TANGRAM_STRONG_SEMANTICS        1
@@ -24,10 +25,11 @@
 
 typedef struct tfs_file {
     char   filename[256]; // file name of the targeting file
-    size_t offset;      // offset of the targeting file in this process
+    size_t offset;        // offset of the targeting file in this process
     int    local_fd;
     FILE*  local_stream;
     IntervalTree *it;
+    struct seg_tree it2;
     UT_hash_handle hh;
 } tfs_file_t;
 

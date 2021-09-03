@@ -27,8 +27,6 @@ void tfs_init() {
 
 
     struct seg_tree tree;
-    seg_tree_init(&tree);
-    seg_tree_destroy(&tree);
 
     MPI_Barrier(tfs.mpi_comm);
     tfs.initialized = true;
@@ -72,6 +70,7 @@ tfs_file_t* tfs_open(const char* pathname) {
         tf->it = tangram_malloc(sizeof(IntervalTree));
         tf->offset = 0;
         tangram_it_init(tf->it);
+        seg_tree_init(&tf->it2);
 
         remove(abs_filename);   // delete the file first
         HASH_ADD_STR(tfs_files, filename, tf);
@@ -87,69 +86,11 @@ tfs_file_t* tfs_open(const char* pathname) {
     return tf;
 }
 
+
 size_t tfs_write(tfs_file_t* tf, const void* buf, size_t size) {
-
-    int num_overlaps, i, overlap_type;
-
-    size_t local_offset, res;
-    local_offset = TANGRAM_REAL_CALL(lseek)(tf->local_fd, 0, SEEK_END);
-
-    Interval *interval = tangram_it_new(tf->offset, size, local_offset);
-    Interval** overlaps = tangram_it_overlaps(tf->it, interval, &overlap_type, &num_overlaps);
-
-    Interval *old, *start, *end;
-
-    switch(overlap_type) {
-        // 1. No overlap
-        // Write the data at the end of the local file
-        // Insert the new interval
-        case IT_NO_OVERLAP:
-            tangram_it_insert(tf->it, interval);
-            res = pwrite(tf->local_fd, buf, size, local_offset);
-            break;
-        // 2. Have exactly one overlap
-        // The old interval fully covers the new one
-        // Only need to update the old content
-        case IT_COVERED_BY_ONE:
-            old = overlaps[0];
-            old->posted = false;
-            local_offset = old->local_offset+(tf->offset - old->offset);
-            res = pwrite(tf->local_fd, buf, size, local_offset);
-            tangram_free(interval, sizeof(Interval));
-            break;
-        // 3. The new interval fully covers several old ones
-        // Delete all old intervals and insert this new one
-        case IT_COVERS_ALL:
-            for(i = 0; i < num_overlaps; i++)
-                tangram_it_delete(tf->it, overlaps[i]);
-            tangram_it_insert(tf->it, interval);
-            res = pwrite(tf->local_fd, buf, size, local_offset);
-            break;
-        case IT_PARTIAL_COVERED:
-            printf("IT_PARTIAL_COVERED: Not handled\n");
-            /*
-            Interval *start_interval = interval;
-            Interval *end_interval = interval;
-            size_t start_offset = interval->offset;
-            size_t end_offset = interval->offset + interval->count;
-            for(i = 0; i < *num_overlaps; i++) {
-                if(overlaps[i]->offset < start_offset) {
-                    start_offset = overlaps[i]->offset;
-                    start_interval = overlaps[i];
-                } else if(overlaps[i]->offset+overlaps[i]->count > end_offset) {
-                    end_offset = overlaps[i]->offset+overlaps[i]->count;
-                    //end_interval = overlaps[i];
-                }
-            }
-            */
-            break;
-    }
-
-    if(overlaps)
-        tangram_free(overlaps, sizeof(Interval*)*num_overlaps);
-
-    TANGRAM_REAL_CALL(fsync)(tf->local_fd);
-    tf->offset += size;
+    size_t local_offset = TANGRAM_REAL_CALL(lseek)(tf->local_fd, 0, SEEK_END);
+    size_t res = pwrite(tf->local_fd, buf, size, local_offset);
+    seg_tree_add(&tf->it2, tf->offset, tf->offset+size-1, local_offset);
     return res;
 }
 
@@ -160,14 +101,8 @@ size_t tfs_read(tfs_file_t* tf, void* buf, size_t size) {
 
     // Turns out that myself has the latest data,
     // just read it locally.
-    if(owner_rank == tfs.mpi_rank) {
-        size_t local_offset;
-        bool found = tangram_it_query(tf->it, tf->offset, size, &local_offset);
-        assert(found);
-        pread(tf->local_fd, buf, size, local_offset);
-        tf->offset += size;
-        return size;
-    }
+    if(owner_rank == tfs.mpi_rank)
+        return tfs_read_lazy(tf, buf, size);
 
     /*TODO RMA read*/
     size_t offset = tf->offset;
@@ -176,20 +111,84 @@ size_t tfs_read(tfs_file_t* tf, void* buf, size_t size) {
     return size;
 }
 
-size_t tfs_read_lazy(tfs_file_t* tf, void* buf, size_t size) {
-    size_t res;
-    size_t local_offset;
-    bool found = tangram_it_query(tf->it, tf->offset, size, &local_offset);
-    assert(found);
+size_t read_local(tfs_file_t* tf, void* buf, size_t req_start, size_t req_end) {
 
-    if(found) {
-        res = pread(tf->local_fd, buf, size, local_offset);
-        tf->offset += size;
-    } else {
-        res = tfs_read(tf, buf, size);
+    struct seg_tree *extents = &tf->it2;
+
+    seg_tree_rdlock(extents);
+
+    /* can we fully satisfy this request? assume we can */
+    int have_local = 1;
+
+    /* this will point to the offset of the next byte we
+     * need to account for */
+    size_t expected_start = req_start;
+
+    /* iterate over extents we have for this file,
+     * and check that there are no holes in coverage.
+     * we search for a starting extent using a range
+     * of just the very first byte that we need */
+    struct seg_tree_node* first;
+    first = seg_tree_find_nolock(extents, req_start, req_start);
+    struct seg_tree_node* next = first;
+    while (next != NULL && next->start < req_end) {
+        if (expected_start >= next->start) {
+            /* this extent has the next byte we expect,
+             * bump up to the first byte past the end
+             * of this extent */
+            expected_start = next->end + 1;
+        } else {
+            /* there is a gap between extents so we're missing
+             * some bytes */
+            have_local = 0;
+            break;
+        }
+
+        /* get the next element in the tree */
+        next = seg_tree_iter(extents, next);
     }
 
-    return res;
+    /* check that we account for the full request
+     * up until the last byte */
+    if (expected_start < req_end) {
+        /* missing some bytes at the end of the request */
+        have_local = 0;
+    }
+
+    /* TODO
+     * if we can't fully satisfy the request, copy request to
+     * output array, so it can be passed on to server */
+    assert(have_local);
+
+    /* otherwise we can copy the data locally, iterate
+     * over the extents and copy data into request buffer.
+     * again search for a starting extent using a range
+     * of just the very first byte that we need */
+    next = first;
+    int off = 0;
+    while ((next != NULL) && (next->start < req_end)) {
+        /* get start and length of this extent */
+        size_t ext_start = next->start;
+        size_t ext_length = (next->end + 1) - ext_start;
+        size_t ext_pos = next->ptr;
+
+        /* actual read */
+        pread(tf->local_fd, buf+off, ext_length, ext_pos);
+        off += ext_length;
+
+        /* get the next element in the tree */
+        next = seg_tree_iter(extents, next);
+    }
+
+    /* done reading the tree */
+    seg_tree_unlock(extents);
+    return req_end-req_start+1;
+}
+
+size_t tfs_read_lazy(tfs_file_t* tf, void* buf, size_t size) {
+    size_t req_start = tf->offset;
+    size_t req_end   = tf->offset + size - 1;
+    return read_local(tf, buf, req_start, req_end);
 }
 
 size_t tfs_seek(tfs_file_t *tf, size_t offset, int whence) {
@@ -207,32 +206,34 @@ size_t tfs_seek(tfs_file_t *tf, size_t offset, int whence) {
     return tf->offset;
 }
 
-// TODO: need to check the range to make sure it is valid.
 void tfs_post(tfs_file_t* tf, size_t offset, size_t count) {
-    int num_covered;
-    Interval** covered = tangram_it_covers(tf->it, offset, count, &num_covered);
-
     int ack;
     tangram_issue_rpc_rma(AM_ID_POST_REQUEST, tf->filename, tfs.mpi_rank, 0, &offset, &count, 1, &ack);
-
-    int i;
-    for(i = 0; i < num_covered; i++)
-        covered[i]->posted = true;
-    tangram_free(covered, sizeof(Interval*)*num_covered);
+    // TODO: need to check the range to make sure it is valid.
+    // Also need to set those ranges as posted, so when we do
+    // post_all() later we only send the unposted ones.
 }
 
 void tfs_post_all(tfs_file_t* tf) {
-    int num, i, ack;
-    Interval** unposted = tangram_it_unposted(tf->it, &num);
 
+    // TODO only send unposted ones
+    int num = seg_tree_count(&tf->it2);
     size_t offsets[num];
     size_t counts[num];
-    for(i = 0; i < num; i++) {
-        offsets[i] = unposted[i]->offset;
-        counts[i] = unposted[i]->count;
+
+    seg_tree_rdlock(&tf->it2);
+
+    int i = 0;
+    struct seg_tree_node *node = NULL;
+    while ((node = seg_tree_iter(&tf->it2, node))) {
+        offsets[i] = node->start;
+        counts[i]  = node->end - node->start + 1;
+        i++;
     }
 
-    tangram_free(unposted, num*sizeof(Interval*));
+    seg_tree_unlock(&tf->it2);
+
+    int ack;
     tangram_issue_rpc_rma(AM_ID_POST_REQUEST, tf->filename, tfs.mpi_rank, 0, offsets, counts, num, &ack);
 }
 
@@ -291,14 +292,14 @@ void* serve_rma_data(void* in_arg, size_t* size) {
     tfs_file_t* tf = tangram_get_tfs_file(in->filename);
     assert(tf != NULL);
 
-    size_t local_offset;
-    bool found = tangram_it_query(tf->it, in->intervals[0].offset, in->intervals[0].count, &local_offset);
-    assert(found);
-
     *size = in->intervals[0].count;
     void* data = malloc(*size);
-    pread(tf->local_fd, data, *size, local_offset);
 
-    rpc_in_free(in);
+    size_t req_start = in->intervals[0].offset;
+    size_t req_end = req_start + in->intervals[0].count - 1;
+
+    size_t res = read_local(tf, data, req_start, req_end);
+    assert(res == *size);
+
     return data;
 }

@@ -30,6 +30,8 @@ int tangram_commit_impl(tfs_file_t* tf) {
 
 int tangram_close_impl(tfs_file_t *tf) {
     // For all three semantics
-    //tfs_post_all(tf);
+    int semantics = tangram_get_semantics();
+    if (semantics != TANGRAM_STRONG_SEMANTICS)
+        tfs_post_all(tf);
     return tfs_close(tf);
 }
