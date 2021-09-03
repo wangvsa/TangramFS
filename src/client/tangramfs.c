@@ -59,7 +59,16 @@ void tfs_finalize() {
 tfs_file_t* tfs_open(const char* pathname) {
 
     char abs_filename[PATH_MAX+64];
-    sprintf(abs_filename, "%s/_tfs_tmpfile.%d", tfs.tfs_dir, tfs.mpi_rank);
+
+    char* tmp = strdup(pathname);
+    for(int i = 0; i < strlen(pathname); i++) {
+        if(tmp[i] == '/')
+            tmp[i] = '_';
+    }
+
+    sprintf(abs_filename, "%s/tfs_tmp.%s.%d", tfs.tfs_dir, tmp, tfs.mpi_rank);
+    printf("CHEN %s\n", abs_filename);
+    free(tmp);
 
     tfs_file_t *tf = tangram_get_tfs_file(pathname);
     if(tf) {
@@ -72,11 +81,11 @@ tfs_file_t* tfs_open(const char* pathname) {
         tangram_it_init(tf->it);
         seg_tree_init(&tf->it2);
 
-        remove(abs_filename);   // delete the file first
+        remove(abs_filename);   // delete the local file first
         HASH_ADD_STR(tfs_files, filename, tf);
     }
 
-    // open local file as buffer
+    // open local file as buffer, the local file probaly already exists
     tf->local_fd = TANGRAM_REAL_CALL(open)(abs_filename, O_CREAT|O_RDWR, S_IRWXU);
     if(tf->local_fd != -1)
         tf->local_stream = TANGRAM_REAL_CALL(fdopen)(tf->local_fd, "r+");
@@ -115,7 +124,6 @@ size_t tfs_read(tfs_file_t* tf, void* buf, size_t size) {
 
 size_t read_local(tfs_file_t* tf, void* buf, size_t req_start, size_t req_end) {
 
-    printf("read local %s %lu %lu\n", tf->filename, req_start, req_end);
     struct seg_tree *extents = &tf->it2;
 
     seg_tree_rdlock(extents);
@@ -162,6 +170,7 @@ size_t read_local(tfs_file_t* tf, void* buf, size_t req_start, size_t req_end) {
      * if we can't fully satisfy the request, copy request to
      * output array, so it can be passed on to server */
     if(!have_local) {
+        seg_tree_unlock(extents);
         printf("[tangramfs] read_local() does not have the full content\n");
         return 0;
     }
@@ -184,11 +193,6 @@ size_t read_local(tfs_file_t* tf, void* buf, size_t req_start, size_t req_end) {
         size_t this_length = (next->end < req_end) ? (next->end-req_start+1) : (req_end-req_start+1);
         pread(tf->local_fd, buf+off, this_length, this_pos);
 
-        printf("read local %d %lu %lu %lu\n", off, ext_start, ext_length, ext_pos);
-        if(ext_pos == 0 && this_length == 10) {
-            printf("read header cookie: %s\n", (char*) buf);
-        }
-
         off += this_length;
         expected_start = next->end + 1;
 
@@ -204,7 +208,9 @@ size_t read_local(tfs_file_t* tf, void* buf, size_t req_start, size_t req_end) {
 size_t tfs_read_lazy(tfs_file_t* tf, void* buf, size_t size) {
     size_t req_start = tf->offset;
     size_t req_end   = tf->offset + size - 1;
-    return read_local(tf, buf, req_start, req_end);
+    size_t res = read_local(tf, buf, req_start, req_end);
+    tf->offset += res;
+    return res;
 }
 
 size_t tfs_seek(tfs_file_t *tf, size_t offset, int whence) {
