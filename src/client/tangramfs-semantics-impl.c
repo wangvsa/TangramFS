@@ -14,7 +14,7 @@ size_t tangram_write_impl(tfs_file_t* tf, const void* buf, size_t count) {
 
 size_t tangram_read_impl(tfs_file_t *tf, void* buf, size_t count) {
     // All three semantics use tfs_read()
-    return tfs_read(tf, buf, count);
+    return tfs_read_lazy(tf, buf, count);
 }
 
 int tangram_commit_impl(tfs_file_t* tf) {

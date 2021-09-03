@@ -91,10 +91,12 @@ size_t tfs_write(tfs_file_t* tf, const void* buf, size_t size) {
     size_t local_offset = TANGRAM_REAL_CALL(lseek)(tf->local_fd, 0, SEEK_END);
     size_t res = pwrite(tf->local_fd, buf, size, local_offset);
     seg_tree_add(&tf->it2, tf->offset, tf->offset+size-1, local_offset);
+    tf->offset += size;
     return res;
 }
 
 size_t tfs_read(tfs_file_t* tf, void* buf, size_t size) {
+    printf("[tangramfs: %d] read %s (%lu, %lu)\n", tfs.mpi_rank, tf->filename, tf->offset, size);
     int owner_rank;
     tfs_query(tf, tf->offset, size, &owner_rank);
     //printf("my rank: %d, query: %lu, owner rank: %d\n", tfs.mpi_rank, tf->offset/1024/1024, owner_rank);
@@ -113,6 +115,7 @@ size_t tfs_read(tfs_file_t* tf, void* buf, size_t size) {
 
 size_t read_local(tfs_file_t* tf, void* buf, size_t req_start, size_t req_end) {
 
+    printf("read local %s %lu %lu\n", tf->filename, req_start, req_end);
     struct seg_tree *extents = &tf->it2;
 
     seg_tree_rdlock(extents);
@@ -158,23 +161,31 @@ size_t read_local(tfs_file_t* tf, void* buf, size_t req_start, size_t req_end) {
     /* TODO
      * if we can't fully satisfy the request, copy request to
      * output array, so it can be passed on to server */
-    assert(have_local);
+    if(!have_local)
+        return 0;
 
     /* otherwise we can copy the data locally, iterate
      * over the extents and copy data into request buffer.
      * again search for a starting extent using a range
      * of just the very first byte that we need */
     next = first;
-    int off = 0;
+    size_t off = 0;
+    expected_start = req_start;
     while ((next != NULL) && (next->start < req_end)) {
         /* get start and length of this extent */
         size_t ext_start = next->start;
         size_t ext_length = (next->end + 1) - ext_start;
         size_t ext_pos = next->ptr;
 
-        /* actual read */
-        pread(tf->local_fd, buf+off, ext_length, ext_pos);
-        off += ext_length;
+        /* the bytes this extent can provide */
+        size_t this_pos = ext_pos + (req_start - ext_start);
+        size_t this_length = (next->end < req_end) ? (next->end-req_start+1) : (req_end-req_start+1);
+        pread(tf->local_fd, buf+off, this_length, this_pos);
+
+        printf("read local %d %lu %lu %lu\n", off, ext_start, ext_length, ext_pos);
+
+        off += this_length;
+        expected_start = next->end + 1;
 
         /* get the next element in the tree */
         next = seg_tree_iter(extents, next);
@@ -196,13 +207,21 @@ size_t tfs_seek(tfs_file_t *tf, size_t offset, int whence) {
         tf->offset = offset;
     if(whence == SEEK_CUR)
         tf->offset += offset;
-    // TODO do not support SEEK_END For now.
-    // now seek to the end of the loca file
+
+    // TODO
+    // now we assume the local file end offset
+    // is the global end offset
     if(whence == SEEK_END) {
-        TANGRAM_REAL_CALL(fseek)(tf->local_stream, offset, SEEK_END);
-        tf->offset = TANGRAM_REAL_CALL(ftell)(tf->local_stream);
+        if( seg_tree_count(&tf->it2) > 0)
+            tf->offset = seg_tree_max(&tf->it2) + 1;
+        else
+            tf->offset = 0;
     }
 
+    return tf->offset;
+}
+
+size_t tfs_tell(tfs_file_t* tf) {
     return tf->offset;
 }
 

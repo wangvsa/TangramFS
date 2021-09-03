@@ -95,9 +95,7 @@ void* add_to_map(tfs_file_t* tf, const char* filename, int stream) {
 FILE* TANGRAM_WRAP(fopen)(const char *filename, const char *mode)
 {
     if(tangram_should_intercept(filename)) {
-
         tfs_file_t* tf = tfs_open(filename);
-
         if(tf->local_stream != NULL) {
             TFSStreamMap* entry = add_to_map(tf, filename, true);
             return entry->stream;
@@ -113,6 +111,7 @@ int TANGRAM_WRAP(fseek)(FILE *stream, long int offset, int origin)
 {
     tfs_file_t* tf = stream2tf(stream);
     if(tf) {
+        printf("[tangramfs] fseek %s (%lu, %d)\n", tf->filename, offset, origin);
         tfs_seek(tf, offset, origin);
         return 0;   // unlike lseek(), fseek on success, return 0
     }
@@ -123,7 +122,14 @@ int TANGRAM_WRAP(fseek)(FILE *stream, long int offset, int origin)
 
 long int TANGRAM_WRAP(ftell)(FILE *stream)
 {
-    // TODO
+    // TODO now returns locally offset
+    tfs_file_t* tf = stream2tf(stream);
+    if(tf) {
+        size_t res = tfs_tell(tf);
+        printf("[tangramfs] ftell %s %lu\n", tf->filename, res);
+        return res;
+    }
+
     MAP_OR_FAIL(ftell);
     long int res = TANGRAM_REAL_CALL(ftell)(stream);
     return res;
@@ -133,8 +139,10 @@ size_t TANGRAM_WRAP(fwrite)(const void *ptr, size_t size, size_t count, FILE * s
 {
     tfs_file_t *tf = stream2tf(stream);
     if(tf) {
+        printf("[tangramfs] fwrite %s (%lu, %lu)\n", tf->filename, size, count);
         size_t res = tangram_write_impl(tf, ptr, count*size);
         // Note that fwrite on success returns the count not total bytes.
+        printf("[tangramfs] fwrite done %s (%lu, %lu)\n", tf->filename, size, count);
         if(res == size * count)
             return count;
         return res;
@@ -148,6 +156,7 @@ size_t TANGRAM_WRAP(fread)(void * ptr, size_t size, size_t count, FILE * stream)
 {
     tfs_file_t *tf = stream2tf(stream);
     if(tf) {
+        printf("[tangramfs] fread %s (%lu, %lu)\n", tf->filename, size, count);
         size_t res = tangram_read_impl(tf, ptr, count*size);
         if(res == size * count)
             return count;
