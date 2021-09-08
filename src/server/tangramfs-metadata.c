@@ -1,93 +1,113 @@
 #include <stdio.h>
+#include <assert.h>
 #include "uthash.h"
+#include "seg_tree.h"
 #include "tangramfs-utils.h"
 #include "tangramfs-metadata.h"
-#include "tangramfs-global-interval-tree.h"
 
-typedef struct GlobalIntervalTreeEntry_t {
+typedef struct seg_tree_table {
     char filename[256];
-    GlobalIntervalTree global_it;
+    struct seg_tree tree;
     UT_hash_handle hh;
-} GlobalIntervalTreeEntry;
+} seg_tree_table_t;
 
+// Hash Map <filename, seg_tree>
+static seg_tree_table_t *g_stt = NULL;
 
-// Hash Map <filename, global interval tree>
-static GlobalIntervalTreeEntry *global_it_table;
 
 void tangram_ms_init() {
 }
 
 void tangram_ms_finalize() {
-    GlobalIntervalTreeEntry* entry, *tmp;
-    HASH_ITER(hh, global_it_table, entry, tmp) {
-        HASH_DEL(global_it_table, entry);
-        tangram_global_it_finalize(&(entry->global_it));
-        tangram_free(entry, sizeof(GlobalIntervalTreeEntry));
+    seg_tree_table_t * entry, *tmp;
+    HASH_ITER(hh, g_stt, entry, tmp) {
+        HASH_DEL(g_stt, entry);
+        seg_tree_destroy(&entry->tree);
+        tangram_free(entry, sizeof(seg_tree_table_t));
     }
 }
 
 void tangram_ms_handle_post(int rank, char* filename, size_t offset, size_t count) {
-    GlobalIntervalTreeEntry *entry = NULL;
-    HASH_FIND_STR(global_it_table, filename, entry);
+    seg_tree_table_t *entry = NULL;
+    HASH_FIND_STR(g_stt, filename, entry);
 
-    if(entry) {
-
-    } else {
-        entry = tangram_malloc(sizeof(GlobalIntervalTreeEntry));
-        tangram_global_it_init(&(entry->global_it));
+    if(!entry) {
+        entry = tangram_malloc(sizeof(seg_tree_table_t));
+        seg_tree_init(&entry->tree);
         strcpy(entry->filename, filename);
-        HASH_ADD_STR(global_it_table, filename, entry);
+        HASH_ADD_STR(g_stt, filename, entry);
     }
 
-    GlobalInterval *new = tangram_global_it_new(offset, count, rank);
-    GlobalIntervalTree *global_it = &(entry->global_it);
-
-    int num_overlaps = 0;
-    GlobalInterval** overlaps = tangram_global_it_overlaps(global_it, new, &num_overlaps);
-    int i;
-    for(i = 0; i < num_overlaps ; i++) {
-        GlobalInterval *old = overlaps[i];
-        if(rank != old->rank) {
-            // Case 1. new one fully covers the old one
-            // Delete the old one
-            if(offset <= old->offset && offset+count >= old->offset+old->count) {
-                tangram_global_it_delete(global_it, old);
-            }
-            // Case 2. new one covers the left part of the old one
-            // Increase the offset of the old one
-            else if(offset+count <= old->offset+old->count) {
-                old->offset = offset+count;
-            }
-            // Casse 3. new one covers the right part of the old one
-            // Reduce the count of the old one
-            else if(offset >= old->offset) {
-                old->count = offset - old->offset;
-            }
-        }
-    }
-
-    tangram_global_it_insert(global_it, new);
+    // TODO should ask clients to post local offset as well
+    seg_tree_add(&entry->tree, offset, offset+count-1, 0, rank);
 }
 
-bool tangram_ms_handle_query(char* filename, size_t offset, size_t count, int *rank) {
-    GlobalIntervalTreeEntry *entry = NULL;
-    HASH_FIND_STR(global_it_table, filename, entry);
-    if(entry)
-        return tangram_global_it_query(&(entry->global_it), offset, count, rank);
+bool tangram_ms_handle_query(char* filename, size_t req_start, size_t req_count, int *rank) {
+    seg_tree_table_t *entry = NULL;
+    HASH_FIND_STR(g_stt, filename, entry);
 
-    return false;
+    assert(entry);
+
+    struct seg_tree *extents = &g_stt->tree;
+
+    seg_tree_rdlock(extents);
+
+    /* can we fully satisfy this request? assume we can */
+    int have_data = 1;
+
+    /* this will point to the offset of the next byte we
+     * need to account for */
+    size_t req_end = req_start + req_count - 1;
+    size_t expected_start = req_start;
+
+    /* iterate over extents we have for this file,
+     * and check that there are no holes in coverage.
+     * we search for a starting extent using a range
+     * of just the very first byte that we need */
+    struct seg_tree_node* first;
+    first = seg_tree_find_nolock(extents, req_start, req_start);
+    struct seg_tree_node* next = first;
+    while (next != NULL && next->start < req_end) {
+        if (expected_start >= next->start) {
+            /* this extent has the next byte we expect,
+             * bump up to the first byte past the end
+             * of this extent */
+            expected_start = next->end + 1;
+        } else {
+            /* there is a gap between extents so we're missing
+             * some bytes */
+            have_data = 0;
+            break;
+        }
+
+        /* get the next element in the tree */
+        next = seg_tree_iter(extents, next);
+    }
+
+    /* check that we account for the full request
+     * up until the last byte */
+    if (expected_start < req_end) {
+        /* missing some bytes at the end of the request */
+        have_data = 0;
+    }
+
+    // TODO now I assume that only one rank hols the
+    // entire content in a single segment.
+    if (have_data) {
+        *rank = first->rank;
+    }
+
+    return have_data;
 }
 
 void tangram_ms_handle_stat(char* filename, struct stat *buf) {
-    GlobalIntervalTreeEntry *entry = NULL;
-    HASH_FIND_STR(global_it_table, filename, entry);
+    seg_tree_table_t *entry = NULL;
+    HASH_FIND_STR(g_stt, filename, entry);
+
     size_t size = 0;
-    if(entry) {
-        GlobalInterval *i;
-        LL_FOREACH(entry->global_it.head, i) {
-            if((i->offset+i->count) > size)
-                size = i->offset+i->count;
-        }
-    }
+
+    if(entry)
+        size = seg_tree_max(&entry->tree);
+
     buf->st_size = size;
 }
