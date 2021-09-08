@@ -271,7 +271,7 @@ int TANGRAM_WRAP(close)(int fd) {
     TFSFdMap* found = NULL;
     HASH_FIND_INT(tf_fd_map, &fd, found);
     if(found) {
-        printf("[tangramfs] fclose %s\n", found->tf->filename);
+        printf("[tangramfs] close %s\n", found->tf->filename);
         int res = tangram_close_impl(found->tf);
         HASH_DEL(tf_fd_map, found);
         free(found);
