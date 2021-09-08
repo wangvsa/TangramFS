@@ -83,6 +83,7 @@ bool tangram_ms_handle_query(char* filename, size_t req_start, size_t req_count,
         /* get the next element in the tree */
         next = seg_tree_iter(extents, next);
     }
+    seg_tree_unlock(extents);
 
     /* check that we account for the full request
      * up until the last byte */
