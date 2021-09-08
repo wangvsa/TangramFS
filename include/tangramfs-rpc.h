@@ -2,7 +2,6 @@
 #define _TANGRAMFS_RPC_H_
 #include <stdlib.h>
 #include <string.h>
-#include "tangramfs.h"
 #include "tangramfs-ucx.h"
 
 typedef struct rpc_interval {
@@ -18,10 +17,12 @@ typedef struct rpc_in {
     interval_t *intervals;
 } rpc_in_t;
 
+
 typedef struct rpc_out {
+    enum {QUERY_NOT_FOUND, QUERY_OK} res;
+    //int res;
     int rank;
 } rpc_out_t;
-
 
 static void* rpc_in_pack(char* filename, int rank, int num_intervals, size_t *offsets, size_t *counts, size_t *size) {
     int filename_len = strlen(filename);
@@ -85,7 +86,6 @@ static void rpc_in_free(rpc_in_t *in) {
     free(in->intervals);
     free(in);
 }
-
 
 void tangram_issue_rpc_rma(uint8_t id, char* filename, int my_rank, int dest_rank, size_t *offsets, size_t *counts, int len, void* respond);
 void tangram_issue_metadata_rpc(uint8_t id, const char* filename, void* respond);

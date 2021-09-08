@@ -7,8 +7,6 @@
 #include <mpi.h>
 #include "tangramfs.h"
 #include "tangramfs-metadata.h"
-#include "tangramfs-ucx.h"
-#include "tangramfs-rpc.h"
 
 /**
  * Return a respond, can be NULL
@@ -32,8 +30,8 @@ void* rpc_handler(int8_t id, void* data, size_t *respond_len) {
         bool found = tangram_ms_handle_query(in->filename, in->intervals[0].offset, in->intervals[0].count, &(out->rank));
         //printf("query in->rank: %d, filename: %s, offset:%lu, count: %lu, out->rank: %d\n",
         //        in->rank, in->filename, in->intervals[0].offset, in->intervals[0].count, out->rank);
-        assert(found);
         rpc_in_free(in);
+        out->res = found ? QUERY_OK: QUERY_NOT_FOUND;
         respond = out;
     } else if(id == AM_ID_STAT_REQUEST) {
         char* path = data;

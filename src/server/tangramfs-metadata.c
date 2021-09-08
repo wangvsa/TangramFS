@@ -53,7 +53,7 @@ bool tangram_ms_handle_query(char* filename, size_t req_start, size_t req_count,
     seg_tree_rdlock(extents);
 
     /* can we fully satisfy this request? assume we can */
-    int have_data = 1;
+    bool have_data = true;
 
     /* this will point to the offset of the next byte we
      * need to account for */
@@ -76,7 +76,7 @@ bool tangram_ms_handle_query(char* filename, size_t req_start, size_t req_count,
         } else {
             /* there is a gap between extents so we're missing
              * some bytes */
-            have_data = 0;
+            have_data = false;
             break;
         }
 
@@ -89,7 +89,7 @@ bool tangram_ms_handle_query(char* filename, size_t req_start, size_t req_count,
      * up until the last byte */
     if (expected_start < req_end) {
         /* missing some bytes at the end of the request */
-        have_data = 0;
+        have_data = false;
     }
 
     // TODO now I assume that only one rank hols the

@@ -9,9 +9,7 @@
 #include <mpi.h>
 #include "tangramfs.h"
 #include "tangramfs-utils.h"
-#include "tangramfs-rpc.h"
 #include "tangramfs-posix-wrapper.h"
-#include "seg_tree.h"
 
 
 tfs_file_t *tfs_files;   // hash map of currently opened files
@@ -103,18 +101,18 @@ size_t tfs_write(tfs_file_t* tf, const void* buf, size_t size) {
 
 size_t tfs_read(tfs_file_t* tf, void* buf, size_t size) {
     printf("[tangramfs: %d] read %s (%lu, %lu)\n", tfs.mpi_rank, tf->filename, tf->offset, size);
-    int owner_rank;
-    tfs_query(tf, tf->offset, size, &owner_rank);
+    rpc_out_t out;
+    tfs_query(tf, tf->offset, size, &out);
     //printf("my rank: %d, query: %lu, owner rank: %d\n", tfs.mpi_rank, tf->offset/1024/1024, owner_rank);
 
-    // Turns out that myself has the latest data,
-    // just read it locally.
-    if(owner_rank == tfs.mpi_rank)
+    // 1. turns out myself has the latest data, then just read it locally.
+    // 2. in case server does not know who has the data, we'll also try it locally.
+    if(out.res == QUERY_NOT_FOUND || out.rank == tfs.mpi_rank)
         return tfs_read_lazy(tf, buf, size);
 
     /*TODO RMA read*/
     size_t offset = tf->offset;
-    tangram_issue_rpc_rma(AM_ID_RMA_REQUEST, tf->filename, tfs.mpi_rank, owner_rank, &offset, &size, 1, buf);
+    tangram_issue_rpc_rma(AM_ID_RMA_REQUEST, tf->filename, tfs.mpi_rank, out.rank, &offset, &size, 1, buf);
     tf->offset += size;
     return size;
 }
@@ -264,10 +262,8 @@ void tfs_post_all(tfs_file_t* tf) {
     tangram_issue_rpc_rma(AM_ID_POST_REQUEST, tf->filename, tfs.mpi_rank, 0, offsets, counts, num, &ack);
 }
 
-void tfs_query(tfs_file_t* tf, size_t offset, size_t size, int *out_rank) {
-    rpc_out_t out;
-    tangram_issue_rpc_rma(AM_ID_QUERY_REQUEST, tf->filename, tfs.mpi_rank, 0, &offset, &size, 1, &out);
-    *out_rank = out.rank;
+void tfs_query(tfs_file_t* tf, size_t offset, size_t size, rpc_out_t* out) {
+    tangram_issue_rpc_rma(AM_ID_QUERY_REQUEST, tf->filename, tfs.mpi_rank, 0, &offset, &size, 1, out);
 }
 
 int tfs_close(tfs_file_t* tf) {

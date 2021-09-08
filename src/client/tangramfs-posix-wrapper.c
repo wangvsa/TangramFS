@@ -10,7 +10,6 @@
 #include <mpi.h>
 #include "uthash.h"
 #include "tangramfs.h"
-#include "tangramfs-rpc.h"
 #include "tangramfs-posix-wrapper.h"
 #include "tangramfs-semantics-impl.h"
 
