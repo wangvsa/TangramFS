@@ -4,12 +4,12 @@
 #include "tangramfs-metadata.h"
 #include "tangramfs-global-interval-tree.h"
 
-
 typedef struct GlobalIntervalTreeEntry_t {
     char filename[256];
     GlobalIntervalTree global_it;
     UT_hash_handle hh;
 } GlobalIntervalTreeEntry;
+
 
 // Hash Map <filename, global interval tree>
 static GlobalIntervalTreeEntry *global_it_table;

@@ -96,7 +96,7 @@ tfs_file_t* tfs_open(const char* pathname) {
 size_t tfs_write(tfs_file_t* tf, const void* buf, size_t size) {
     size_t local_offset = TANGRAM_REAL_CALL(lseek)(tf->local_fd, 0, SEEK_END);
     size_t res = pwrite(tf->local_fd, buf, size, local_offset);
-    seg_tree_add(&tf->it2, tf->offset, tf->offset+size-1, local_offset);
+    seg_tree_add(&tf->it2, tf->offset, tf->offset+size-1, local_offset, tfs.mpi_rank);
     tf->offset += size;
     return res;
 }
