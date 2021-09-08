@@ -16,7 +16,6 @@ lib_LTLIBRARIES = libtangramfs.la
 AM_CPPFLAGS = -fPIC -I./include -Wno-unused-result -D_LARGEFILE64_SOURCE -DTANGRAM_PRELOAD
 
 libtangramfs_la_SOURCES = src/client/tangramfs.c \
-						  src/client/tangramfs-interval-tree.c \
 						  src/client/tangramfs-rpc.c \
 						  src/client/tangramfs-posix-wrapper.c \
 						  src/client/tangramfs-semantics-impl.c  \

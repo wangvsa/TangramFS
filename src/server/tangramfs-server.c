@@ -3,7 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdbool.h>
+#include <assert.h>
 #include <mpi.h>
 #include "tangramfs.h"
 #include "tangramfs-metadata.h"

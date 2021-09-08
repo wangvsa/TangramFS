@@ -5,6 +5,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <assert.h>
 #include <mpi.h>
 #include "tangramfs.h"
 #include "tangramfs-utils.h"
@@ -47,8 +48,6 @@ void tfs_finalize() {
     tfs_file_t *tf, *tmp;
     HASH_ITER(hh, tfs_files, tf, tmp) {
         HASH_DEL(tfs_files, tf);
-        tangram_it_finalize(tf->it);
-        tangram_free(tf->it, sizeof(IntervalTree));
         tangram_free(tf, sizeof(tfs_file_t));
     }
 
@@ -76,9 +75,7 @@ tfs_file_t* tfs_open(const char* pathname) {
     } else {
         tf = tangram_malloc(sizeof(tfs_file_t));
         strcpy(tf->filename, pathname);
-        tf->it = tangram_malloc(sizeof(IntervalTree));
         tf->offset = 0;
-        tangram_it_init(tf->it);
         seg_tree_init(&tf->it2);
 
         remove(abs_filename);   // delete the local file first
