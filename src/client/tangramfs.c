@@ -93,7 +93,7 @@ tfs_file_t* tfs_open(const char* pathname) {
 
 size_t tfs_write(tfs_file_t* tf, const void* buf, size_t size) {
     size_t local_offset = TANGRAM_REAL_CALL(lseek)(tf->local_fd, 0, SEEK_END);
-    size_t res = pwrite(tf->local_fd, buf, size, local_offset);
+    size_t res = TANGRAM_REAL_CALL(pwrite)(tf->local_fd, buf, size, local_offset);
     seg_tree_add(&tf->it2, tf->offset, tf->offset+size-1, local_offset, tfs.mpi_rank);
     tf->offset += size;
     return res;
@@ -186,7 +186,7 @@ size_t read_local(tfs_file_t* tf, void* buf, size_t req_start, size_t req_end) {
         /* the bytes this extent can provide */
         size_t this_pos = ext_pos + (req_start - ext_start);
         size_t this_length = (next->end < req_end) ? (next->end-req_start+1) : (req_end-req_start+1);
-        pread(tf->local_fd, buf+off, this_length, this_pos);
+        TANGRAM_REAL_CALL(pread)(tf->local_fd, buf+off, this_length, this_pos);
 
         off += this_length;
         expected_start = next->end + 1;

@@ -281,6 +281,37 @@ int TANGRAM_WRAP(close)(int fd) {
     return TANGRAM_REAL_CALL(close)(fd);
 }
 
+ssize_t TANGRAM_WRAP(pwrite)(int fd, const void *buf, size_t count, off_t offset)
+{
+    tfs_file_t *tf = fd2tf(fd);
+    if(tf) {
+        printf("[tangramfs] pwrite start %s (%lu, %lu)\n", tf->filename, offset, count);
+        tfs_seek(tf, offset, SEEK_SET);
+        size_t res = tangram_write_impl(tf, buf, count);
+        // Note that fwrite on success returns the count not total bytes.
+        printf("[tangramfs] pwrite done %s (%lu, %lu), return: %lu\n", tf->filename, offset, count, res);
+        return res;
+    }
+
+    MAP_OR_FAIL(pwrite);
+    return TANGRAM_REAL_CALL(pwrite)(fd, buf, count, offset);
+}
+
+ssize_t TANGRAM_WRAP(pread)(int fd, void *buf, size_t count, off_t offset)
+{
+    tfs_file_t *tf = fd2tf(fd);
+    if(tf) {
+        printf("[tangramfs] pread start %s (%lu, %lu)\n" , tf->filename, offset, count);
+        tfs_seek(tf, offset, SEEK_SET);
+        size_t res = tangram_read_impl(tf, buf, count);
+        printf("[tangramfs] pread done %s (%lu, %lu), return: %lu\n", tf->filename, offset, count, res);
+        return res;
+    }
+
+    MAP_OR_FAIL(pread);
+    return TANGRAM_REAL_CALL(pread)(fd, buf, count, offset);
+}
+
 int TANGRAM_WRAP(fsync)(int fd) {
     tfs_file_t* tf = fd2tf(fd);
     if(tf)
