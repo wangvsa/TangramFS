@@ -6,10 +6,10 @@ tar -zxf ./ucx-1.11.1.tar.gz
 
 cd ./ucx-1.11.1 && mkdir install
 
-export UCX_DIR=`pwd`/instal
+export UCX_DIR=`pwd`/install
 echo $UCX_DIR
 
 ./autogen.sh
 ./contrib/configure-release --prefix=$UCX_DIR --without-cuda --without-java
-make -j8
+make -j2
 make install
