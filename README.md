@@ -1,6 +1,11 @@
+
 <img src="https://raw.githubusercontent.com/wangvsa/TangramFS/main/tangramfs-logo.png" width="200">
 
-  User-level parallel file system with tunable consistency
+User-level parallel file system with tunable consistency.
+
+[![build](https://github.com/wangvsa/TangramFS/actions/workflows/make-build.yml/badge.svg)](https://github.com/wangvsa/TangramFS/actions/workflows/make-build.yml)
+
+
 
 ----------
 
