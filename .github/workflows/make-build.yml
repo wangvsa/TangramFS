@@ -17,7 +17,7 @@ jobs:
       run: |
         sudo apt-get update
         sudo apt-get install libmpich-dev
-        ./install-deps.sh
+        .github/workflows/install-deps.sh
     - name: configure
       run: |
         ./autogen.sh
