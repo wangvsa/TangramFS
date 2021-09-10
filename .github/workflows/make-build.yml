@@ -13,10 +13,10 @@ jobs:
 
     steps:
     - uses: actions/checkout@v2
-    - name: Install MPI
+    - name: Install MPI and UCX
       run: |
         sudo apt-get update
-        sudo apt-get install libmpich-dev
+        sudo apt-get install libmpich-dev libucx-dev
     - name: configure
       run: |
         ./autogen.sh
