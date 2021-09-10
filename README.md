@@ -1,6 +1,6 @@
+<img src="https://raw.githubusercontent.com/wangvsa/TangramFS/main/tangramfs-logo.png" width="200">
 
-![LOGL](https://raw.githubusercontent.com/wangvsa/TangramFS/main/tangramfs-logo.png)
-===========
+----------
 
 User-level parallel file system with tunable consistency
 
