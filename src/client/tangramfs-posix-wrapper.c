@@ -152,11 +152,10 @@ size_t TANGRAM_WRAP(fwrite)(const void *ptr, size_t size, size_t count, FILE * s
 {
     tfs_file_t *tf = stream2tf(stream);
     if(tf) {
-        printf("[tangramfs] fwrite start %s (%lu, %lu)\n", tf->filename, size, count);
         size_t res = tangram_write_impl(tf, ptr, count*size);
         // Note that fwrite on success returns the count not total bytes.
         res = (res == size*count) ? count: res;
-        printf("[tangramfs] fwrite done %s (%lu, %lu), return: %lu\n", tf->filename, size, count, res);
+        printf("[tangramfs] fwrite %s (%lu, %lu), return: %lu\n", tf->filename, size, count, res);
         return res;
     }
 
@@ -168,10 +167,9 @@ size_t TANGRAM_WRAP(fread)(void * ptr, size_t size, size_t count, FILE * stream)
 {
     tfs_file_t *tf = stream2tf(stream);
     if(tf) {
-        printf("[tangramfs] fread start %s (%lu, %lu)\n" , tf->filename, size, count);
         size_t res = tangram_read_impl(tf, ptr, count*size);
         res = (res == size*count) ? count: res;
-        printf("[tangramfs] fread done %s (%lu, %lu), return: %lu\n", tf->filename, size, count, res);
+        printf("[tangramfs] fread %s (%lu, %lu), return: %lu\n", tf->filename, size, count, res);
         return res;
     }
 
@@ -199,6 +197,7 @@ int TANGRAM_WRAP(open)(const char *pathname, int flags, ...)
 {
     if(tangram_should_intercept(pathname)) {
         tfs_file_t* tf = tfs_open(pathname);
+        printf("[tangramfs] open %s %d\n", pathname, tf->local_fd);
         TFSFdMap* entry = add_to_map(tf, pathname, false);
         return entry->fd;
     }
@@ -248,8 +247,12 @@ off_t TANGRAM_WRAP(lseek)(int fd, off_t offset, int whence)
 ssize_t TANGRAM_WRAP(write)(int fd, const void *buf, size_t count)
 {
     tfs_file_t* tf = fd2tf(fd);
-    if(tf)
-        return tangram_write_impl(tf, buf, count);
+    if(tf) {
+        printf("[tangramfs] write start %s (%lu, %lu)\n", tf->filename, tf->offset, count);
+        size_t res = tangram_write_impl(tf, buf, count);
+        printf("[tangramfs] write done %s (%lu), return: %lu\n", tf->filename, count, res);
+        return res;
+    }
 
     MAP_OR_FAIL(write);
     return TANGRAM_REAL_CALL(write)(fd, buf, count);
@@ -259,7 +262,9 @@ ssize_t TANGRAM_WRAP(read)(int fd, void *buf, size_t count)
 {
     tfs_file_t* tf = fd2tf(fd);
     if(tf) {
-        return tangram_read_impl(tf, buf, count);
+        size_t res = tangram_read_impl(tf, buf, count);
+        printf("[tangramfs] read %s (%lu), return: %lu\n", tf->filename, count, res);
+        return res;
     }
 
     MAP_OR_FAIL(read);
@@ -285,11 +290,10 @@ ssize_t TANGRAM_WRAP(pwrite)(int fd, const void *buf, size_t count, off_t offset
 {
     tfs_file_t *tf = fd2tf(fd);
     if(tf) {
-        printf("[tangramfs] pwrite start %s (%lu, %lu)\n", tf->filename, offset, count);
         tfs_seek(tf, offset, SEEK_SET);
         size_t res = tangram_write_impl(tf, buf, count);
         // Note that fwrite on success returns the count not total bytes.
-        printf("[tangramfs] pwrite done %s (%lu, %lu), return: %lu\n", tf->filename, offset, count, res);
+        printf("[tangramfs] pwrite %s (%lu, %lu), return: %lu\n", tf->filename, offset, count, res);
         return res;
     }
 
@@ -301,10 +305,9 @@ ssize_t TANGRAM_WRAP(pread)(int fd, void *buf, size_t count, off_t offset)
 {
     tfs_file_t *tf = fd2tf(fd);
     if(tf) {
-        printf("[tangramfs] pread start %s (%lu, %lu)\n" , tf->filename, offset, count);
         tfs_seek(tf, offset, SEEK_SET);
         size_t res = tangram_read_impl(tf, buf, count);
-        printf("[tangramfs] pread done %s (%lu, %lu), return: %lu\n", tf->filename, offset, count, res);
+        printf("[tangramfs] pread %s (%lu, %lu), return: %lu\n", tf->filename, offset, count, res);
         return res;
     }
 
@@ -331,6 +334,18 @@ int TANGRAM_WRAP(__xstat)(int vers, const char *path, struct stat *buf)
 
     MAP_OR_FAIL(__xstat);
     return TANGRAM_REAL_CALL(__xstat)(vers, path, buf);
+}
+
+int TANGRAM_WRAP(__lxstat)(int vers, const char *path, struct stat *buf)
+{
+    // TODO: stat() call not implemented yet.
+    if(tangram_should_intercept(path)) {
+        tangram_issue_metadata_rpc(AM_ID_STAT_REQUEST, path, buf);
+        return 0;
+    }
+
+    MAP_OR_FAIL(__lxstat);
+    return TANGRAM_REAL_CALL(__lxstat)(vers, path, buf);
 }
 
 int TANGRAM_WRAP(access)(const char *pathname, int mode) {

@@ -64,7 +64,6 @@ tfs_file_t* tfs_open(const char* pathname) {
     }
 
     sprintf(abs_filename, "%s/tfs_tmp.%s.%d", tfs.tfs_dir, tmp, tfs.mpi_rank);
-    printf("CHEN %s\n", abs_filename);
     free(tmp);
 
     tfs_file_t *tf = tangram_get_tfs_file(pathname);
