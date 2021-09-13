@@ -18,6 +18,21 @@ static seg_tree_table_t *g_stt = NULL;
 void tangram_ms_init() {
 }
 
+char* print_tree(char* dst, struct seg_tree* seg_tree)
+{
+    int ptr = 0;
+    struct seg_tree_node* node = NULL;
+
+    /* In case we don't actually print anything */
+    dst[0] = '\0';
+
+    seg_tree_rdlock(seg_tree);
+    while ((node = seg_tree_iter(seg_tree, node))) {
+        ptr += sprintf(&dst[ptr], "[%lu-%lu:%d],  ", node->start, node->end, node->rank);
+    }
+    seg_tree_unlock(seg_tree);
+}
+
 void tangram_ms_finalize() {
     seg_tree_table_t * entry, *tmp;
     HASH_ITER(hh, g_stt, entry, tmp) {
@@ -39,7 +54,8 @@ void tangram_ms_handle_post(int rank, char* filename, size_t offset, size_t coun
     }
 
     // TODO should ask clients to post local offset as well
-    seg_tree_add(&entry->tree, offset, offset+count-1, 0, rank);
+    int res = seg_tree_add(&entry->tree, offset, offset+count-1, 0, rank);
+    assert(res == 0);
 }
 
 bool tangram_ms_handle_query(char* filename, size_t req_start, size_t req_count, int *rank) {
@@ -47,7 +63,7 @@ bool tangram_ms_handle_query(char* filename, size_t req_start, size_t req_count,
     HASH_FIND_STR(g_stt, filename, entry);
     if(NULL) return false;
 
-    struct seg_tree *extents = &g_stt->tree;
+    struct seg_tree *extents = &entry->tree;
 
     seg_tree_rdlock(extents);
 
@@ -91,7 +107,7 @@ bool tangram_ms_handle_query(char* filename, size_t req_start, size_t req_count,
         have_data = false;
     }
 
-    // TODO now I assume that only one rank hols the
+    // TODO now I assume that only one rank holds the
     // entire content in a single segment.
     if (have_data) {
         *rank = first->rank;
