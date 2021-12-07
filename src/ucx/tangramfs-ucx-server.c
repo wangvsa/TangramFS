@@ -208,7 +208,6 @@ void tangram_ucx_server_init(tfs_info_t *tfs_info) {
 
     tangram_uct_context_init(g_server_async, tfs_info->rpc_dev_name, tfs_info->rpc_tl_name, true, &g_server_context);
 
-
     status = uct_iface_set_am_handler(g_server_context.iface, AM_ID_QUERY_REQUEST, am_query_listener, NULL, 0);
     assert(status == UCS_OK);
     status = uct_iface_set_am_handler(g_server_context.iface, AM_ID_POST_REQUEST, am_post_listener, NULL, 0);

@@ -19,10 +19,15 @@ work_dir=/g/g90/wang116/sources/TangramFS
 cd $work_dir 
 export TANGRAM_PERSIST_DIR=$work_dir
 export TANGRAM_BUFFER_DIR=/l/ssd
+export TANGRAM_RPC_DEV=hsi0
+export TANGRAM_RPC_TL=tcp
+export TANGRAM_RMA_DEV=hsi1
+export TANGRAM_RMA_TL=tcp
+export TANGRAM_SEMANTICS=1
 
 unset UCX_NET_DEVICES
 
-./server.out start &
+./install/bin/server start &
 sleep 1
 
 for nodes in {2..2..1}
@@ -31,9 +36,9 @@ do
     echo "nodes:" $nodes "procs:" $procs
     for i in {1..10..1}
     do
-        srun -N $nodes -n $procs ./main.out
+        srun -N $nodes -n $procs ./install/bin/example
     done
 done
 
-./server.out stop
+./install/bin/server stop
 
