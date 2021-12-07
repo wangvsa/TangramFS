@@ -3,7 +3,7 @@
 
 User-level parallel file system with tunable consistency.
 
-[![build](https://github.com/wangvsa/TangramFS/actions/workflows/make-build.yml/badge.svg?branch=main)](https://github.com/wangvsa/TangramFS/actions/workflows/make-build.yml)
+[![build](https://github.com/wangvsa/TangramFS/actions/workflows/cmake.yml/badge.svg)](https://github.com/wangvsa/TangramFS/actions/workflows/cmake.yml)
 
 ----------
 
