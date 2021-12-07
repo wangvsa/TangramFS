@@ -23,11 +23,11 @@ else()
     message(STATUS, "MPI not found")
 endif()
 
-# UCX - UCX is not a cmake project
-include_directories(/home/wangchen/Sources/ucx/install/include)
+# UCX is not a cmake project
+include_directories(${UCX_DIR}/include)
 set(TANGRAMFS_EXT_LIB_DEPENDENCIES
-        /home/wangchen/Sources/ucx/install/lib/libuct.so
-        /home/wangchen/Sources/ucx/install/lib/libucs.so
+        ${UCX_DIR}/lib/libuct.so
+        ${UCX_DIR}/lib/libucs.so
         ${TANGRAMFS_EXT_LIB_DEPENDENCIES})
 
 #------------------------------------------------------------------------------

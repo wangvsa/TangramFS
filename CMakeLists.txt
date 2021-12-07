@@ -100,12 +100,6 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
             "MinSizeRel" "RelWithDebInfo")
 endif()
 
-#if(NOT "${CMAKE_CXX_STANDARD}")
-#    set(CMAKE_CXX_STANDARD 17)
-#    set(CMAKE_CXX_STANDARD_REQUIRED ON)
-#    set(CMAKE_CXX_EXTENSIONS OFF)
-#endif()
-
 #-----------------------------------------------------------------------------
 # Targets built within this project are exported at Install time for use
 # by other projects.
@@ -117,15 +111,8 @@ endif()
 #------------------------------------------------------------------------------
 # Build options
 #------------------------------------------------------------------------------
+set(UCX_DIR "" CACHE PATH "UCX instal path")
 option(BUILD_SHARED_LIBS "Build with shared libraries." ON)
-option(TANGRAMFS_ENABLE_PARQUET "Build Parquet format converter." OFF)
-option(TANGRAMFS_ENABLE_POSIX_TRACE "Enable tracing of POSIX calls." ON)
-option(TANGRAMFS_ENABLE_MPI_TRACE "Enable tracing of MPI communication calls." ON)
-option(TANGRAMFS_ENABLE_MPIIO_TRACE "Enable tracing of MPI-IO calls." ON)
-option(TANGRAMFS_ENABLE_HDF5_TRACE "Enable tracing of HDF5 calls." ON)
-option(TANGRAMFS_ENABLE_CUDA_TRACE "Enable tracing of CUDA kernels." OFF)
-option(TANGRAMFS_ENABLE_FCNTL_TRACE "Enable tracing of fcntl()." ON)
-option(TANGRAMFS_INSTALL_TESTS "Enable installation of tests." OFF)
 
 #mark_as_advanced(TANGRAMFS_ENABLE_POSIX_TRACE)
 #mark_as_advanced(TANGRAMFS_ENABLE_MPI_TRACE)
@@ -158,7 +145,6 @@ if (CMAKE_BUILD_TYPE STREQUAL "Debug")
         set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -g3"
                 CACHE STRING "" FORCE)
     endif()
-
 endif()
 
 

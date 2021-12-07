@@ -18,7 +18,7 @@ else()
     message(STATUS, "MPI not found")
 endif()
 
-include_directories(/home/wangchen/Sources/ucx/install/include)
+include_directories(${UCX_DIR}/include)
 
 
 #------------------------------------------------------------------------------
