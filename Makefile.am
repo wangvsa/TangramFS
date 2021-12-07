@@ -9,7 +9,6 @@ noinst_PROGRAMS =
 nodist_noinst_SCRIPTS =
 dist_noinst_SCRIPTS = autogen.sh
 
-
 bin_PROGRAMS = main.out server.out server.out
 lib_LTLIBRARIES = libtangramfs.la
 
@@ -28,8 +27,7 @@ libtangramfs_la_SOURCES = src/client/tangramfs.c \
 
 libtangramfs_la_CFLAGS  = -I./include -I${UCX_DIR}/include -std=gnu99
 libtangramfs_la_LDFLAGS = -Wl,-rpath,-L${UCX_DIR}/lib
-libtangramfs_la_LDFLAGS += -L${UCX_DIR}/lib -lucp -lucs -luct -pthread -lrt -version-info 0:0:0
-
+libtangramfs_la_LDFLAGS += -L${UCX_DIR}/lib -lucp -lucs -luct -pthread -lrt
 
 server_out_SOURCES = src/server/tangramfs-metadata.c 				\
 				 	 src/server/tangramfs-server.c 					\
@@ -43,7 +41,6 @@ server_out_SOURCES = src/server/tangramfs-metadata.c 				\
 
 server_out_CFLAGS  = -I./include -I${UCX_DIR}/include -std=gnu99
 server_out_LDADD   = -L${UCX_DIR}/lib -lucp -lucs -luct -ldl
-
 
 main_out_CFLAGS = -I./include -I${UCX_DIR}/include -std=gnu99
 main_out_SOURCES = src/client/main.c

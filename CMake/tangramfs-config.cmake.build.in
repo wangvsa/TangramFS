@@ -1,0 +1,17 @@
+#-----------------------------------------------------------------------------
+# Config file for compiling against the build directory
+#-----------------------------------------------------------------------------
+get_filename_component(SELF_DIR "${CMAKE_CURRENT_LIST_FILE}" PATH)
+
+#-----------------------------------------------------------------------------
+# Directories
+#-----------------------------------------------------------------------------
+set(TANGRAMFS_INCLUDE_DIR "@TANGRAMFS_INCLUDES_BUILD_TIME@")
+
+#-----------------------------------------------------------------------------
+# Version Strings
+#-----------------------------------------------------------------------------
+set(TANGRAMFS_VERSION_STRING  @TANGRAMFS_PACKAGE_VERSION@)
+set(TANGRAMFS_VERSION_MAJOR   @TANGRAMFS_VERSION_MAJOR@)
+set(TANGRAMFS_VERSION_MINOR   @TANGRAMFS_VERSION_MINOR@)
+set(TANGRAMFS_VERSION_PATCH   @TANGRAMFS_VERSION_PATCH@)
