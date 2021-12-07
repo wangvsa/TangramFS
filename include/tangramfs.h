@@ -10,7 +10,6 @@
 #define TANGRAM_SESSION_SEMANTICS       3
 #define TANGRAM_CUSTOM_SEMANTICS        4
 
-
 /**
  * A list of environment variables that can be set
  *

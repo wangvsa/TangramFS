@@ -24,9 +24,6 @@ void tfs_init() {
     tangram_rpc_service_start(&tfs);
     tangram_rma_service_start(&tfs, serve_rma_data);
 
-
-    struct seg_tree tree;
-
     MPI_Barrier(tfs.mpi_comm);
     tfs.initialized = true;
 }
@@ -91,6 +88,7 @@ tfs_file_t* tfs_open(const char* pathname) {
 
 
 size_t tfs_write(tfs_file_t* tf, const void* buf, size_t size) {
+    printf("[tangram] tfs write\n");
     size_t local_offset = TANGRAM_REAL_CALL(lseek)(tf->local_fd, 0, SEEK_END);
     size_t res = TANGRAM_REAL_CALL(pwrite)(tf->local_fd, buf, size, local_offset);
     seg_tree_add(&tf->it2, tf->offset, tf->offset+size-1, local_offset, tfs.mpi_rank);
@@ -102,7 +100,6 @@ size_t tfs_read(tfs_file_t* tf, void* buf, size_t size) {
     printf("[tangramfs: %d] read %s (%lu, %lu)\n", tfs.mpi_rank, tf->filename, tf->offset, size);
     rpc_out_t out;
     tfs_query(tf, tf->offset, size, &out);
-    //printf("my rank: %d, query: %lu, owner rank: %d\n", tfs.mpi_rank, tf->offset/1024/1024, owner_rank);
 
     // 1. turns out myself has the latest data, then just read it locally.
     // 2. in case server does not know who has the data, we'll also try it locally.

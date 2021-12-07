@@ -113,6 +113,7 @@ endif()
 #------------------------------------------------------------------------------
 set(UCX_DIR "" CACHE PATH "UCX instal path")
 option(BUILD_SHARED_LIBS "Build with shared libraries." ON)
+option(TANGRAMFS_PRELOAD "Preload." ON)
 
 #mark_as_advanced(TANGRAMFS_ENABLE_POSIX_TRACE)
 #mark_as_advanced(TANGRAMFS_ENABLE_MPI_TRACE)

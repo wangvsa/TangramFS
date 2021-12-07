@@ -10,7 +10,7 @@
  * put #define _GNU_SOURCE as their first line
  */
 
-#ifdef TANGRAM_PRELOAD
+#ifdef TANGRAMFS_PRELOAD
     #define TANGRAM_WRAP(func) func
 
     /* Point __real_func to the real funciton using dlsym() */
