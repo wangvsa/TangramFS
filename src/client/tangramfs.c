@@ -88,16 +88,16 @@ tfs_file_t* tfs_open(const char* pathname) {
 
 
 size_t tfs_write(tfs_file_t* tf, const void* buf, size_t size) {
-    printf("[tangram] tfs write\n");
     size_t local_offset = TANGRAM_REAL_CALL(lseek)(tf->local_fd, 0, SEEK_END);
     size_t res = TANGRAM_REAL_CALL(pwrite)(tf->local_fd, buf, size, local_offset);
+    //TANGRAM_REAL_CALL(fsync)(tf->local_fd);
     seg_tree_add(&tf->it2, tf->offset, tf->offset+size-1, local_offset, tfs.mpi_rank);
     tf->offset += size;
     return res;
 }
 
 size_t tfs_read(tfs_file_t* tf, void* buf, size_t size) {
-    printf("[tangramfs: %d] read %s (%lu, %lu)\n", tfs.mpi_rank, tf->filename, tf->offset, size);
+    //printf("[tangramfs: %d] read %s (%lu, %lu)\n", tfs.mpi_rank, tf->filename, tf->offset, size);
     rpc_out_t out;
     tfs_query(tf, tf->offset, size, &out);
 
@@ -157,12 +157,12 @@ size_t read_local(tfs_file_t* tf, void* buf, size_t req_start, size_t req_end) {
         have_local = 0;
     }
 
-    /* TODO
-     * if we can't fully satisfy the request, copy request to
-     * output array, so it can be passed on to server */
+    /* if we can't fully satisfy the request, normally this
+     * means the consistency model is not enough.
+     */
     if(!have_local) {
         seg_tree_unlock(extents);
-        printf("[tangramfs] read_local() does not have the full content\n");
+        //printf("[tangramfs] read_local() does not have the full content\n");
         return 0;
     }
 

@@ -123,7 +123,7 @@ void tangram_ms_handle_stat(char* filename, struct stat *buf) {
     size_t size = 0;
 
     if(entry)
-        size = seg_tree_max(&entry->tree);
+        size = seg_tree_max(&entry->tree) + 1;
 
     buf->st_size = size;
 }
