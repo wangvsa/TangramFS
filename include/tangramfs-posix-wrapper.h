@@ -53,6 +53,7 @@ TANGRAM_DECL_REAL_CALL(unlink, int, (const char* pathname));
 TANGRAM_DECL_REAL_CALL(open, int, (const char *pathname, int flags, ...));
 TANGRAM_DECL_REAL_CALL(open64, int, (const char *pathname, int flags, ...));
 TANGRAM_DECL_REAL_CALL(lseek, off_t, (int fd, off_t offset, int whence));
+TANGRAM_DECL_REAL_CALL(lseek64, off64_t, (int fd, off64_t offset, int whence));
 TANGRAM_DECL_REAL_CALL(write, ssize_t, (int fd, const void *buf, size_t count));
 TANGRAM_DECL_REAL_CALL(read, ssize_t, (int fd, void *buf, size_t count));
 TANGRAM_DECL_REAL_CALL(close, int, (int fd));
@@ -81,6 +82,7 @@ void tangram_map_real_calls() {
     MAP_OR_FAIL(open);
     MAP_OR_FAIL(open64);
     MAP_OR_FAIL(lseek);
+    MAP_OR_FAIL(lseek64);
     MAP_OR_FAIL(write);
     MAP_OR_FAIL(read);
     MAP_OR_FAIL(close);

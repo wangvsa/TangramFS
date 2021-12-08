@@ -96,7 +96,7 @@ FILE* TANGRAM_WRAP(fopen)(const char *filename, const char *mode)
 {
     if(tangram_should_intercept(filename)) {
         tfs_file_t* tf = tfs_open(filename);
-        printf("[tangramfs] fopen %s %p\n", filename, tf->local_stream);
+        //printf("[tangramfs] fopen %s %p\n", filename, tf->local_stream);
         if(tf->local_stream != NULL) {
             TFSStreamMap* entry = add_to_map(tf, filename, true);
             return entry->stream;
@@ -112,7 +112,7 @@ int TANGRAM_WRAP(fseek)(FILE *stream, long int offset, int origin)
 {
     tfs_file_t* tf = stream2tf(stream);
     if(tf) {
-        printf("[tangramfs] fseek %s (%lu, %d)\n", tf->filename, offset, origin);
+        //printf("[tangramfs] fseek %s (%lu, %d)\n", tf->filename, offset, origin);
         tfs_seek(tf, offset, origin);
         return 0;   // unlike lseek(), fseek on success, return 0
     }
@@ -125,7 +125,7 @@ void TANGRAM_WRAP(rewind)(FILE *stream)
 {
     tfs_file_t* tf = stream2tf(stream);
     if(tf) {
-        printf("[tangramfs] rewind %s\n", tf->filename);
+        //printf("[tangramfs] rewind %s\n", tf->filename);
         tfs_seek(tf, 0, SEEK_SET);
     }
 
@@ -139,7 +139,7 @@ long int TANGRAM_WRAP(ftell)(FILE *stream)
     tfs_file_t* tf = stream2tf(stream);
     if(tf) {
         size_t res = tfs_tell(tf);
-        printf("[tangramfs] ftell %s %lu\n", tf->filename, res);
+        //printf("[tangramfs] ftell %s %lu\n", tf->filename, res);
         return res;
     }
 
@@ -155,7 +155,7 @@ size_t TANGRAM_WRAP(fwrite)(const void *ptr, size_t size, size_t count, FILE * s
         size_t res = tangram_write_impl(tf, ptr, count*size);
         // Note that fwrite on success returns the count not total bytes.
         res = (res == size*count) ? count: res;
-        printf("[tangramfs] fwrite %s (%lu, %lu), return: %lu\n", tf->filename, size, count, res);
+        //printf("[tangramfs] fwrite %s (%lu, %lu), return: %lu\n", tf->filename, size, count, res);
         return res;
     }
 
@@ -169,7 +169,7 @@ size_t TANGRAM_WRAP(fread)(void * ptr, size_t size, size_t count, FILE * stream)
     if(tf) {
         size_t res = tangram_read_impl(tf, ptr, count*size);
         res = (res == size*count) ? count: res;
-        printf("[tangramfs] fread %s (%lu, %lu), return: %lu\n", tf->filename, size, count, res);
+        //printf("[tangramfs] fread %s (%lu, %lu), return: %lu\n", tf->filename, size, count, res);
         return res;
     }
 
@@ -183,7 +183,7 @@ int TANGRAM_WRAP(fclose)(FILE * stream)
     HASH_FIND_PTR(tf_stream_map, &stream, found);
 
     if(found) {
-        printf("[tangramfs] fclose %s\n", found->tf->filename);
+        //printf("[tangramfs] fclose %s\n", found->tf->filename);
         int res = tangram_close_impl(found->tf);
         HASH_DEL(tf_stream_map, found);
         return res;
@@ -197,7 +197,7 @@ int TANGRAM_WRAP(open)(const char *pathname, int flags, ...)
 {
     if(tangram_should_intercept(pathname)) {
         tfs_file_t* tf = tfs_open(pathname);
-        printf("[tangramfs] open %s %d\n", pathname, tf->local_fd);
+        //printf("[tangramfs] open %s %d\n", pathname, tf->local_fd);
         TFSFdMap* entry = add_to_map(tf, pathname, false);
         return entry->fd;
     }
@@ -237,20 +237,35 @@ int TANGRAM_WRAP(open64)(const char *pathname, int flags, ...)
 off_t TANGRAM_WRAP(lseek)(int fd, off_t offset, int whence)
 {
     tfs_file_t* tf = fd2tf(fd);
-    if(tf)
+    if(tf) {
+        //printf("[tangramfs] lseek %s, offset: %lu, whence: %d)\n", tf->filename, offset, whence);
         return tfs_seek(tf, offset, whence);
+    }
 
     MAP_OR_FAIL(lseek);
     return TANGRAM_REAL_CALL(lseek)(fd, offset, whence);
 }
 
+off64_t TANGRAM_WRAP(lseek64)(int fd, off64_t offset, int whence)
+{
+    tfs_file_t* tf = fd2tf(fd);
+    if(tf) {
+        //printf("[tangramfs] lseek64 %s, offset: %lu, whence: %d)\n", tf->filename, offset, whence);
+        return tfs_seek(tf, offset, whence);
+    }
+
+    MAP_OR_FAIL(lseek64);
+    return TANGRAM_REAL_CALL(lseek64)(fd, offset, whence);
+}
+
+
 ssize_t TANGRAM_WRAP(write)(int fd, const void *buf, size_t count)
 {
     tfs_file_t* tf = fd2tf(fd);
     if(tf) {
-        printf("[tangramfs] write start %s (%lu, %lu)\n", tf->filename, tf->offset, count);
+        //printf("[tangramfs] write start %s (%lu, %lu)\n", tf->filename, tf->offset, count);
         size_t res = tangram_write_impl(tf, buf, count);
-        printf("[tangramfs] write done %s (%lu), return: %lu\n", tf->filename, count, res);
+        //printf("[tangramfs] write done %s (%lu), return: %lu\n", tf->filename, count, res);
         return res;
     }
 
@@ -263,7 +278,7 @@ ssize_t TANGRAM_WRAP(read)(int fd, void *buf, size_t count)
     tfs_file_t* tf = fd2tf(fd);
     if(tf) {
         size_t res = tangram_read_impl(tf, buf, count);
-        printf("[tangramfs] read %s (%lu), return: %lu\n", tf->filename, count, res);
+        //printf("[tangramfs] read %s (%lu), return: %lu\n", tf->filename, count, res);
         return res;
     }
 
@@ -275,7 +290,7 @@ int TANGRAM_WRAP(close)(int fd) {
     TFSFdMap* found = NULL;
     HASH_FIND_INT(tf_fd_map, &fd, found);
     if(found) {
-        printf("[tangramfs] close %s\n", found->tf->filename);
+        //printf("[tangramfs] close %s\n", found->tf->filename);
         int res = tangram_close_impl(found->tf);
         HASH_DEL(tf_fd_map, found);
         free(found);
@@ -293,7 +308,7 @@ ssize_t TANGRAM_WRAP(pwrite)(int fd, const void *buf, size_t count, off_t offset
         tfs_seek(tf, offset, SEEK_SET);
         size_t res = tangram_write_impl(tf, buf, count);
         // Note that fwrite on success returns the count not total bytes.
-        printf("[tangramfs] pwrite %s (%lu, %lu), return: %lu\n", tf->filename, offset, count, res);
+        //printf("[tangramfs] pwrite %s (%lu, %lu), return: %lu\n", tf->filename, offset, count, res);
         return res;
     }
 
@@ -307,7 +322,7 @@ ssize_t TANGRAM_WRAP(pread)(int fd, void *buf, size_t count, off_t offset)
     if(tf) {
         tfs_seek(tf, offset, SEEK_SET);
         size_t res = tangram_read_impl(tf, buf, count);
-        printf("[tangramfs] pread %s (%lu, %lu), return: %lu\n", tf->filename, offset, count, res);
+        //printf("[tangramfs] pread %s (%lu, %lu), return: %lu\n", tf->filename, offset, count, res);
         return res;
     }
 
