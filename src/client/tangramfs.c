@@ -97,7 +97,7 @@ size_t tfs_write(tfs_file_t* tf, const void* buf, size_t size) {
 }
 
 size_t tfs_read(tfs_file_t* tf, void* buf, size_t size) {
-    //printf("[tangramfs: %d] read %s (%lu, %lu)\n", tfs.mpi_rank, tf->filename, tf->offset, size);
+    tangram_debug("[tangramfs: %d] read %s (%lu, %lu)\n", tfs.mpi_rank, tf->filename, tf->offset, size);
     rpc_out_t out;
     tfs_query(tf, tf->offset, size, &out);
 
@@ -162,7 +162,7 @@ size_t read_local(tfs_file_t* tf, void* buf, size_t req_start, size_t req_end) {
      */
     if(!have_local) {
         seg_tree_unlock(extents);
-        //printf("[tangramfs] read_local() does not have the full content\n");
+        tangram_debug("[tangramfs] read_local() does not have the full content\n");
         return 0;
     }
 

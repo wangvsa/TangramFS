@@ -1,10 +1,12 @@
 #ifndef _TANGRAMFS_UTILS_H_
 #define _TANGRAMFS_UTILS_H_
-
 #include <mpi.h>
 #include <stdbool.h>
 
 #define PATH_MAX    4096
+
+#define tangram_info(f_, ...) printf((f_), ##__VA_ARGS__)
+#define tangram_debug(f_, ...) printf((f_), ##__VA_ARGS__)
 
 typedef struct tfs_info {
     int mpi_rank;

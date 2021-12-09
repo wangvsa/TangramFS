@@ -69,6 +69,6 @@ void tangram_rma_service_start(tfs_info_t *tfs_info, void* (*serve_rma_data)(voi
 
 void tangram_rma_service_stop() {
     tangram_ucx_rma_service_stop();
-    //printf("Total rma time: %.3f\n", rma_time);
+    //tangram_debug("Total rma time: %.3f\n", rma_time);
 }
 

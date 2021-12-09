@@ -27,7 +27,7 @@ void tangram_get_info(tfs_info_t* tfs_info) {
     const char* persist_dir = getenv(TANGRAM_PERSIST_DIR_ENV);
     const char* buffer_dir = getenv(TANGRAM_BUFFER_DIR_ENV);
     if(!persist_dir || !buffer_dir) {
-        printf("ERROR: Please set %s and %s.\n\n", TANGRAM_PERSIST_DIR_ENV, TANGRAM_BUFFER_DIR_ENV);
+        tangram_info("ERROR: Please set %s and %s.\n\n", TANGRAM_PERSIST_DIR_ENV, TANGRAM_BUFFER_DIR_ENV);
         return;
     }
 
@@ -40,7 +40,7 @@ void tangram_get_info(tfs_info_t* tfs_info) {
     const char* rma_tl = getenv(TANGRAM_UCX_RMA_TL_ENV);
 
     if(!rpc_dev || !rpc_tl || !rma_dev || !rma_tl) {
-        printf("ERROR: Please set UCX device and transport.\n\n");
+        tangram_info("ERROR: Please set UCX device and transport.\n\n");
         return;
     }
     strcpy(tfs_info->rpc_dev_name, rpc_dev);

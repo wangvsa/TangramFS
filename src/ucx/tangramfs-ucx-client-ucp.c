@@ -42,8 +42,6 @@ static ucs_status_t client_am_recv_cb(void *arg, const void *header, size_t head
 }
 
 void client_err_cb(void *arg, ucp_ep_h ep, ucs_status_t status) {
-    printf("client_err_cb: received respond: %d, %s\n",
-            g_received_respond, ucs_status_string(status));
     g_received_respond = true;
 }
 

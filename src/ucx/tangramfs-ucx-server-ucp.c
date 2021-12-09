@@ -88,7 +88,6 @@ ucs_status_t server_am_cb_data(void *arg, const void *header, size_t header_leng
 ucs_status_t server_am_cb_cmd(void *arg, const void *header, size_t header_length,
                                void *data, size_t length,
                                const ucp_am_recv_param_t *param) {
-    printf("Server: received stop server command!\n");
     g_server_running = false;
 
     return UCS_OK;
@@ -101,7 +100,6 @@ void tangram_ucx_server_respond(my_session_t *session) {
 
 void server_err_cb(void *arg, ucp_ep_h ep, ucs_status_t status) {
     my_session_t *session = (my_session_t*) arg;
-    printf("server_err_cb: complete: %s\n", ucs_status_string(status));
 }
 
 

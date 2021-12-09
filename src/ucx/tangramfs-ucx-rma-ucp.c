@@ -56,7 +56,6 @@ void wait_request(void* request) {
 
     if(UCS_PTR_IS_ERR(request)) {
         status = UCS_PTR_STATUS(request);
-        printf("Error at wait_request(): %s\n", ucs_status_string(status));
         return;
     }
 

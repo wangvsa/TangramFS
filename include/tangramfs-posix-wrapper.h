@@ -4,6 +4,7 @@
 #include <sys/stat.h>
 #include <dlfcn.h>
 #include <fcntl.h>
+#include "tangramfs-utils.h"
 
 /**
  * Note, whoever include this header file need to
@@ -18,7 +19,7 @@
     if (!(__real_##func)) {                                                 \
         __real_##func = dlsym(RTLD_NEXT, #func);                            \
         if (!(__real_##func)) {                                             \
-            printf("Tangram failed to map symbol: %s\n", #func);            \
+            tangram_debug("Tangram failed to map symbol: %s\n", #func);     \
         }                                                                   \
     }
 

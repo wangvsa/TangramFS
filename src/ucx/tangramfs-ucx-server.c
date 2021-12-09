@@ -93,7 +93,6 @@ static ucs_status_t am_stat_listener(void *arg, void *data, size_t length, unsig
 }
 
 static ucs_status_t am_stop_listener(void *arg, void *data, size_t length, unsigned flags) {
-    printf("Server: received stop server command!\n");
     g_server_running = false;
     return UCS_OK;
 }
