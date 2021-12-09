@@ -6,7 +6,9 @@
 #define PATH_MAX    4096
 
 #define tangram_info(f_, ...) printf((f_), ##__VA_ARGS__)
-#define tangram_debug(f_, ...) printf((f_), ##__VA_ARGS__)
+#define tangram_debug(f_, ...)      \
+    if(getenv(TANGRAM_DEBUG_ENV))   \
+        printf((f_), ##__VA_ARGS__)
 
 typedef struct tfs_info {
     int mpi_rank;
@@ -22,6 +24,7 @@ typedef struct tfs_info {
 
     int semantics;  // Strong, Session or Commit; only needed in passive mode.
     bool initialized;
+    bool debug;
 } tfs_info_t;
 
 

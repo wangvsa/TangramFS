@@ -52,6 +52,9 @@ void tangram_get_info(tfs_info_t* tfs_info) {
     const char* semantics_str = getenv(TANGRAM_SEMANTICS_ENV);
     if(semantics_str)
         tfs_info->semantics = atoi(semantics_str);
+
+    const char* debug = getenv(TANGRAM_DEBUG_ENV);
+    tfs_info->debug = (debug == NULL);
 }
 
 void tangram_release_info(tfs_info_t *tfs_info) {

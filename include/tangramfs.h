@@ -11,7 +11,7 @@
 #define TANGRAM_CUSTOM_SEMANTICS        4
 
 /**
- * A list of environment variables that can be set
+ * A list of environment variables can be set
  *
  */
 #define TANGRAM_PERSIST_DIR_ENV         "TANGRAM_PERSIST_DIR"
@@ -21,6 +21,8 @@
 #define TANGRAM_UCX_RPC_TL_ENV          "TANGRAM_RPC_TL"
 #define TANGRAM_UCX_RMA_DEV_ENV         "TANGRAM_RMA_DEV"
 #define TANGRAM_UCX_RMA_TL_ENV          "TANGRAM_RMA_TL"
+// optional
+#define TANGRAM_DEBUG_ENV               "TANGRAM_DEBUG"
 
 
 typedef struct tfs_file {
