@@ -70,13 +70,13 @@ void* add_to_map(tfs_file_t* tf, const char* filename, int stream) {
     if(stream) {        // FILE* stream
         TFSStreamMap *entry = malloc(sizeof(TFSStreamMap));
         entry->tf = tf;
-        entry->stream = tf->local_stream;
+        entry->stream = tf->stream;
         HASH_ADD_PTR(tf_stream_map, stream, entry);
         res = entry;
     } else {            // int fd
         TFSFdMap *entry = malloc(sizeof(TFSFdMap));
         entry->tf = tf;
-        entry->fd = tf->local_fd;
+        entry->fd = tf->fd;
         HASH_ADD_INT(tf_fd_map, fd, entry);
         res = entry;
     }
@@ -94,8 +94,14 @@ void* add_to_map(tfs_file_t* tf, const char* filename, int stream) {
 
 FILE* TANGRAM_WRAP(fopen)(const char *filename, const char *mode)
 {
+    FILE* stream;
+    MAP_OR_FAIL(fopen);
+    stream = TANGRAM_REAL_CALL(fopen)(filename, mode);
+
     if(tangram_should_intercept(filename)) {
         tfs_file_t* tf = tfs_open(filename);
+        tf->stream = stream;
+
         tangram_debug("[tangramfs] fopen %s %p\n", filename, tf->local_stream);
         if(tf->local_stream != NULL) {
             TFSStreamMap* entry = add_to_map(tf, filename, true);
@@ -104,8 +110,7 @@ FILE* TANGRAM_WRAP(fopen)(const char *filename, const char *mode)
         return NULL;
     }
 
-    MAP_OR_FAIL(fopen);
-    return TANGRAM_REAL_CALL(fopen)(filename, mode);
+    return stream;
 }
 
 int TANGRAM_WRAP(fseek)(FILE *stream, long int offset, int origin)
@@ -195,43 +200,50 @@ int TANGRAM_WRAP(fclose)(FILE * stream)
 
 int TANGRAM_WRAP(open)(const char *pathname, int flags, ...)
 {
-    if(tangram_should_intercept(pathname)) {
-        tfs_file_t* tf = tfs_open(pathname);
-        tangram_debug("[tangramfs] open %s %d\n", pathname, tf->local_fd);
-        TFSFdMap* entry = add_to_map(tf, pathname, false);
-        return entry->fd;
-    }
+    int fd;
 
     MAP_OR_FAIL(open);
-    if(flags & O_CREAT) {
+    if((flags & O_CREAT) || (flags & O_TMPFILE)) {
         va_list arg;
         va_start(arg, flags);
         int mode = va_arg(arg, int);
         va_end(arg);
-        return TANGRAM_REAL_CALL(open)(pathname, flags, mode);
+        fd = TANGRAM_REAL_CALL(open)(pathname, flags, mode);
     } else {
-        return TANGRAM_REAL_CALL(open)(pathname, flags);
+        fd = TANGRAM_REAL_CALL(open)(pathname, flags);
     }
+
+    if(tangram_should_intercept(pathname)) {
+        tfs_file_t* tf = tfs_open(pathname);
+        tf->fd = fd;
+        tangram_debug("[tangramfs] open %s %d\n", pathname, tf->local_fd);
+        TFSFdMap* entry = add_to_map(tf, pathname, false);
+    }
+    return fd;
 }
 
 int TANGRAM_WRAP(open64)(const char *pathname, int flags, ...)
 {
-    if(tangram_should_intercept(pathname)) {
-        tfs_file_t* tf = tfs_open(pathname);
-        TFSFdMap* entry = add_to_map(tf, pathname, false);
-        return entry->fd;
-    }
+    int fd;
 
-    MAP_OR_FAIL(open);
-    if(flags & O_CREAT) {
+    MAP_OR_FAIL(open64);
+    if((flags & O_CREAT) || (flags & O_TMPFILE)) {
         va_list arg;
         va_start(arg, flags);
         int mode = va_arg(arg, int);
         va_end(arg);
-        return TANGRAM_REAL_CALL(open)(pathname, flags, mode);
+        fd = TANGRAM_REAL_CALL(open64)(pathname, flags, mode);
     } else {
-        return TANGRAM_REAL_CALL(open)(pathname, flags);
+        fd = TANGRAM_REAL_CALL(open64)(pathname, flags);
     }
+
+    if(tangram_should_intercept(pathname)) {
+        tfs_file_t* tf = tfs_open(pathname);
+        tf->fd = fd;
+        TFSFdMap* entry = add_to_map(tf, pathname, false);
+    }
+
+    return fd;
 }
 
 off_t TANGRAM_WRAP(lseek)(int fd, off_t offset, int whence)
