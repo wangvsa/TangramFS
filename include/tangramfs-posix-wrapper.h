@@ -62,6 +62,7 @@ TANGRAM_DECL_REAL_CALL(pread, ssize_t, (int fd, void *buf, size_t count, off_t o
 TANGRAM_DECL_REAL_CALL(pwrite, ssize_t, (int fd, const void *buf, size_t count, off_t offset));
 TANGRAM_DECL_REAL_CALL(fsync, int, (int fd));
 TANGRAM_DECL_REAL_CALL(__xstat, int, (int vers, const char* path, struct stat* buf));
+TANGRAM_DECL_REAL_CALL(__fxstat, int, (int vers, int fd, struct stat* buf));
 TANGRAM_DECL_REAL_CALL(__lxstat, int, (int vers, const char *path, struct stat *buf));
 TANGRAM_DECL_REAL_CALL(mkdir, int, (const char *pathname, mode_t mode));
 TANGRAM_DECL_REAL_CALL(rmdir, int, (const char *pathname));
@@ -91,6 +92,7 @@ void tangram_map_real_calls() {
     MAP_OR_FAIL(pread);
     MAP_OR_FAIL(fsync);
     MAP_OR_FAIL(__xstat);
+    MAP_OR_FAIL(__fxstat);
     MAP_OR_FAIL(__lxstat);
     MAP_OR_FAIL(mkdir);
     MAP_OR_FAIL(rmdir);

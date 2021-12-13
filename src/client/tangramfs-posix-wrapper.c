@@ -339,10 +339,18 @@ int TANGRAM_WRAP(fsync)(int fd) {
     return TANGRAM_REAL_CALL(fsync)(fd);
 }
 
+int fill_local_stat(tfs_file_t* tf, struct stat* buf, int vers) {
+    MAP_OR_FAIL(__fxstat);
+    return TANGRAM_REAL_CALL(__fxstat)(vers, fileno(tf->local_stream), buf);
+}
+
 int TANGRAM_WRAP(__xstat)(int vers, const char *path, struct stat *buf)
 {
     // TODO: stat() call not implemented yet.
     if(tangram_should_intercept(path)) {
+        tfs_file_t* tf = path2tf(path);
+        if(tf)
+            fill_local_stat(tf, buf, vers);
         tangram_issue_metadata_rpc(AM_ID_STAT_REQUEST, path, buf);
         return 0;
     }
@@ -351,10 +359,26 @@ int TANGRAM_WRAP(__xstat)(int vers, const char *path, struct stat *buf)
     return TANGRAM_REAL_CALL(__xstat)(vers, path, buf);
 }
 
+int TANGRAM_WRAP(__fxstat)(int vers, int fd, struct stat *buf)
+{
+    tfs_file_t* tf = fd2tf(fd);
+    if(tf) {
+        fill_local_stat(tf, buf, vers);
+        tangram_issue_metadata_rpc(AM_ID_STAT_REQUEST, tf->filename, buf);
+        return 0;
+    }
+
+    MAP_OR_FAIL(__fxstat);
+    return TANGRAM_REAL_CALL(__fxstat)(vers, fd, buf);
+}
+
 int TANGRAM_WRAP(__lxstat)(int vers, const char *path, struct stat *buf)
 {
     // TODO: stat() call not implemented yet.
     if(tangram_should_intercept(path)) {
+        tfs_file_t* tf = path2tf(path);
+        if(tf)
+            fill_local_stat(tf, buf, vers);
         tangram_issue_metadata_rpc(AM_ID_STAT_REQUEST, path, buf);
         return 0;
     }
