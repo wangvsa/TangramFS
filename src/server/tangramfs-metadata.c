@@ -61,7 +61,7 @@ void tangram_ms_handle_post(int rank, char* filename, size_t offset, size_t coun
 bool tangram_ms_handle_query(char* filename, size_t req_start, size_t req_count, int *rank) {
     seg_tree_table_t *entry = NULL;
     HASH_FIND_STR(g_stt, filename, entry);
-    if(NULL) return false;
+    if(entry == NULL) return false;
 
     struct seg_tree *extents = &entry->tree;
 
