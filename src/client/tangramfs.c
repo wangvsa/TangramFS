@@ -68,8 +68,10 @@ tfs_file_t* tfs_open(const char* pathname) {
         tf->offset = 0;
     } else {
         tf = tangram_malloc(sizeof(tfs_file_t));
-        strcpy(tf->filename, pathname);
+        tf->stream = NULL;
+        tf->fd     = -1;
         tf->offset = 0;
+        strcpy(tf->filename, pathname);
         seg_tree_init(&tf->it2);
 
         remove(abs_filename);   // delete the local file first
@@ -78,11 +80,6 @@ tfs_file_t* tfs_open(const char* pathname) {
 
     // open local file as buffer, the local file probaly already exists
     tf->local_fd = TANGRAM_REAL_CALL(open)(abs_filename, O_CREAT|O_RDWR, S_IRWXU);
-    if(tf->local_fd != -1)
-        tf->local_stream = TANGRAM_REAL_CALL(fdopen)(tf->local_fd, "r+");
-    else
-        tf->local_stream = NULL;
-
     return tf;
 }
 
@@ -263,6 +260,10 @@ void tfs_query(tfs_file_t* tf, size_t offset, size_t size, rpc_out_t* out) {
 }
 
 int tfs_close(tfs_file_t* tf) {
+    if(tf->fd != -1)
+        TANGRAM_REAL_CALL(close)(tf->fd);
+    if(tf->stream != NULL)
+        TANGRAM_REAL_CALL(fclose)(tf->stream);
     int res = TANGRAM_REAL_CALL(close)(tf->local_fd);
 
     // The tfs_file_t and its interval tree is not released
@@ -283,9 +284,9 @@ bool tangram_should_intercept(const char* filename) {
     realpath(filename, abs_path);
     // file in buffer directory and not exist in the backend file system.
     if ( strncmp(tfs.persist_dir, abs_path, strlen(tfs.persist_dir)) == 0 ) {
-        if(TANGRAM_REAL_CALL(access)(filename, F_OK) != 0) {
-            return true;
-        }
+        //if(TANGRAM_REAL_CALL(access)(filename, F_OK) != 0)
+        //    return true;
+        return true;
     }
 
     return false;
@@ -296,7 +297,7 @@ int tangram_get_semantics() {
 }
 
 tfs_file_t* tangram_get_tfs_file(const char* filename) {
-    tfs_file_t *tf= NULL;
+    tfs_file_t *tf = NULL;
     HASH_FIND_STR(tfs_files, filename, tf);
     return tf;
 }

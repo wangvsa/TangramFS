@@ -33,7 +33,6 @@ typedef struct tfs_file {
 
     size_t offset;        // offset of the targeting file in this process
     int    local_fd;
-    FILE*  local_stream;
     struct seg_tree it2;
     UT_hash_handle hh;
 } tfs_file_t;
