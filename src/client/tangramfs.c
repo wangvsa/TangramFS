@@ -42,6 +42,10 @@ void tfs_finalize() {
     // Clear all resources
     tfs_file_t *tf, *tmp;
     HASH_ITER(hh, tfs_files, tf, tmp) {
+
+        // TODO need to make sure to avoid concurrent writes from all clients.
+        // tfs_flush(tf);
+
         HASH_DEL(tfs_files, tf);
         tangram_free(tf, sizeof(tfs_file_t));
     }
@@ -83,6 +87,32 @@ tfs_file_t* tfs_open(const char* pathname) {
     return tf;
 }
 
+// Flush local file to PFS
+size_t tfs_flush(tfs_file_t *tf) {
+    seg_tree_rdlock(&tf->it2);
+
+    size_t chunk_size = 4096;
+
+    char* buf = tangram_malloc(chunk_size);
+    struct seg_tree_node *node = NULL;
+    while ((node = seg_tree_iter(&tf->it2, node))) {
+
+        ssize_t n;  // cannot use size_t, as n can be -1
+        size_t res = node->end - node->start + 1;
+
+        while(res > 0) {
+            n = TANGRAM_REAL_CALL(pread)(tf->local_fd, buf, chunk_size, node->start);
+            // something wrong, the file was deleted?
+            if(n <= 0) break;
+            TANGRAM_REAL_CALL(pwrite)(tf->fd, buf, n, node->start);
+            res -= n;
+        }
+    }
+
+    seg_tree_unlock(&tf->it2);
+    tangram_free(buf, chunk_size);
+}
+
 
 size_t tfs_write(tfs_file_t* tf, const void* buf, size_t size) {
     size_t local_offset = TANGRAM_REAL_CALL(lseek)(tf->local_fd, 0, SEEK_END);
@@ -109,6 +139,7 @@ size_t tfs_read(tfs_file_t* tf, void* buf, size_t size) {
     tf->offset += size;
     return size;
 }
+
 
 size_t read_local(tfs_file_t* tf, void* buf, size_t req_start, size_t req_end) {
 
