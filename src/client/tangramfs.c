@@ -225,6 +225,7 @@ size_t tfs_tell(tfs_file_t* tf) {
 }
 
 void tfs_post(tfs_file_t* tf, size_t offset, size_t count) {
+    if(count <= 0 || offset < 0) return;
     int ack;
     tangram_issue_rpc_rma(AM_ID_POST_REQUEST, tf->filename, tfs.mpi_rank, 0, &offset, &count, 1, &ack);
     // TODO: need to check the range to make sure it is valid.
@@ -233,9 +234,10 @@ void tfs_post(tfs_file_t* tf, size_t offset, size_t count) {
 }
 
 void tfs_post_all(tfs_file_t* tf) {
-
     // TODO only send unposted ones
     int num = seg_tree_count(&tf->it2);
+    if(num == 0) return;
+
     size_t offsets[num];
     size_t counts[num];
 
