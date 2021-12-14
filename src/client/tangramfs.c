@@ -192,6 +192,7 @@ size_t read_local(tfs_file_t* tf, void* buf, size_t req_start, size_t req_end) {
     if(!have_local) {
         seg_tree_unlock(extents);
         tangram_debug("[tangramfs] read from PFS %s, [%ld, %ld]\n", tf->filename, req_start, req_end-req_start+1);
+        tfs_flush(tf);
         return TANGRAM_REAL_CALL(pread)(tf->fd, buf, req_end-req_start+1, req_start);
     }
 
