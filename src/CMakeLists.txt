@@ -58,11 +58,10 @@ target_include_directories(tangramfs
 
 target_link_libraries(tangramfs
         PUBLIC ${TANGRAMFS_EXT_LIB_DEPENDENCIES}
-        PUBLIC pthread
+        PRIVATE pthread
         )
 target_compile_definitions(tangramfs
         PUBLIC _LARGEFILE64_SOURCE
-        PRIVATE TANGRAMFS_PRELOAD
         PRIVATE $<$<BOOL:${TANGRAMFS_PRELOAD}>:TANGRAMFS_PRELOAD>)
 
 tangramfs_set_lib_options(tangramfs "tangramfs" ${TANGRAMFS_LIBTYPE})
