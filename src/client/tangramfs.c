@@ -98,12 +98,15 @@ size_t tfs_flush(tfs_file_t *tf) {
     while ((node = seg_tree_iter(&tf->it2, node))) {
 
         ssize_t n;  // cannot use size_t, as n can be -1
-        size_t res = node->end - node->start + 1;
+        ssize_t res = node->end - node->start + 1;
 
         while(res > 0) {
             n = TANGRAM_REAL_CALL(pread)(tf->local_fd, buf, chunk_size, node->start);
             // something wrong, the file was deleted?
             if(n <= 0) break;
+
+            //printf("flush %s %ld [%ld-%ld]\n", tf->filename, n, node->start, node->end);
+
             TANGRAM_REAL_CALL(pwrite)(tf->fd, buf, n, node->start);
             res -= n;
         }
@@ -124,19 +127,22 @@ size_t tfs_write(tfs_file_t* tf, const void* buf, size_t size) {
 }
 
 size_t tfs_read(tfs_file_t* tf, void* buf, size_t size) {
-    tangram_debug("[tangramfs: %d] read %s (%lu, %lu)\n", tfs.mpi_rank, tf->filename, tf->offset, size);
     rpc_out_t out;
     tfs_query(tf, tf->offset, size, &out);
+    printf("[tangramfs %d] read %s (%d, [%lu,%lu])\n", tfs.mpi_rank, tf->filename, out.rank, tf->offset, size);
 
     // 1. turns out myself has the latest data, then just read it locally.
     // 2. in case server does not know who has the data, we'll also try it locally.
     if(out.res == QUERY_NOT_FOUND || out.rank == tfs.mpi_rank)
         return tfs_read_lazy(tf, buf, size);
 
-    /*TODO RMA read*/
+    // read from peers through RMA
     size_t offset = tf->offset;
+    double t1 = MPI_Wtime();
     tangram_issue_rpc_rma(AM_ID_RMA_REQUEST, tf->filename, tfs.mpi_rank, out.rank, &offset, &size, 1, buf);
     tf->offset += size;
+    double t2 = MPI_Wtime();
+    printf("[tangramfs %d] rpc for read: %.6fseconds, %.3fMB/s\n", tfs.mpi_rank, (t2-t1), size/1024.0/1024.0/(t2-t1));
     return size;
 }
 
@@ -192,6 +198,7 @@ size_t read_local(tfs_file_t* tf, void* buf, size_t req_start, size_t req_end) {
     if(!have_local) {
         seg_tree_unlock(extents);
         tangram_debug("[tangramfs] read from PFS %s, [%ld, %ld]\n", tf->filename, req_start, req_end-req_start+1);
+        // TODO need optimize when to flush.
         tfs_flush(tf);
         return TANGRAM_REAL_CALL(pread)(tf->fd, buf, req_end-req_start+1, req_start);
     }
