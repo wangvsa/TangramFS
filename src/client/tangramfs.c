@@ -131,7 +131,7 @@ size_t tfs_write(tfs_file_t* tf, const void* buf, size_t size) {
 size_t tfs_read(tfs_file_t* tf, void* buf, size_t size) {
     rpc_out_t out;
     tfs_query(tf, tf->offset, size, &out);
-    printf("[tangramfs %d] read %s (%d, [%lu,%lu])\n", tfs.mpi_rank, tf->filename, out.rank, tf->offset, size);
+    //printf("[tangramfs %d] read %s (%d, [%lu,%lu])\n", tfs.mpi_rank, tf->filename, out.rank, tf->offset, size);
 
     // 1. turns out myself has the latest data, then just read it locally.
     // 2. in case server does not know who has the data, we'll also try it locally.
@@ -144,7 +144,7 @@ size_t tfs_read(tfs_file_t* tf, void* buf, size_t size) {
     tangram_issue_rpc_rma(AM_ID_RMA_REQUEST, tf->filename, tfs.mpi_rank, out.rank, &offset, &size, 1, buf);
     tf->offset += size;
     double t2 = MPI_Wtime();
-    printf("[tangramfs %d] rpc for read: %.6fseconds, %.3fMB/s\n", tfs.mpi_rank, (t2-t1), size/1024.0/1024.0/(t2-t1));
+    //printf("[tangramfs %d] rpc for read: %.6fseconds, %.3fMB/s\n", tfs.mpi_rank, (t2-t1), size/1024.0/1024.0/(t2-t1));
     return size;
 }
 
