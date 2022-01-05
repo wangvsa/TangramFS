@@ -13,40 +13,46 @@
 #include "tangramfs-posix-wrapper.h"
 #include "tangramfs-semantics-impl.h"
 
-typedef struct TFSStreamMap_t {
-    tfs_file_t *tf;
-    FILE* stream;  // key
-    UT_hash_handle hh;
-} TFSStreamMap;
+typedef struct tfs_file_entry {
+    FILE* stream;   // key 1
+    char* path;     // key 2
+    int fd;         // key 3
 
-typedef struct TFSPathMat_t {
-    tfs_file_t *tf;
-    char* pathname;     // key
-    UT_hash_handle hh;
-} TFSPathMap;
+    tfs_file_t *tf; // value
 
-typedef struct TFSFdMap_t {
-    tfs_file_t *tf;
-    int fd;             // key
-    UT_hash_handle hh;
-} TFSFdMap;
+    UT_hash_handle hh_stream;
+    UT_hash_handle hh_path;
+    UT_hash_handle hh_fd;
 
-static TFSStreamMap* tf_stream_map = NULL;
-static TFSPathMap* tf_path_map = NULL;     // TODO not realeased after use
-static TFSFdMap*   tf_fd_map = NULL;
+} tfs_file_entry_t;
 
+static tfs_file_entry_t* tf_by_stream = NULL;
+static tfs_file_entry_t* tf_by_path   = NULL;
+static tfs_file_entry_t* tf_by_fd     = NULL;
+
+pthread_rwlock_t uthash_lock = PTHREAD_RWLOCK_INITIALIZER;
+
+#define HASH_FIND_RLOCK(hh, head, key, keylen, entry)   \
+    pthread_rwlock_rdlock(&uthash_lock);                \
+    HASH_FIND(hh, head, key, keylen, entry);            \
+    pthread_rwlock_unlock(&uthash_lock);
+
+#define HASH_ADD_WLOCK(hh, head, key, keylen, entry)    \
+    pthread_rwlock_wrlock(&uthash_lock);                \
+    HASH_ADD(hh, head, key, keylen, entry);             \
+    pthread_rwlock_unlock(&uthash_lock);
 
 tfs_file_t* stream2tf(FILE* stream) {
-    TFSStreamMap *found = NULL;
-    HASH_FIND_PTR(tf_stream_map, &stream, found);
+    tfs_file_entry_t *found = NULL;
+    HASH_FIND_RLOCK(hh_stream, tf_by_stream, &stream, sizeof(FILE*), found);
     if(found)
         return found->tf;
     return NULL;
 }
 
 tfs_file_t* fd2tf(int fd) {
-    TFSFdMap* found = NULL;
-    HASH_FIND_INT(tf_fd_map, &fd, found);
+    tfs_file_entry_t *found = NULL;
+    HASH_FIND_RLOCK(hh_fd, tf_by_fd, &fd, sizeof(int), found);
     if(found)
         return found->tf;
     return NULL;
@@ -54,11 +60,10 @@ tfs_file_t* fd2tf(int fd) {
 
 tfs_file_t* path2tf(const char* path) {
     char *key = realpath(path, NULL);
-    if(key == NULL || path == NULL)
-        return NULL;
+    if(key == NULL || path == NULL) return NULL;
 
-    TFSPathMap *found = NULL;
-    HASH_FIND(hh, tf_path_map, key, strlen(key), found);
+    tfs_file_entry_t *found = NULL;
+    HASH_FIND_RLOCK(hh_path, tf_by_path, key, strlen(key), found);
 
     free(key);
     if(found)
@@ -67,31 +72,24 @@ tfs_file_t* path2tf(const char* path) {
 }
 
 
-void* add_to_map(tfs_file_t* tf, const char* filename, int stream) {
-    void *res;
+tfs_file_entry_t* add_to_map(tfs_file_t* tf) {
 
-    if(stream) {        // FILE* stream
-        TFSStreamMap *entry = malloc(sizeof(TFSStreamMap));
-        entry->tf = tf;
-        entry->stream = tf->stream;
-        HASH_ADD_PTR(tf_stream_map, stream, entry);
-        res = entry;
-    } else {            // int fd
-        TFSFdMap *entry = malloc(sizeof(TFSFdMap));
-        entry->tf = tf;
-        entry->fd = tf->fd;
-        HASH_ADD_INT(tf_fd_map, fd, entry);
-        res = entry;
-    }
+    tfs_file_entry_t *entry = malloc(sizeof(tfs_file_entry_t));
+    entry->tf     = tf;
+    entry->fd     = tf->fd;
+    entry->stream = tf->stream;
+    entry->path   = realpath(tf->filename, NULL);
 
-    TFSPathMap *e2 = malloc(sizeof(TFSPathMap));
-    e2->pathname = NULL;
-    e2->pathname = realpath(filename, NULL);
-    e2->tf = tf;
-    if(e2->pathname)
-        HASH_ADD_KEYPTR(hh, tf_path_map, e2->pathname, strlen(e2->pathname), e2);
+    if(entry->fd != -1)
+        HASH_ADD_WLOCK(hh_fd, tf_by_fd, fd, sizeof(int), entry);
 
-    return res;
+    if(entry->stream != NULL)
+        HASH_ADD_WLOCK(hh_stream, tf_by_stream, stream, sizeof(FILE*), entry);
+
+    if(entry->path)
+        HASH_ADD_WLOCK(hh_path, tf_by_path, path, strlen(entry->path), entry);
+
+    return entry;
 }
 
 
@@ -108,7 +106,7 @@ FILE* TANGRAM_WRAP(fopen)(const char *filename, const char *mode)
         tfs_file_t* tf = tfs_open(filename);
         tf->stream = stream;
         tangram_debug("[tangramfs] fopen %s\n", filename);
-        TFSStreamMap* entry = add_to_map(tf, filename, true);
+        tfs_file_entry_t* entry = add_to_map(tf);
     }
 
     return stream;
@@ -185,14 +183,12 @@ size_t TANGRAM_WRAP(fread)(void * ptr, size_t size, size_t count, FILE * stream)
 
 int TANGRAM_WRAP(fclose)(FILE * stream)
 {
-    TFSStreamMap *found = NULL;
-    HASH_FIND_PTR(tf_stream_map, &stream, found);
 
-    if(found) {
-        tangram_debug("[tangramfs] fclose %s\n", found->tf->filename);
-        int res = tangram_close_impl(found->tf);
-        HASH_DEL(tf_stream_map, found);
-        return res;
+    tfs_file_t *tf = stream2tf(stream);
+
+    if(tf) {
+        tangram_debug("[tangramfs] fclose %s\n", tf->filename);
+        return tangram_close_impl(tf);
     }
 
     MAP_OR_FAIL(fclose);
@@ -219,7 +215,7 @@ int TANGRAM_WRAP(open)(const char *pathname, int flags, ...)
         tfs_file_t* tf = tfs_open(pathname);
         tf->fd = fd;
         tangram_debug("[tangramfs] open %s %d\n", pathname, tf->local_fd);
-        TFSFdMap* entry = add_to_map(tf, pathname, false);
+        tfs_file_entry_t* entry = add_to_map(tf);
     }
     return fd;
 }
@@ -243,7 +239,7 @@ int TANGRAM_WRAP(open64)(const char *pathname, int flags, ...)
     if(intercept) {
         tfs_file_t* tf = tfs_open(pathname);
         tf->fd = fd;
-        TFSFdMap* entry = add_to_map(tf, pathname, false);
+        tfs_file_entry_t* entry = add_to_map(tf);
     }
 
     return fd;
@@ -302,14 +298,10 @@ ssize_t TANGRAM_WRAP(read)(int fd, void *buf, size_t count)
 }
 
 int TANGRAM_WRAP(close)(int fd) {
-    TFSFdMap* found = NULL;
-    HASH_FIND_INT(tf_fd_map, &fd, found);
-    if(found) {
-        tangram_debug("[tangramfs] close %s\n", found->tf->filename);
-        int res = tangram_close_impl(found->tf);
-        HASH_DEL(tf_fd_map, found);
-        free(found);
-        return res;
+    tfs_file_t* tf = fd2tf(fd);
+    if(tf) {
+        tangram_debug("[tangramfs] close %s\n", tf->filename);
+        return tangram_close_impl(tf);
     }
 
     MAP_OR_FAIL(close);
@@ -454,5 +446,24 @@ int TANGRAM_WRAP(MPI_Init_thread)(int *argc, char ***argv, int required, int *pr
 
 int TANGRAM_WRAP(MPI_Finalize)() {
     tfs_finalize();
+
+    pthread_rwlock_wrlock(&uthash_lock);
+    tfs_file_entry_t *entry, *tmp;
+    HASH_ITER(hh_stream, tf_by_stream, entry, tmp) {
+        HASH_DELETE(hh_stream, tf_by_stream, entry);
+        free(entry);
+    }
+    HASH_ITER(hh_fd, tf_by_fd, entry, tmp) {
+        HASH_DELETE(hh_fd, tf_by_fd, entry);
+        free(entry);
+    }
+    HASH_ITER(hh_path, tf_by_path, entry, tmp) {
+        HASH_DELETE(hh_path, tf_by_path, entry);
+        if(entry->path)
+            free(entry->path);
+        free(entry);
+    }
+    pthread_rwlock_unlock(&uthash_lock);
+
     return PMPI_Finalize();
 }

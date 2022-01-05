@@ -7,13 +7,13 @@
 #include <fcntl.h>
 #include <assert.h>
 #include <mpi.h>
+#include "uthash.h"
 #include "tangramfs.h"
 #include "tangramfs-utils.h"
 #include "tangramfs-posix-wrapper.h"
 
-
-tfs_file_t *tfs_files;   // hash map of currently opened files
-tfs_info_t tfs;
+tfs_info_t  tfs;
+tfs_file_t* tfs_files;
 
 void* serve_rma_data(void* in_arg, size_t* size);
 
@@ -82,7 +82,7 @@ tfs_file_t* tfs_open(const char* pathname) {
         HASH_ADD_STR(tfs_files, filename, tf);
     }
 
-    // open local file as buffer, the local file probaly already exists
+    // open node-local buffer file
     tf->local_fd = TANGRAM_REAL_CALL(open)(abs_filename, O_CREAT|O_RDWR, S_IRWXU);
     return tf;
 }
@@ -310,7 +310,7 @@ int tfs_close(tfs_file_t* tf) {
 
     // The tfs_file_t and its interval tree is not released
     // just like Linux page cache won't be cleared at close point
-    // because the the same might be opened later for read.
+    // because the same file might be opened later for read.
     // We clean all resources at tfs_finalize();
     // TODO this assumes we have enough buffer space.
     return res;

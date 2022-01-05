@@ -8,7 +8,6 @@
 #include "mpi.h"
 #include "tangramfs.h"
 
-
 #define MB (1024*1024)
 
 static size_t DATA_SIZE = 2*MB;

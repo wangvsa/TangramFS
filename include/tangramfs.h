@@ -1,8 +1,8 @@
 #ifndef __TANGRAM_FS_H__
 #define __TANGRAM_FS_H__
 #include <stdbool.h>
-#include "uthash.h"
 #include "seg_tree.h"
+#include "uthash.h"
 #include "tangramfs-rpc.h"
 
 #define TANGRAM_STRONG_SEMANTICS        1
@@ -34,7 +34,9 @@ typedef struct tfs_file {
     size_t offset;        // offset of the targeting file in this process
     int    local_fd;
     struct seg_tree it2;
-    UT_hash_handle hh;
+
+    UT_hash_handle hh;    // filename as key
+
 } tfs_file_t;
 
 void tfs_init();
