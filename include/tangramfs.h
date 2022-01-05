@@ -63,6 +63,4 @@ void tfs_query(tfs_file_t* tf, size_t offset, size_t count, rpc_out_t *out);
 bool tangram_should_intercept(const char* filename);
 int tangram_get_semantics();
 
-tfs_file_t* tangram_get_tfs_file(const char* filename);
-
 #endif

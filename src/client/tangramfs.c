@@ -67,7 +67,9 @@ tfs_file_t* tfs_open(const char* pathname) {
     sprintf(abs_filename, "%s/tfs_tmp.%s.%d", tfs.tfs_dir, tmp, tfs.mpi_rank);
     free(tmp);
 
-    tfs_file_t *tf = tangram_get_tfs_file(pathname);
+    tfs_file_t *tf = NULL;
+    HASH_FIND_STR(tfs_files, pathname, tf);
+
     if(tf) {
         tf->offset = 0;
     } else {
@@ -338,12 +340,6 @@ int tangram_get_semantics() {
     return tfs.semantics;
 }
 
-tfs_file_t* tangram_get_tfs_file(const char* filename) {
-    tfs_file_t *tf = NULL;
-    HASH_FIND_STR(tfs_files, filename, tf);
-    return tf;
-}
-
 
 /*
  * Read data locally to serve for the RMA request
@@ -351,7 +347,9 @@ tfs_file_t* tangram_get_tfs_file(const char* filename) {
 void* serve_rma_data(void* in_arg, size_t* size) {
     rpc_in_t* in = rpc_in_unpack(in_arg);
 
-    tfs_file_t* tf = tangram_get_tfs_file(in->filename);
+    tfs_file_t* tf = NULL;
+    HASH_FIND_STR(tfs_files, in->filename, tf);
+
     assert(tf != NULL);
 
     *size = in->intervals[0].count;
