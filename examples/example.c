@@ -10,8 +10,8 @@
 
 #define MB (1024*1024)
 
-static size_t DATA_SIZE = 2*MB;
-static int N = 1;
+static size_t DATA_SIZE = 32*MB;
+static int N = 8;
 
 int mpi_size, mpi_rank;
 double write_bandwidth, read_bandwidth;
