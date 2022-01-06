@@ -32,22 +32,20 @@ static tfs_file_entry_t* tf_by_fd     = NULL;
 
 pthread_rwlock_t uthash_lock = PTHREAD_RWLOCK_INITIALIZER;
 
-pthread_mutex_t g_mutex = PTHREAD_MUTEX_INITIALIZER;
-
 #define HASH_FIND_RLOCK(hh, head, key, keylen, entry)           \
-    pthread_mutex_lock(&g_mutex);                               \
+    pthread_rwlock_rdlock(&uthash_lock);                        \
     HASH_FIND(hh, head, key, keylen, entry);                    \
-    pthread_mutex_unlock(&g_mutex);
+    pthread_rwlock_unlock(&uthash_lock);
 
 #define HASH_ADD_WLOCK(hh, head, key, keylen, entry)            \
-    pthread_mutex_lock(&g_mutex);                               \
+    pthread_rwlock_wrlock(&uthash_lock);                        \
     HASH_ADD(hh, head, key, keylen, entry);                     \
-    pthread_mutex_unlock(&g_mutex);
+    pthread_rwlock_unlock(&uthash_lock);
 
 #define HASH_ADD_KEYPTR_WLOCK(hh, head, key, keylen, entry)     \
-    pthread_mutex_lock(&g_mutex);                               \
+    pthread_rwlock_wrlock(&uthash_lock);                        \
     HASH_ADD_KEYPTR(hh, head, key, keylen, entry);              \
-    pthread_mutex_unlock(&g_mutex);
+    pthread_rwlock_unlock(&uthash_lock);
 
 tfs_file_t* stream2tf(FILE* stream) {
     tfs_file_entry_t *found = NULL;
@@ -87,11 +85,13 @@ tfs_file_entry_t* add_to_map(tfs_file_t* tf) {
     entry->stream = tf->stream;
     entry->path   = realpath(tf->filename, NULL);
 
-    if(entry->fd != -1)
+    if(entry->fd != -1) {   // must have "{}", because the macro below will translate to multiple lines.
         HASH_ADD_WLOCK(hh_fd, tf_by_fd, fd, sizeof(int), entry);
+    }
 
-    if(entry->stream != NULL)
+    if(entry->stream != NULL) {
         HASH_ADD_WLOCK(hh_stream, tf_by_stream, stream, sizeof(FILE*), entry);
+    }
 
     if(entry->path != NULL) {
         HASH_ADD_KEYPTR_WLOCK(hh_path, tf_by_path, entry->path, strlen(entry->path), entry);
@@ -461,7 +461,6 @@ int TANGRAM_WRAP(MPI_Init_thread)(int *argc, char ***argv, int required, int *pr
 int TANGRAM_WRAP(MPI_Finalize)() {
     tfs_finalize();
 
-    /*
     pthread_rwlock_wrlock(&uthash_lock);
     tfs_file_entry_t *entry, *tmp;
     // Should be enough to just free entries
@@ -473,7 +472,6 @@ int TANGRAM_WRAP(MPI_Finalize)() {
         free(entry);
     }
     pthread_rwlock_unlock(&uthash_lock);
-    */
 
     return PMPI_Finalize();
 }
