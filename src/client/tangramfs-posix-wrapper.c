@@ -32,15 +32,22 @@ static tfs_file_entry_t* tf_by_fd     = NULL;
 
 pthread_rwlock_t uthash_lock = PTHREAD_RWLOCK_INITIALIZER;
 
-#define HASH_FIND_RLOCK(hh, head, key, keylen, entry)   \
-    pthread_rwlock_rdlock(&uthash_lock);                \
-    HASH_FIND(hh, head, key, keylen, entry);            \
-    pthread_rwlock_unlock(&uthash_lock);
+pthread_mutex_t g_mutex = PTHREAD_MUTEX_INITIALIZER;
 
-#define HASH_ADD_WLOCK(hh, head, key, keylen, entry)    \
-    pthread_rwlock_wrlock(&uthash_lock);                \
-    HASH_ADD(hh, head, key, keylen, entry);             \
-    pthread_rwlock_unlock(&uthash_lock);
+#define HASH_FIND_RLOCK(hh, head, key, keylen, entry)           \
+    pthread_mutex_lock(&g_mutex);                               \
+    HASH_FIND(hh, head, key, keylen, entry);                    \
+    pthread_mutex_unlock(&g_mutex);
+
+#define HASH_ADD_WLOCK(hh, head, key, keylen, entry)            \
+    pthread_mutex_lock(&g_mutex);                               \
+    HASH_ADD(hh, head, key, keylen, entry);                     \
+    pthread_mutex_unlock(&g_mutex);
+
+#define HASH_ADD_KEYPTR_WLOCK(hh, head, key, keylen, entry)     \
+    pthread_mutex_lock(&g_mutex);                               \
+    HASH_ADD_KEYPTR(hh, head, key, keylen, entry);              \
+    pthread_mutex_unlock(&g_mutex);
 
 tfs_file_t* stream2tf(FILE* stream) {
     tfs_file_entry_t *found = NULL;
@@ -86,8 +93,15 @@ tfs_file_entry_t* add_to_map(tfs_file_t* tf) {
     if(entry->stream != NULL)
         HASH_ADD_WLOCK(hh_stream, tf_by_stream, stream, sizeof(FILE*), entry);
 
-    if(entry->path)
-        HASH_ADD_WLOCK(hh_path, tf_by_path, path, strlen(entry->path), entry);
+    if(entry->path != NULL) {
+        HASH_ADD_KEYPTR_WLOCK(hh_path, tf_by_path, entry->path, strlen(entry->path), entry);
+
+        char* key = entry->path;
+        tfs_file_entry_t *found = NULL;
+        HASH_FIND_RLOCK(hh_path, tf_by_path, key, strlen(key), found);
+        assert(found != NULL);
+
+    }
 
     return entry;
 }
@@ -447,16 +461,11 @@ int TANGRAM_WRAP(MPI_Init_thread)(int *argc, char ***argv, int required, int *pr
 int TANGRAM_WRAP(MPI_Finalize)() {
     tfs_finalize();
 
+    /*
     pthread_rwlock_wrlock(&uthash_lock);
     tfs_file_entry_t *entry, *tmp;
-    HASH_ITER(hh_stream, tf_by_stream, entry, tmp) {
-        HASH_DELETE(hh_stream, tf_by_stream, entry);
-        free(entry);
-    }
-    HASH_ITER(hh_fd, tf_by_fd, entry, tmp) {
-        HASH_DELETE(hh_fd, tf_by_fd, entry);
-        free(entry);
-    }
+    // Should be enough to just free entries
+    // in tf_by_path
     HASH_ITER(hh_path, tf_by_path, entry, tmp) {
         HASH_DELETE(hh_path, tf_by_path, entry);
         if(entry->path)
@@ -464,6 +473,7 @@ int TANGRAM_WRAP(MPI_Finalize)() {
         free(entry);
     }
     pthread_rwlock_unlock(&uthash_lock);
+    */
 
     return PMPI_Finalize();
 }
