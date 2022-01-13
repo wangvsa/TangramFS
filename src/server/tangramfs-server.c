@@ -20,7 +20,7 @@ void* rpc_handler(int8_t id, tangram_uct_addr_t* client, void* data, size_t *res
         rpc_in_t* in = rpc_in_unpack(data);
         for(int i = 0; i < in->num_intervals; i++)
             tangram_ms_handle_post(client_dup, in->filename, in->intervals[i].offset, in->intervals[i].count);
-        tangram_debug("post, filename: %s, offset:%lu, count: %lu\n", in->filename, in->intervals[0].offset, in->intervals[0].count);
+        tangram_debug("[tangramfs] post, filename: %s, offset:%lu, count: %lu\n", in->filename, in->intervals[0].offset, in->intervals[0].count);
         rpc_in_free(in);
         respond = malloc(sizeof(int));
         *respond_len = sizeof(int);
@@ -28,7 +28,7 @@ void* rpc_handler(int8_t id, tangram_uct_addr_t* client, void* data, size_t *res
         rpc_in_t* in = rpc_in_unpack(data);
         tangram_uct_addr_t *owner;
         owner = tangram_ms_handle_query(in->filename, in->intervals[0].offset, in->intervals[0].count);
-        tangram_debug("query, filename: %s, offset:%lu, count: %lu\n",
+        tangram_debug("[tangramfs] query, filename: %s, offset:%lu, count: %lu\n",
                 in->filename, in->intervals[0].offset, in->intervals[0].count);
         rpc_in_free(in);
         respond = tangram_uct_addr_serialize(owner, respond_len);

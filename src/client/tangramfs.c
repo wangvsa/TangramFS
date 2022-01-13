@@ -129,26 +129,28 @@ size_t tfs_write(tfs_file_t* tf, const void* buf, size_t size) {
 }
 
 size_t tfs_read(tfs_file_t* tf, void* buf, size_t size) {
-    tangram_uct_addr_t *self = tangram_rpc_get_client_addr();
-    tangram_uct_addr_t owner;
+    tangram_uct_addr_t *self  = tangram_rpc_get_client_addr();
+    tangram_uct_addr_t *owner = NULL;
     int res = tfs_query(tf, tf->offset, size, &owner);
     //printf("[tangramfs %d] read %s (%d, [%lu,%lu])\n", tfs.mpi_rank, tf->filename, out.rank, tf->offset, size);
 
     // 1. turns out myself has the latest data, then just read it locally.
     // 2. in case server does not know who has the data, we'll also try it locally.
-    if(res != 0 || tangram_uct_addr_compare(&owner, self) == 0) {
-        tangram_uct_addr_free(&owner);
+    if(res != 0 || tangram_uct_addr_compare(owner, self) == 0) {
+        if(owner)
+            tangram_uct_addr_free(owner);
         return tfs_read_lazy(tf, buf, size);
     }
 
     // read from peers through RMA
     size_t offset = tf->offset;
     double t1 = MPI_Wtime();
-    tangram_issue_rma(AM_ID_RMA_REQUEST, tf->filename, &owner, &offset, &size, 1, buf);
+    tangram_issue_rma(AM_ID_RMA_REQUEST, tf->filename, owner, &offset, &size, 1, buf);
     tf->offset += size;
     double t2 = MPI_Wtime();
 
-    tangram_uct_addr_free(&owner);
+    if(owner)
+        tangram_uct_addr_free(owner);
     //printf("[tangramfs %d] rpc for read: %.6fseconds, %.3fMB/s\n", tfs.mpi_rank, (t2-t1), size/1024.0/1024.0/(t2-t1));
     return size;
 }
@@ -274,7 +276,7 @@ size_t tfs_tell(tfs_file_t* tf) {
 void tfs_post(tfs_file_t* tf, size_t offset, size_t count) {
     if(count <= 0 || offset < 0) return;
     int* ack;
-    tangram_issue_rpc(AM_ID_POST_REQUEST, tf->filename, TANGRAM_UCT_ADDR_IGNORE, &offset, &count, 1, (void**)&ack);
+    tangram_issue_rpc(AM_ID_POST_REQUEST, tf->filename, &offset, &count, 1, (void**)&ack);
     // TODO: need to check the range to make sure it is valid.
     // Also need to set those ranges as posted, so when we do
     // post_all() later we only send the unposted ones.
@@ -302,17 +304,20 @@ void tfs_post_all(tfs_file_t* tf) {
     seg_tree_unlock(&tf->it2);
 
     int* ack;
-    tangram_issue_rpc(AM_ID_POST_REQUEST, tf->filename, TANGRAM_UCT_ADDR_IGNORE, offsets, counts, num, (void**)&ack);
+    tangram_issue_rpc(AM_ID_POST_REQUEST, tf->filename, offsets, counts, num, (void**)&ack);
     free(ack);
 }
 
-int tfs_query(tfs_file_t* tf, size_t offset, size_t size, tangram_uct_addr_t* owner) {
+int tfs_query(tfs_file_t* tf, size_t offset, size_t size, tangram_uct_addr_t** owner) {
     void* buf = NULL;
-    tangram_issue_rpc(AM_ID_QUERY_REQUEST, tf->filename, TANGRAM_UCT_ADDR_IGNORE, &offset, &size, 1, &buf);
+    tangram_issue_rpc(AM_ID_QUERY_REQUEST, tf->filename, &offset, &size, 1, &buf);
     if(buf) {
-        tangram_uct_addr_deserialize(buf, owner);
+        *owner = malloc(sizeof(tangram_uct_addr_t));
+        tangram_uct_addr_deserialize(buf, *owner);
         free(buf);
         return 0;
+    } else {
+        *owner = NULL;
     }
 
     return -1;

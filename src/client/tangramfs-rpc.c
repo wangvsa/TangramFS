@@ -13,11 +13,10 @@ static double rma_time;
 
 
 /*
- * Perform RPC.
+ * Perform RPC (send to server).
  * The underlying implementaiton is in src/ucx/tangram-ucx-client.c
  */
-void tangram_issue_rpc(uint8_t id, char* filename, tangram_uct_addr_t* dest,
-                            size_t *offsets, size_t *counts, int num_intervals, void** respond_ptr) {
+void tangram_issue_rpc(uint8_t id, char* filename, size_t *offsets, size_t *counts, int num_intervals, void** respond_ptr) {
 
     size_t data_size;
     void* user_data = rpc_in_pack(filename, num_intervals, offsets, counts, &data_size);
@@ -37,7 +36,7 @@ void tangram_issue_rpc(uint8_t id, char* filename, tangram_uct_addr_t* dest,
 }
 
 /*
- * Perform RPC.
+ * Perform RPC (between clients)
  * The underlying implementaiton is in src/ucx/tangram-ucx-client.c
  */
 void tangram_issue_rma(uint8_t id, char* filename, tangram_uct_addr_t* dest,

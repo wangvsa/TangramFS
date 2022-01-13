@@ -112,7 +112,7 @@ void handle_one_task(rpc_task_t* task) {
 
     task->respond = (*user_am_data_handler)(task->id, &task->client, task->data, &task->respond_len);
 
-    if(task->respond) {
+    //if(task->respond) {
         uint8_t id;
         if(task->id == AM_ID_QUERY_REQUEST)
             id = AM_ID_QUERY_RESPOND;
@@ -121,7 +121,7 @@ void handle_one_task(rpc_task_t* task) {
         if(task->id == AM_ID_STAT_REQUEST)
             id = AM_ID_STAT_RESPOND;
         do_uct_am_short(&g_server_context.mutex, ep, id, &g_server_context.self_addr, task->respond, task->respond_len);
-    }
+    //}
 
     pthread_mutex_lock(&g_server_context.mutex);
     uct_ep_destroy(ep);

@@ -283,6 +283,7 @@ void do_uct_am_short_progress(uct_worker_h worker, uct_ep_h ep, uint8_t id, tang
 
 
 void* tangram_uct_addr_serialize(tangram_uct_addr_t* addr, size_t *len) {
+    *len = 0;
     if(!addr) return NULL;
 
     *len = sizeof(size_t)*2 + addr->dev_len + addr->iface_len;
@@ -341,6 +342,7 @@ void tangram_uct_addr_free(tangram_uct_addr_t* addr) {
 }
 
 int tangram_uct_addr_compare(tangram_uct_addr_t* a, tangram_uct_addr_t* b) {
+    if(!a || !b) return -1;
     if(a == b) return 0;
     if(a->dev_len == b->dev_len && a->iface_len == b->iface_len) {
         int r1 = memcmp(a->dev, b->dev, a->dev_len);

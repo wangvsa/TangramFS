@@ -76,7 +76,7 @@ static void rpc_in_free(rpc_in_t *in) {
     free(in);
 }
 
-void tangram_issue_rpc(uint8_t id, char* filename, tangram_uct_addr_t* dest, size_t *offsets, size_t *counts, int len, void** respond_ptr);
+void tangram_issue_rpc(uint8_t id, char* filename, size_t *offsets, size_t *counts, int len, void** respond_ptr);
 void tangram_issue_rma(uint8_t id, char* filename, tangram_uct_addr_t* dest, size_t *offsets, size_t *counts, int len, void* recv_buf);
 void tangram_issue_metadata_rpc(uint8_t id, const char* filename, void** respond_ptr);
 void tangram_rma_service_start(tfs_info_t *tfs_info, void* (*serve_rma_data)(void*, size_t*));
