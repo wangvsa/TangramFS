@@ -28,7 +28,7 @@ char* print_tree(char* dst, struct seg_tree* seg_tree)
 
     seg_tree_rdlock(seg_tree);
     while ((node = seg_tree_iter(seg_tree, node))) {
-        ptr += sprintf(&dst[ptr], "[%lu-%lu:%d],  ", node->start, node->end, node->rank);
+        ptr += sprintf(&dst[ptr], "[%lu-%lu],  ", node->start, node->end);
     }
     seg_tree_unlock(seg_tree);
 }
@@ -42,7 +42,8 @@ void tangram_ms_finalize() {
     }
 }
 
-void tangram_ms_handle_post(int rank, char* filename, size_t offset, size_t count) {
+void tangram_ms_handle_post(tangram_uct_addr_t* client, char* filename, size_t offset, size_t count) {
+
     seg_tree_table_t *entry = NULL;
     HASH_FIND_STR(g_stt, filename, entry);
 
@@ -54,11 +55,11 @@ void tangram_ms_handle_post(int rank, char* filename, size_t offset, size_t coun
     }
 
     // TODO should ask clients to post local offset as well
-    int res = seg_tree_add(&entry->tree, offset, offset+count-1, 0, rank);
+    int res = seg_tree_add(&entry->tree, offset, offset+count-1, 0, client);
     assert(res == 0);
 }
 
-bool tangram_ms_handle_query(char* filename, size_t req_start, size_t req_count, int *rank) {
+tangram_uct_addr_t* tangram_ms_handle_query(char* filename, size_t req_start, size_t req_count) {
     seg_tree_table_t *entry = NULL;
     HASH_FIND_STR(g_stt, filename, entry);
     if(entry == NULL) return false;
@@ -109,11 +110,10 @@ bool tangram_ms_handle_query(char* filename, size_t req_start, size_t req_count,
 
     // TODO now I assume that only one rank holds the
     // entire content in a single segment.
-    if (have_data) {
-        *rank = first->rank;
-    }
+    if (have_data)
+        return first->owner;
 
-    return have_data;
+    return NULL;
 }
 
 void tangram_ms_handle_stat(char* filename, struct stat *buf) {

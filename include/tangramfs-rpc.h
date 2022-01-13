@@ -10,7 +10,6 @@ typedef struct rpc_interval {
 } interval_t;
 
 typedef struct rpc_in {
-    int rank;
     int num_intervals;
     int filename_len;
     char* filename;
@@ -18,24 +17,17 @@ typedef struct rpc_in {
 } rpc_in_t;
 
 
-typedef struct rpc_out {
-    enum {QUERY_NOT_FOUND, QUERY_OK} res;
-    //int res;
-    int rank;
-} rpc_out_t;
 
-static void* rpc_in_pack(char* filename, int rank, int num_intervals, size_t *offsets, size_t *counts, size_t *size) {
+static void* rpc_in_pack(char* filename, int num_intervals, size_t *offsets, size_t *counts, size_t *size) {
     int filename_len = strlen(filename);
 
-    size_t total = sizeof(int)*3;           // rank, filename_len, num_intervals
+    size_t total = sizeof(int)*2;           // filename_len, num_intervals
     total += strlen(filename);              // filename
     for(int i = 0; i < num_intervals; i++)  // intervals (offset, count)
         total += sizeof(size_t) * 2;
 
     int pos = 0;
     void* data = malloc(total);
-    memcpy(data+pos, &rank, sizeof(int));
-    pos+= sizeof(int);
     memcpy(data+pos, &num_intervals, sizeof(int));
     pos+= sizeof(int);
     memcpy(data+pos, &filename_len, sizeof(int));
@@ -54,11 +46,8 @@ static void* rpc_in_pack(char* filename, int rank, int num_intervals, size_t *of
 }
 
 static rpc_in_t* rpc_in_unpack(void* data) {
-    int pos = 0;
+    size_t pos = 0;
     rpc_in_t *in = malloc(sizeof(rpc_in_t));
-
-    memcpy(&in->rank, data+pos, sizeof(int));
-    pos += sizeof(int);
 
     memcpy(&in->num_intervals, data+pos, sizeof(int));
     pos += sizeof(int);
@@ -87,11 +76,13 @@ static void rpc_in_free(rpc_in_t *in) {
     free(in);
 }
 
-void tangram_issue_rpc_rma(uint8_t id, char* filename, int my_rank, int dest_rank, size_t *offsets, size_t *counts, int len, void* respond);
-void tangram_issue_metadata_rpc(uint8_t id, const char* filename, void* respond);
+void tangram_issue_rpc(uint8_t id, char* filename, tangram_uct_addr_t* dest, size_t *offsets, size_t *counts, int len, void** respond_ptr);
+void tangram_issue_rma(uint8_t id, char* filename, tangram_uct_addr_t* dest, size_t *offsets, size_t *counts, int len, void* recv_buf);
+void tangram_issue_metadata_rpc(uint8_t id, const char* filename, void** respond_ptr);
 void tangram_rma_service_start(tfs_info_t *tfs_info, void* (*serve_rma_data)(void*, size_t*));
 void tangram_rma_service_stop();
 void tangram_rpc_service_start(tfs_info_t *tfs_info);
 void tangram_rpc_service_stop();
+tangram_uct_addr_t* tangram_rpc_get_client_addr();
 
 #endif

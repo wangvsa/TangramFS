@@ -73,7 +73,7 @@ tfs_file_t* tfs_open(const char* pathname) {
     if(tf) {
         tf->offset = 0;
     } else {
-        tf = tangram_malloc(sizeof(tfs_file_t));
+        tf         = tangram_malloc(sizeof(tfs_file_t));
         tf->stream = NULL;
         tf->fd     = -1;
         tf->offset = 0;
@@ -123,27 +123,32 @@ size_t tfs_write(tfs_file_t* tf, const void* buf, size_t size) {
     size_t local_offset = TANGRAM_REAL_CALL(lseek)(tf->local_fd, 0, SEEK_END);
     size_t res = TANGRAM_REAL_CALL(pwrite)(tf->local_fd, buf, size, local_offset);
     //TANGRAM_REAL_CALL(fsync)(tf->local_fd);
-    seg_tree_add(&tf->it2, tf->offset, tf->offset+size-1, local_offset, tfs.mpi_rank);
+    seg_tree_add(&tf->it2, tf->offset, tf->offset+size-1, local_offset, tangram_rpc_get_client_addr());
     tf->offset += size;
     return res;
 }
 
 size_t tfs_read(tfs_file_t* tf, void* buf, size_t size) {
-    rpc_out_t out;
-    tfs_query(tf, tf->offset, size, &out);
+    tangram_uct_addr_t *self = tangram_rpc_get_client_addr();
+    tangram_uct_addr_t owner;
+    int res = tfs_query(tf, tf->offset, size, &owner);
     //printf("[tangramfs %d] read %s (%d, [%lu,%lu])\n", tfs.mpi_rank, tf->filename, out.rank, tf->offset, size);
 
     // 1. turns out myself has the latest data, then just read it locally.
     // 2. in case server does not know who has the data, we'll also try it locally.
-    if(out.res == QUERY_NOT_FOUND || out.rank == tfs.mpi_rank)
+    if(res != 0 || tangram_uct_addr_compare(&owner, self) == 0) {
+        tangram_uct_addr_free(&owner);
         return tfs_read_lazy(tf, buf, size);
+    }
 
     // read from peers through RMA
     size_t offset = tf->offset;
     double t1 = MPI_Wtime();
-    tangram_issue_rpc_rma(AM_ID_RMA_REQUEST, tf->filename, tfs.mpi_rank, out.rank, &offset, &size, 1, buf);
+    tangram_issue_rma(AM_ID_RMA_REQUEST, tf->filename, &owner, &offset, &size, 1, buf);
     tf->offset += size;
     double t2 = MPI_Wtime();
+
+    tangram_uct_addr_free(&owner);
     //printf("[tangramfs %d] rpc for read: %.6fseconds, %.3fMB/s\n", tfs.mpi_rank, (t2-t1), size/1024.0/1024.0/(t2-t1));
     return size;
 }
@@ -268,11 +273,12 @@ size_t tfs_tell(tfs_file_t* tf) {
 
 void tfs_post(tfs_file_t* tf, size_t offset, size_t count) {
     if(count <= 0 || offset < 0) return;
-    int ack;
-    tangram_issue_rpc_rma(AM_ID_POST_REQUEST, tf->filename, tfs.mpi_rank, 0, &offset, &count, 1, &ack);
+    int* ack;
+    tangram_issue_rpc(AM_ID_POST_REQUEST, tf->filename, TANGRAM_UCT_ADDR_IGNORE, &offset, &count, 1, (void**)&ack);
     // TODO: need to check the range to make sure it is valid.
     // Also need to set those ranges as posted, so when we do
     // post_all() later we only send the unposted ones.
+    free(ack);
 }
 
 void tfs_post_all(tfs_file_t* tf) {
@@ -295,20 +301,37 @@ void tfs_post_all(tfs_file_t* tf) {
 
     seg_tree_unlock(&tf->it2);
 
-    int ack;
-    tangram_issue_rpc_rma(AM_ID_POST_REQUEST, tf->filename, tfs.mpi_rank, 0, offsets, counts, num, &ack);
+    int* ack;
+    tangram_issue_rpc(AM_ID_POST_REQUEST, tf->filename, TANGRAM_UCT_ADDR_IGNORE, offsets, counts, num, (void**)&ack);
+    free(ack);
 }
 
-void tfs_query(tfs_file_t* tf, size_t offset, size_t size, rpc_out_t* out) {
-    tangram_issue_rpc_rma(AM_ID_QUERY_REQUEST, tf->filename, tfs.mpi_rank, 0, &offset, &size, 1, out);
+int tfs_query(tfs_file_t* tf, size_t offset, size_t size, tangram_uct_addr_t* owner) {
+    void* buf = NULL;
+    tangram_issue_rpc(AM_ID_QUERY_REQUEST, tf->filename, TANGRAM_UCT_ADDR_IGNORE, &offset, &size, 1, &buf);
+    if(buf) {
+        tangram_uct_addr_deserialize(buf, owner);
+        free(buf);
+        return 0;
+    }
+
+    return -1;
 }
 
 int tfs_close(tfs_file_t* tf) {
-    if(tf->fd != -1)
+    int res = 0;
+    if(tf->fd != -1) {
         TANGRAM_REAL_CALL(close)(tf->fd);
-    if(tf->stream != NULL)
+        tf->fd = -1;
+    }
+    if(tf->stream != NULL) {
         TANGRAM_REAL_CALL(fclose)(tf->stream);
-    int res = TANGRAM_REAL_CALL(close)(tf->local_fd);
+        tf->stream = NULL;
+    }
+    if(tf->local_fd != -1) {
+        res = TANGRAM_REAL_CALL(close)(tf->local_fd);
+        tf->local_fd = -1;
+    }
 
     // The tfs_file_t and its interval tree is not released
     // just like Linux page cache won't be cleared at close point

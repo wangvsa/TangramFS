@@ -93,7 +93,7 @@ void dev_tl_lookup(char* dev_name, char* tl_name, tangram_uct_context_t *context
     uct_release_component_list(components);
 }
 
-void exchange_dev_iface_addr(tangram_uct_context_t* context, uct_device_addr_t** dev_addrs, uct_iface_addr_t** iface_addrs) {
+void exchange_dev_iface_addr(tangram_uct_context_t* context, tangram_uct_addr_t* peer_addrs) {
     int mpi_size;
     MPI_Comm_size(MPI_COMM_WORLD, &mpi_size);
 
@@ -101,25 +101,26 @@ void exchange_dev_iface_addr(tangram_uct_context_t* context, uct_device_addr_t**
     void*  all_addrs;
 
     // exchange device addrs
-    addr_len = context->iface_attr.device_addr_len;
-    all_addrs = malloc(addr_len*mpi_size);
-    MPI_Allgather(context->dev_addr, addr_len, MPI_BYTE, all_addrs, addr_len, MPI_BYTE, MPI_COMM_WORLD);
+    addr_len = context->self_addr.dev_len;
+    all_addrs = malloc(addr_len * mpi_size);
+    MPI_Allgather(context->self_addr.dev, addr_len, MPI_BYTE, all_addrs, addr_len, MPI_BYTE, MPI_COMM_WORLD);
 
     for(int rank = 0; rank < mpi_size; rank++) {
-        dev_addrs[rank] = malloc(addr_len);
-        memcpy(dev_addrs[rank], all_addrs+rank*addr_len, addr_len);
+        peer_addrs[rank].dev     = malloc(addr_len);
+        peer_addrs[rank].dev_len = addr_len;
+        memcpy(peer_addrs[rank].dev, all_addrs+rank*addr_len, addr_len);
     }
     free(all_addrs);
 
-    if(iface_addrs == NULL) return;
     // exchange iface addrs
-    addr_len = context->iface_attr.iface_addr_len;
+    addr_len = context->self_addr.iface_len;
     all_addrs = malloc(addr_len*mpi_size);
-    MPI_Allgather(context->iface_addr, addr_len, MPI_BYTE, all_addrs, addr_len, MPI_BYTE, MPI_COMM_WORLD);
+    MPI_Allgather(context->self_addr.iface, addr_len, MPI_BYTE, all_addrs, addr_len, MPI_BYTE, MPI_COMM_WORLD);
 
     for(int rank = 0; rank < mpi_size; rank++) {
-        iface_addrs[rank] = malloc(addr_len);
-        memcpy(iface_addrs[rank], all_addrs+rank*addr_len, addr_len);
+        peer_addrs[rank].iface     = malloc(addr_len);
+        peer_addrs[rank].iface_len = addr_len;
+        memcpy(peer_addrs[rank].iface, all_addrs+rank*addr_len, addr_len);
     }
     free(all_addrs);
 }
@@ -134,19 +135,26 @@ void tangram_uct_context_init(ucs_async_context_t* async, char* dev_name, char* 
     // This will open the context->iface and set context->iface_attr
     init_iface(dev_name, tl_name, context);
 
-    context->dev_addr = malloc(context->iface_attr.device_addr_len);
-    context->iface_addr = malloc(context->iface_attr.iface_addr_len);
-    context->server_dev_addr = malloc(context->iface_attr.device_addr_len);
-    context->server_iface_addr = malloc(context->iface_attr.iface_addr_len);
 
-    uct_iface_get_device_address(context->iface, context->dev_addr);
-    uct_iface_get_address(context->iface, context->iface_addr);
+    context->self_addr.dev_len     = context->iface_attr.device_addr_len;
+    context->self_addr.iface_len   = context->iface_attr.iface_addr_len;
+    // TODO same dev_len and iface_len?
+    context->server_addr.dev_len   = context->iface_attr.device_addr_len;
+    context->server_addr.iface_len = context->iface_attr.iface_addr_len;
+
+    context->self_addr.dev         = malloc(context->self_addr.dev_len);
+    context->self_addr.iface       = malloc(context->self_addr.iface_len);
+    context->server_addr.dev       = malloc(context->server_addr.dev_len);
+    context->server_addr.iface     = malloc(context->server_addr.iface_len);
+
+    uct_iface_get_device_address(context->iface, context->self_addr.dev);
+    uct_iface_get_address(context->iface, context->self_addr.iface);
 
     if(server)
-        tangram_write_uct_server_addr(context->dev_addr, context->iface_attr.device_addr_len,
-                                      context->iface_addr, context->iface_attr.iface_addr_len);
+        tangram_write_uct_server_addr(context->self_addr.dev, context->self_addr.dev_len,
+                                      context->self_addr.iface, context->self_addr.iface_len);
     else
-        tangram_read_uct_server_addr((void**)&context->server_dev_addr, (void**)&context->server_iface_addr);
+        tangram_read_uct_server_addr((void**)&context->server_addr.dev, (void**)&context->server_addr.iface);
 
     pthread_mutex_init(&context->mutex, NULL);
     pthread_mutex_init(&context->cond_mutex, NULL);
@@ -157,10 +165,10 @@ void tangram_uct_context_init(ucs_async_context_t* async, char* dev_name, char* 
 void tangram_uct_context_destroy(tangram_uct_context_t *context) {
     uct_iface_close(context->iface);
     uct_md_close(context->md);
-    free(context->dev_addr);
-    free(context->iface_addr);
-    free(context->server_dev_addr);
-    free(context->server_iface_addr);
+    free(context->self_addr.dev);
+    free(context->self_addr.iface);
+    free(context->server_addr.dev);
+    free(context->server_addr.iface);
     uct_worker_destroy(context->worker);
 
     pthread_mutex_destroy(&context->mutex);
@@ -170,7 +178,7 @@ void tangram_uct_context_destroy(tangram_uct_context_t *context) {
 
 
 // Create and connect to the remote iface
-void uct_ep_create_connect(uct_iface_h iface, uct_device_addr_t* dev_addr, uct_iface_addr_t* iface_addr, uct_ep_h* ep) {
+void uct_ep_create_connect(uct_iface_h iface, tangram_uct_addr_t* addr, uct_ep_h* ep) {
     //assert(context->iface_attr.cap.flags & UCT_IFACE_FLAG_CONNECT_TO_IFACE);
     ucs_status_t status;
 
@@ -179,30 +187,167 @@ void uct_ep_create_connect(uct_iface_h iface, uct_device_addr_t* dev_addr, uct_i
                            UCT_EP_PARAM_FIELD_DEV_ADDR  |
                            UCT_EP_PARAM_FIELD_IFACE_ADDR;
     ep_params.iface      = iface;
-    ep_params.dev_addr   = dev_addr;
-    ep_params.iface_addr = iface_addr;
+    ep_params.dev_addr   = addr->dev;
+    ep_params.iface_addr = addr->iface;
 
     status = uct_ep_create(&ep_params, ep);
     assert(status == UCS_OK);
 }
 
-void do_uct_am_short(pthread_mutex_t *lock, uct_ep_h ep, uint8_t id, int header, void* data, size_t length) {
+void* pack_rpc_buffer(tangram_uct_addr_t* addr, void* data, size_t inlen, size_t* outlen) {
+
+    *outlen = 2 * sizeof(size_t) + addr->dev_len + addr->iface_len + inlen;
+
+    void* out = malloc(*outlen);
+
+    void* ptr = out;
+    memcpy(ptr, &addr->dev_len, sizeof(size_t));
+
+    ptr += sizeof(size_t);
+    memcpy(ptr, addr->dev, addr->dev_len);
+
+    ptr += addr->dev_len;
+    memcpy(ptr, &addr->iface_len, sizeof(size_t));
+
+    ptr += sizeof(size_t);
+    memcpy(ptr, addr->iface, addr->iface_len);
+
+    ptr += addr->iface_len;
+    if(data && inlen > 0)
+        memcpy(ptr, data, inlen);
+
+    return out;
+}
+
+void unpack_rpc_buffer(void* buf, size_t buf_len, tangram_uct_addr_t *sender, void** data_ptr) {
+    buf_len = buf_len - sizeof(uint64_t);   // skip header;
+    void* ptr = buf + sizeof(uint64_t);
+
+    size_t dev_len, iface_len;
+    memcpy(&dev_len, ptr, sizeof(size_t));
+    ptr += sizeof(size_t);
+
+    if(sender != TANGRAM_UCT_ADDR_IGNORE) {
+        sender->dev_len = dev_len;
+        sender->dev = malloc(dev_len);
+        memcpy(sender->dev, ptr, dev_len);
+    }
+
+    ptr += dev_len;
+    memcpy(&iface_len, ptr, sizeof(size_t));
+    ptr += sizeof(size_t);
+
+    if(sender != TANGRAM_UCT_ADDR_IGNORE) {
+        sender->iface_len = iface_len;
+        sender->iface = malloc(iface_len);
+        memcpy(sender->iface, ptr, iface_len);
+    }
+
+    ptr += iface_len;
+    size_t data_len = buf_len - 2 * sizeof(size_t) - dev_len - iface_len;
+
+    if(data_len > 0 && data_ptr != NULL) {
+        *data_ptr = malloc(data_len);
+        memcpy(*data_ptr, ptr, data_len);
+    }
+}
+
+void do_uct_am_short(pthread_mutex_t *lock, uct_ep_h ep, uint8_t id, tangram_uct_addr_t* my_addr, void* data, size_t data_len) {
+    size_t buf_len;
+    void* buf = pack_rpc_buffer(my_addr, data, data_len, &buf_len);
+
     ucs_status_t status = UCS_OK;
     do {
         pthread_mutex_lock(lock);
-        status = uct_ep_am_short(ep, id, header, data, length);
+        status = uct_ep_am_short(ep, id, 0, buf, buf_len);
         pthread_mutex_unlock(lock);
     } while (status == UCS_ERR_NO_RESOURCE);
+
+    free(buf);
     assert(status == UCS_OK);
 }
 
-void do_uct_am_short_progress(uct_worker_h worker, uct_ep_h ep, uint8_t id, int header, void* data, size_t length) {
+void do_uct_am_short_progress(uct_worker_h worker, uct_ep_h ep, uint8_t id, tangram_uct_addr_t* my_addr, void* data, size_t data_len) {
+    size_t buf_len;
+    void* buf = pack_rpc_buffer(my_addr, data, data_len, &buf_len);
+
     ucs_status_t status = UCS_OK;
     do {
-        status = uct_ep_am_short(ep, id, header, data, length);
+        status = uct_ep_am_short(ep, id, 0, buf, buf_len);
         uct_worker_progress(worker);
     } while (status == UCS_ERR_NO_RESOURCE);
+
+    free(buf);
     assert(status == UCS_OK);
 }
 
+
+void* tangram_uct_addr_serialize(tangram_uct_addr_t* addr, size_t *len) {
+    if(!addr) return NULL;
+
+    *len = sizeof(size_t)*2 + addr->dev_len + addr->iface_len;
+    void* buf = malloc(*len);
+
+    void* ptr = buf;
+    memcpy(ptr, &addr->dev_len, sizeof(size_t));
+
+    ptr += sizeof(size_t);
+    memcpy(ptr, addr->dev, addr->dev_len);
+
+    ptr += addr->dev_len;
+    memcpy(ptr, &addr->iface_len, sizeof(size_t));
+
+    ptr += sizeof(size_t);
+    memcpy(ptr, addr->iface, addr->iface_len);
+
+    return buf;
+}
+
+void tangram_uct_addr_deserialize(void* buf, tangram_uct_addr_t* addr) {
+    void* ptr = buf;
+    memcpy(&addr->dev_len, ptr, sizeof(size_t));
+
+    ptr += sizeof(size_t);
+    addr->dev = malloc(addr->dev_len);
+    memcpy(addr->dev, ptr, addr->dev_len);
+
+    ptr += addr->dev_len;
+    memcpy(&addr->iface_len, ptr, sizeof(size_t));
+
+    ptr += sizeof(size_t);
+    addr->iface = malloc(addr->iface_len);
+    memcpy(addr->iface, ptr, addr->iface_len);
+}
+
+tangram_uct_addr_t* tangram_uct_addr_duplicate(tangram_uct_addr_t* in) {
+    tangram_uct_addr_t* out = malloc(sizeof(tangram_uct_addr_t));
+    out->dev_len = in->dev_len;
+    out->iface_len = in->iface_len;
+    out->dev = malloc(out->dev_len);
+    out->iface = malloc(out->iface_len);
+    memcpy(out->dev, in->dev, out->dev_len);
+    memcpy(out->iface, in->iface, out->iface_len);
+    return out;
+}
+
+void tangram_uct_addr_free(tangram_uct_addr_t* addr) {
+    if(addr->dev != NULL)
+        free(addr->dev);
+    if(addr->iface != NULL)
+        free(addr->iface);
+
+    addr->dev = NULL;
+    addr->iface = NULL;
+}
+
+int tangram_uct_addr_compare(tangram_uct_addr_t* a, tangram_uct_addr_t* b) {
+    if(a == b) return 0;
+    if(a->dev_len == b->dev_len && a->iface_len == b->iface_len) {
+        int r1 = memcmp(a->dev, b->dev, a->dev_len);
+        int r2 = memcmp(a->iface, b->iface, a->iface_len);
+        if (r1 == 0 && r2 == 0)
+            return 0;
+    }
+    return 1;
+}
 

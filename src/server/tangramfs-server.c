@@ -11,28 +11,27 @@
 /**
  * Return a respond, can be NULL
  */
-void* rpc_handler(int8_t id, void* data, size_t *respond_len) {
+void* rpc_handler(int8_t id, tangram_uct_addr_t* client, void* data, size_t *respond_len) {
     *respond_len = 0;
     void *respond = NULL;
 
     if(id == AM_ID_POST_REQUEST) {
+        tangram_uct_addr_t* client_dup = tangram_uct_addr_duplicate(client);
         rpc_in_t* in = rpc_in_unpack(data);
         for(int i = 0; i < in->num_intervals; i++)
-            tangram_ms_handle_post(in->rank, in->filename, in->intervals[i].offset, in->intervals[i].count);
-        //tangram_debug("post in->rank: %d, filename: %s, offset:%lu, count: %lu\n", in->rank, in->filename, in->intervals[0].offset, in->intervals[0].count);
+            tangram_ms_handle_post(client_dup, in->filename, in->intervals[i].offset, in->intervals[i].count);
+        tangram_debug("post, filename: %s, offset:%lu, count: %lu\n", in->filename, in->intervals[0].offset, in->intervals[0].count);
         rpc_in_free(in);
         respond = malloc(sizeof(int));
         *respond_len = sizeof(int);
     } else if(id == AM_ID_QUERY_REQUEST) {
         rpc_in_t* in = rpc_in_unpack(data);
-        *respond_len = sizeof(rpc_out_t);
-        rpc_out_t *out = malloc(sizeof(rpc_out_t));
-        bool found = tangram_ms_handle_query(in->filename, in->intervals[0].offset, in->intervals[0].count, &(out->rank));
-        //tangram_debug("query in->rank: %d, filename: %s, offset:%lu, count: %lu, out->rank: %d\n",
-        //        in->rank, in->filename, in->intervals[0].offset, in->intervals[0].count, out->rank);
+        tangram_uct_addr_t *owner;
+        owner = tangram_ms_handle_query(in->filename, in->intervals[0].offset, in->intervals[0].count);
+        tangram_debug("query, filename: %s, offset:%lu, count: %lu\n",
+                in->filename, in->intervals[0].offset, in->intervals[0].count);
         rpc_in_free(in);
-        out->res = found ? QUERY_OK: QUERY_NOT_FOUND;
-        respond = out;
+        respond = tangram_uct_addr_serialize(owner, respond_len);
     } else if(id == AM_ID_STAT_REQUEST) {
         char* path = data;
         *respond_len = sizeof(struct stat);

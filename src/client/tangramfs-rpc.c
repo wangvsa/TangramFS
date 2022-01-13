@@ -11,31 +11,23 @@
 
 static double rma_time;
 
+
 /*
- * Perform RPC or RMA.
- * The underlying implementaiton is in tangramfs-ucx.c
- *
- * int dest_rank is only required for RMA operation
- *
+ * Perform RPC.
+ * The underlying implementaiton is in src/ucx/tangram-ucx-client.c
  */
-void tangram_issue_rpc_rma(uint8_t id, char* filename, int my_rank, int dest_rank,
-                            size_t *offsets, size_t *counts, int num_intervals, void* respond) {
+void tangram_issue_rpc(uint8_t id, char* filename, tangram_uct_addr_t* dest,
+                            size_t *offsets, size_t *counts, int num_intervals, void** respond_ptr) {
 
     size_t data_size;
-    size_t total_recv_size = 0;     // RMA only
-    void* user_data = rpc_in_pack(filename, my_rank, num_intervals, offsets, counts, &data_size);
+    void* user_data = rpc_in_pack(filename, num_intervals, offsets, counts, &data_size);
 
     switch(id) {
         case AM_ID_POST_REQUEST:
-            tangram_ucx_sendrecv_server(id, user_data, data_size, respond);
+            tangram_ucx_sendrecv_server(id, user_data, data_size, respond_ptr);
             break;
         case AM_ID_QUERY_REQUEST:
-            tangram_ucx_sendrecv_server(id, user_data, data_size, respond);
-            break;
-        case AM_ID_RMA_REQUEST:
-            for(int i = 0; i < num_intervals; i++)
-                total_recv_size += counts[i];
-            tangram_ucx_rma_request(dest_rank, user_data, data_size, respond, total_recv_size);
+            tangram_ucx_sendrecv_server(id, user_data, data_size, respond_ptr);
             break;
         default:
             break;
@@ -44,11 +36,28 @@ void tangram_issue_rpc_rma(uint8_t id, char* filename, int my_rank, int dest_ran
     free(user_data);
 }
 
-void tangram_issue_metadata_rpc(uint8_t id, const char* path, void* respond) {
+/*
+ * Perform RPC.
+ * The underlying implementaiton is in src/ucx/tangram-ucx-client.c
+ */
+void tangram_issue_rma(uint8_t id, char* filename, tangram_uct_addr_t* dest,
+                            size_t *offsets, size_t *counts, int num_intervals, void* recv_buf) {
+
+    size_t data_size;
+    void* user_data = rpc_in_pack(filename, num_intervals, offsets, counts, &data_size);
+
+    size_t total_recv_size = 0;
+    for(int i = 0; i < num_intervals; i++)
+        total_recv_size += counts[i];
+
+    tangram_ucx_rma_request(dest, user_data, data_size, recv_buf, total_recv_size);
+}
+
+void tangram_issue_metadata_rpc(uint8_t id, const char* path, void** respond_ptr) {
     void* data = (void*) path;
     switch(id) {
         case AM_ID_STAT_REQUEST:
-            tangram_ucx_sendrecv_server(id, data, 1+strlen(path), respond);
+            tangram_ucx_sendrecv_server(id, data, 1+strlen(path), respond_ptr);
             break;
         default:
             break;
@@ -61,6 +70,10 @@ void tangram_rpc_service_start(tfs_info_t *tfs_info){
 
 void tangram_rpc_service_stop() {
     tangram_ucx_rpc_service_stop();
+}
+
+tangram_uct_addr_t* tangram_rpc_get_client_addr() {
+    return tangram_ucx_get_client_addr();
 }
 
 void tangram_rma_service_start(tfs_info_t *tfs_info, void* (*serve_rma_data)(void*, size_t*)) {

@@ -17,13 +17,14 @@
 
 #include <pthread.h>
 #include "tree.h"
+#include "tangramfs-rpc.h"
 
 struct seg_tree_node {
     RB_ENTRY(seg_tree_node) entry;
-    int rank;            /* mpi process of this segment, use by metadata server */
-    unsigned long start; /* starting logical offset of range */
-    unsigned long end;   /* ending logical offset of range */
-    unsigned long ptr;   /* physical offset of data in log */
+    tangram_uct_addr_t* owner;      /* owner of this segment, use by metadata server */
+    unsigned long start;            /* starting logical offset of range */
+    unsigned long end;              /* ending logical offset of range */
+    unsigned long ptr;              /* physical offset of data in log */
 };
 
 struct seg_tree {
@@ -51,7 +52,7 @@ void seg_tree_destroy(struct seg_tree* seg_tree);
  * Add an entry to the range tree.  Returns 0 on success, nonzero otherwise.
  */
 int seg_tree_add(struct seg_tree* seg_tree, unsigned long start,
-                 unsigned long end, unsigned long ptr, int rank);
+                 unsigned long end, unsigned long ptr, tangram_uct_addr_t* owner);
 
 /*
  * Remove or truncate one or more entries from the range tree

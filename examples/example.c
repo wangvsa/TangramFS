@@ -10,8 +10,8 @@
 
 #define MB (1024*1024)
 
-static size_t DATA_SIZE = 32*MB;
-static int N = 8;
+static size_t DATA_SIZE = 4*MB;
+static int N = 1;
 
 int mpi_size, mpi_rank;
 double write_bandwidth, read_bandwidth;
@@ -48,7 +48,7 @@ void read_phase() {
     char* data = malloc(sizeof(char)*DATA_SIZE);
 
     // read neighbor rank's data
-    int neighbor_rank = (mpi_rank + 8) % mpi_size;
+    int neighbor_rank = (mpi_rank + 1) % mpi_size;
     size_t offset = neighbor_rank * DATA_SIZE * N;
     tfs_seek(tf, offset, SEEK_SET);
 

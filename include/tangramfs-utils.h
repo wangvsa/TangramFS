@@ -25,6 +25,7 @@ typedef struct tfs_info {
     int semantics;  // Strong, Session or Commit; only needed in passive mode.
     bool initialized;
     bool debug;
+
 } tfs_info_t;
 
 
