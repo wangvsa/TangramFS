@@ -28,8 +28,6 @@ tfs_info_t*                 gg_tfs_info;
 static tangram_uct_context_t  g_request_context;
 static tangram_uct_context_t  g_respond_context;
 
-tangram_uct_addr_t*           g_respond_addrs;
-tangram_uct_addr_t*           g_request_addrs;
 
 
 typedef struct zcopy_comp {
@@ -354,24 +352,12 @@ void tangram_ucx_rma_service_start(tfs_info_t* tfs_info, void* (serve_rma_data)(
     tangram_uct_context_init(g_rma_async, gg_tfs_info->rma_dev_name, gg_tfs_info->rma_tl_name, false, &g_request_context);
     tangram_uct_context_init(g_rma_async, gg_tfs_info->rma_dev_name, gg_tfs_info->rma_tl_name, false, &g_respond_context);
 
-    g_respond_addrs = malloc(gg_tfs_info->mpi_size * sizeof(tangram_uct_addr_t));
-    g_request_addrs = malloc(gg_tfs_info->mpi_size * sizeof(tangram_uct_addr_t));
-    exchange_dev_iface_addr(&g_respond_context, g_respond_addrs);
-    exchange_dev_iface_addr(&g_request_context, g_request_addrs);
-
     status = uct_iface_set_am_handler(g_request_context.iface, AM_ID_RMA_RESPOND, am_rma_respond_listener, NULL, 0);
     assert(status == UCS_OK);
 }
 
 void tangram_ucx_rma_service_stop() {
     MPI_Barrier(gg_tfs_info->mpi_comm);
-
-    for(int i = 0; i < gg_tfs_info->mpi_size; i++) {
-        free(g_respond_addrs[i].dev);
-        free(g_request_addrs[i].iface);
-    }
-    free(g_respond_addrs);
-    free(g_request_addrs);
 
     tangram_uct_context_destroy(&g_request_context);
     tangram_uct_context_destroy(&g_respond_context);

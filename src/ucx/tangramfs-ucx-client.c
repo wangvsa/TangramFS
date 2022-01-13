@@ -182,30 +182,6 @@ void tangram_ucx_stop_server() {
     tangram_ucx_send_server(AM_ID_STOP_REQUEST);
 }
 
-
-void send_address_to_server() {
-    size_t len = 2 * sizeof(size_t) + g_recv_context.iface_attr.device_addr_len + g_recv_context.iface_attr.iface_addr_len;
-    void* data = malloc(len);
-
-    memcpy(data, &g_recv_context.self_addr.dev_len, sizeof(size_t));
-    memcpy(data+sizeof(size_t), g_recv_context.self_addr.dev, g_recv_context.self_addr.dev_len);
-
-    memcpy(data+sizeof(size_t)+g_recv_context.self_addr.dev_len, &g_recv_context.self_addr.iface_len, sizeof(size_t));
-    memcpy(data+2*sizeof(size_t)+g_recv_context.self_addr.dev_len, g_recv_context.self_addr.iface, g_recv_context.self_addr.iface_len);
-
-    pthread_mutex_lock(&g_send_context.mutex);
-
-    uct_ep_h ep;
-    uct_ep_create_connect(g_send_context.iface, &g_send_context.server_addr, &ep);
-
-    do_uct_am_short_progress(g_send_context.worker, ep, AM_ID_CLIENT_ADDR, &g_recv_context.self_addr, data, len);
-    uct_ep_destroy(ep);
-
-    pthread_mutex_unlock(&g_send_context.mutex);
-
-    free(data);
-}
-
 void tangram_ucx_rpc_service_start(tfs_info_t *tfs_info) {
     g_tfs_info = tfs_info;
 
@@ -231,17 +207,7 @@ void tangram_ucx_rpc_service_start(tfs_info_t *tfs_info) {
     assert(status == UCS_OK);
 
     pthread_create(&g_recv_progress_thread, NULL, receiver_progress_loop, NULL);
-
-    if(g_tfs_info->mpi_rank == 0)
-        tangram_ucx_send_server(AM_ID_MPI_SIZE);
     MPI_Barrier(g_tfs_info->mpi_comm);
-
-    // TODO, Note here we have N clients each send a message to
-    // the server, but we did not wait for server to respond.
-    // So, even the barrier after still can not guarantee server
-    // has processed all messages, thus we add a few seconds sleep().
-    //send_address_to_server();
-    sleep(1);
 }
 
 

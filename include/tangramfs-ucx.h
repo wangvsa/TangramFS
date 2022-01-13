@@ -17,8 +17,6 @@
 #define AM_ID_RMA_EP_ADDR    7
 #define AM_ID_STOP_REQUEST   8
 #define AM_ID_STOP_RESPOND   9
-#define AM_ID_CLIENT_ADDR    10
-#define AM_ID_MPI_SIZE       11
 #define AM_ID_STAT_REQUEST   12
 #define AM_ID_STAT_RESPOND   13
 

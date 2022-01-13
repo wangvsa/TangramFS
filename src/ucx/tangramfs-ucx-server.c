@@ -12,7 +12,6 @@
 #define NUM_THREADS 8
 
 volatile static bool         g_server_running = true;
-static int                   g_mpi_size;
 static ucs_async_context_t*  g_server_async;
 static tangram_uct_context_t g_server_context;
 
@@ -104,13 +103,6 @@ static ucs_status_t am_stop_listener(void *arg, void *buf, size_t buf_len, unsig
     return UCS_OK;
 }
 
-
-// Receive the size of mpi clients and init client addresses
-static ucs_status_t am_mpi_size_listener(void *arg, void *data, size_t length, unsigned flags) {
-    g_mpi_size = *(uint64_t*) data;
-    return UCS_OK;
-}
-
 void handle_one_task(rpc_task_t* task) {
     pthread_mutex_lock(&g_server_context.mutex);
     uct_ep_h ep;
@@ -185,10 +177,6 @@ void tangram_ucx_server_init(tfs_info_t *tfs_info) {
     status = uct_iface_set_am_handler(g_server_context.iface, AM_ID_STAT_REQUEST, am_stat_listener, NULL, 0);
     assert(status == UCS_OK);
     status = uct_iface_set_am_handler(g_server_context.iface, AM_ID_STOP_REQUEST, am_stop_listener, NULL, 0);
-    assert(status == UCS_OK);
-    //status = uct_iface_set_am_handler(g_server_context.iface, AM_ID_CLIENT_ADDR, am_client_addr_listener, NULL, 0);
-    //assert(status == UCS_OK);
-    status = uct_iface_set_am_handler(g_server_context.iface, AM_ID_MPI_SIZE, am_mpi_size_listener, NULL, 0);
     assert(status == UCS_OK);
 
     for(int i = 0; i < NUM_THREADS; i++) {
