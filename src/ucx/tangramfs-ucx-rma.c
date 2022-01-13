@@ -11,7 +11,7 @@
 
 
 static ucs_async_context_t* g_rma_async;
-tfs_info_t*                 g_tfs_info;
+tfs_info_t*                 gg_tfs_info;
 
 /**
  * Request context is for sending RMA request
@@ -32,7 +32,6 @@ tangram_uct_addr_t*           g_respond_addrs;
 tangram_uct_addr_t*           g_request_addrs;
 
 
-
 typedef struct zcopy_comp {
     uct_completion_t uct_comp;
     volatile bool    done;
@@ -50,8 +49,8 @@ void* (*g_serve_rma_data)(void*, size_t *size);
 void* pack_request_arg(void* ep_addr, void* my_addr, void* rkey_buf, size_t rkey_buf_size,
                             void* user_arg, size_t user_arg_size, size_t *total_size) {
     // format:
-    // ep_addr_len | ep_addr | my_addr | rkey_buf_size | rkey_buf | user_arg_size | user_arg |
-    *total_size = sizeof(uint64_t) + sizeof(size_t)*3 +
+    // ep_addr_len | ep_addr | dev_addr_len | dev | my_addr | rkey_buf_size | rkey_buf | user_arg_size | user_arg |
+    *total_size = sizeof(uint64_t) + sizeof(size_t)*4 + g_request_context.self_addr.dev_len +
         g_request_context.iface_attr.ep_addr_len + rkey_buf_size + user_arg_size;
 
     int pos = 0;
@@ -62,6 +61,12 @@ void* pack_request_arg(void* ep_addr, void* my_addr, void* rkey_buf, size_t rkey
 
     memcpy(send_buf+pos, ep_addr, g_request_context.iface_attr.ep_addr_len);
     pos += g_request_context.iface_attr.ep_addr_len;
+
+    memcpy(send_buf+pos, &g_request_context.self_addr.dev_len, sizeof(size_t));
+    pos += sizeof(size_t);
+
+    memcpy(send_buf+pos, g_request_context.self_addr.dev, g_request_context.self_addr.dev_len);
+    pos += g_request_context.self_addr.dev_len;
 
     uint64_t tmp_addr = (uint64_t)my_addr;
     memcpy(send_buf+pos, &tmp_addr, sizeof(uint64_t));
@@ -173,8 +178,9 @@ void* rma_respond(void* arg_in) {
     uint64_t remote_addr;
     size_t rkey_buf_size, user_arg_size;
     void *rkey_buf, *user_arg;
-    size_t ep_addr_len;
+    size_t ep_addr_len, dev_addr_len;
     uct_ep_addr_t* peer_ep_addr;
+    uct_device_addr_t* peer_dev_addr;
 
     size_t pos = 0;
 
@@ -184,6 +190,13 @@ void* rma_respond(void* arg_in) {
     peer_ep_addr = alloca(ep_addr_len);
     memcpy(peer_ep_addr, data+pos, ep_addr_len);
     pos += ep_addr_len;
+
+    memcpy(&dev_addr_len, data+pos, sizeof(size_t));
+    pos += sizeof(size_t);
+
+    peer_dev_addr = alloca(dev_addr_len);
+    memcpy(peer_dev_addr, data+pos, dev_addr_len);
+    pos += dev_addr_len;
 
     memcpy(&remote_addr, data+pos, sizeof(uint64_t));
     pos += sizeof(uint64_t);
@@ -199,14 +212,22 @@ void* rma_respond(void* arg_in) {
     pos += sizeof(size_t);
     user_arg = data+pos;
 
-    // First send back my ep address
-    ucs_status_t status;
+    // First send back rma dev address and my ep address
     uct_ep_h ep;
-    uct_ep_addr_t* ep_addr = alloca(g_respond_context.iface_attr.ep_addr_len);
+    ep_addr_len = g_respond_context.iface_attr.ep_addr_len;
+    uct_ep_addr_t* ep_addr = alloca(ep_addr_len);
     ep_create_get_address(&g_respond_context, &ep, ep_addr);
-    tangram_ucx_send_ep_addr(AM_ID_RMA_EP_ADDR, &arg->src, ep_addr, g_respond_context.iface_attr.ep_addr_len);
+    size_t dev_and_ep_len = sizeof(size_t)*2 + ep_addr_len + g_respond_context.self_addr.dev_len;
+    void* dev_and_ep = alloca(dev_and_ep_len);
+    memcpy(dev_and_ep, &ep_addr_len, sizeof(size_t));
+    memcpy(dev_and_ep+sizeof(size_t), ep_addr, g_respond_context.iface_attr.ep_addr_len);
+    memcpy(dev_and_ep+sizeof(size_t)+ep_addr_len, &g_respond_context.self_addr.dev_len, sizeof(size_t));
+    memcpy(dev_and_ep+sizeof(size_t)*2+ep_addr_len, g_respond_context.self_addr.dev, g_respond_context.self_addr.dev_len);
+    tangram_ucx_send_ep_addr(AM_ID_RMA_EP_ADDR, &arg->src, dev_and_ep, dev_and_ep_len);
 
-    status = uct_ep_connect_to_ep(ep, arg->src.dev, peer_ep_addr);
+    // Then connect to the request ep
+    ucs_status_t status;
+    status = uct_ep_connect_to_ep(ep, peer_dev_addr, peer_ep_addr);
     assert(status == UCS_OK);
 
     // Get rkey
@@ -292,13 +313,21 @@ void tangram_ucx_rma_request(tangram_uct_addr_t* dest, void* user_arg, size_t us
     // Send RMA request to the destination client and wait
     // it to send back the ep address.
     g_request_context.respond_flag = false;
-    uct_ep_addr_t* peer_ep_addr = NULL;
-    tangram_ucx_sendrecv_client(AM_ID_RMA_REQUEST, dest, sendbuf, sendbuf_size, (void**)&peer_ep_addr);
+    void* peer_ep_dev = NULL;
+    tangram_ucx_sendrecv_client(AM_ID_RMA_REQUEST, dest, sendbuf, sendbuf_size, &peer_ep_dev);
+    assert(peer_ep_dev != NULL);
 
-    assert(peer_ep_addr != NULL);
-    status = uct_ep_connect_to_ep(ep, dest->dev, peer_ep_addr);
+    size_t peer_ep_len, peer_dev_len;
+    memcpy(&peer_ep_len, peer_ep_dev, sizeof(size_t));
+    uct_ep_addr_t *peer_ep_addr = alloca(peer_ep_len);
+    memcpy(peer_ep_addr, peer_ep_dev+sizeof(size_t), peer_ep_len);
+    memcpy(&peer_dev_len, peer_ep_dev+sizeof(size_t)+peer_ep_len, sizeof(size_t));
+    uct_device_addr_t* peer_dev_addr = alloca(peer_dev_len);
+    memcpy(peer_dev_addr, peer_ep_dev+sizeof(size_t)*2+peer_ep_len, peer_dev_len);
+
+    status = uct_ep_connect_to_ep(ep, peer_dev_addr, peer_ep_addr);
     assert(status == UCS_OK);
-    free(peer_ep_addr);
+    free(peer_ep_dev);
 
     // Once we made the connection with the dest clien,
     // we wait for it to finish the RMA put
@@ -315,18 +344,18 @@ void tangram_ucx_rma_request(tangram_uct_addr_t* dest, void* user_arg, size_t us
 }
 
 void tangram_ucx_rma_service_start(tfs_info_t* tfs_info, void* (serve_rma_data)(void*, size_t*)) {
-    g_tfs_info = tfs_info;
+    gg_tfs_info = tfs_info;
 
     g_serve_rma_data = serve_rma_data;
 
     ucs_status_t status;
     ucs_async_context_create(UCS_ASYNC_MODE_THREAD_SPINLOCK, &g_rma_async);
 
-    tangram_uct_context_init(g_rma_async, g_tfs_info->rma_dev_name, g_tfs_info->rma_tl_name, false, &g_request_context);
-    tangram_uct_context_init(g_rma_async, g_tfs_info->rma_dev_name, g_tfs_info->rma_tl_name, false, &g_respond_context);
+    tangram_uct_context_init(g_rma_async, gg_tfs_info->rma_dev_name, gg_tfs_info->rma_tl_name, false, &g_request_context);
+    tangram_uct_context_init(g_rma_async, gg_tfs_info->rma_dev_name, gg_tfs_info->rma_tl_name, false, &g_respond_context);
 
-    g_respond_addrs = malloc(g_tfs_info->mpi_size * sizeof(tangram_uct_addr_t));
-    g_request_addrs = malloc(g_tfs_info->mpi_size * sizeof(tangram_uct_addr_t));
+    g_respond_addrs = malloc(gg_tfs_info->mpi_size * sizeof(tangram_uct_addr_t));
+    g_request_addrs = malloc(gg_tfs_info->mpi_size * sizeof(tangram_uct_addr_t));
     exchange_dev_iface_addr(&g_respond_context, g_respond_addrs);
     exchange_dev_iface_addr(&g_request_context, g_request_addrs);
 
@@ -335,9 +364,9 @@ void tangram_ucx_rma_service_start(tfs_info_t* tfs_info, void* (serve_rma_data)(
 }
 
 void tangram_ucx_rma_service_stop() {
-    MPI_Barrier(g_tfs_info->mpi_comm);
+    MPI_Barrier(gg_tfs_info->mpi_comm);
 
-    for(int i = 0; i < g_tfs_info->mpi_size; i++) {
+    for(int i = 0; i < gg_tfs_info->mpi_size; i++) {
         free(g_respond_addrs[i].dev);
         free(g_request_addrs[i].iface);
     }
