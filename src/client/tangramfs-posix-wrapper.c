@@ -365,13 +365,6 @@ int fill_local_stat(tfs_file_t* tf, struct stat* buf, int vers) {
     return TANGRAM_REAL_CALL(__fxstat)(vers, tf->local_fd, buf);
 }
 
-void request_latest_stat(const char*path, struct stat* buf) {
-    struct stat* tmp = NULL;
-    tangram_issue_metadata_rpc(AM_ID_STAT_REQUEST, path, (void**)&tmp);
-    memcpy(buf, tmp, sizeof(struct stat));
-    free(tmp);
-}
-
 int TANGRAM_WRAP(__xstat)(int vers, const char *path, struct stat *buf)
 {
     // TODO: stat() call not implemented yet.
@@ -379,7 +372,7 @@ int TANGRAM_WRAP(__xstat)(int vers, const char *path, struct stat *buf)
     if(tf) {
         tangram_debug("[tangramfs] stat %s\n", tf->filename);
         fill_local_stat(tf, buf, vers);
-        request_latest_stat(path, buf);
+        tfs_stat(tf, buf);
         return 0;
     }
 
@@ -393,7 +386,7 @@ int TANGRAM_WRAP(__fxstat)(int vers, int fd, struct stat *buf)
     if(tf) {
         tangram_debug("[tangramfs] fstat %s\n", tf->filename);
         fill_local_stat(tf, buf, vers);
-        request_latest_stat(tf->filename, buf);
+        tfs_stat(tf, buf);
         return 0;
     }
 
@@ -408,7 +401,7 @@ int TANGRAM_WRAP(__lxstat)(int vers, const char *path, struct stat *buf)
     if(tf) {
         tangram_debug("[tangramfs] lstat %s\n", tf->filename);
         fill_local_stat(tf, buf, vers);
-        request_latest_stat(path, buf);
+        tfs_stat(tf, buf);
         return 0;
     }
 

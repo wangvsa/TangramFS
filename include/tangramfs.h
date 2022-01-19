@@ -1,6 +1,7 @@
 #ifndef __TANGRAM_FS_H__
 #define __TANGRAM_FS_H__
 #include <stdbool.h>
+#include <sys/stat.h>
 #include "seg_tree.h"
 #include "uthash.h"
 #include "tangramfs-rpc.h"
@@ -50,7 +51,9 @@ size_t tfs_read(tfs_file_t* tf, void* buf, size_t size);
 size_t tfs_read_lazy(tfs_file_t* tf, void* buf, size_t size);
 size_t tfs_seek(tfs_file_t* tf, size_t offset, int whence);
 size_t tfs_tell(tfs_file_t* tf);
-size_t tfs_flush(tfs_file_t* tf);
+void   tfs_stat(tfs_file_t* tf, struct stat* buf);
+void   tfs_flush(tfs_file_t* tf);
+
 
 void tfs_post(tfs_file_t* tf, size_t offset, size_t count);
 void tfs_post_all(tfs_file_t* tf);

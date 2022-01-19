@@ -89,8 +89,15 @@ tfs_file_t* tfs_open(const char* pathname) {
     return tf;
 }
 
+void tfs_stat(tfs_file_t* tf, struct stat* buf) {
+    struct stat* tmp = NULL;
+    tangram_issue_metadata_rpc(AM_ID_STAT_REQUEST, tf->filename, (void**)&tmp);
+    memcpy(buf, tmp, sizeof(struct stat));
+    free(tmp);
+}
+
 // Flush local file to PFS
-size_t tfs_flush(tfs_file_t *tf) {
+void tfs_flush(tfs_file_t *tf) {
     seg_tree_rdlock(&tf->it2);
 
     size_t chunk_size = 4096;
