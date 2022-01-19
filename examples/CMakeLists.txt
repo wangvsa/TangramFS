@@ -4,7 +4,7 @@
 include_directories(${CMAKE_SOURCE_DIR}/include)
 
 #------------------------------------------------------------------------------
-# UCX and MPI
+# MPI
 #------------------------------------------------------------------------------
 find_package(MPI REQUIRED)
 if(MPI_FOUND)
@@ -22,7 +22,7 @@ include_directories(${UCX_DIR}/include)
 
 
 #------------------------------------------------------------------------------
-# Examples
+# Example and Workflow
 #------------------------------------------------------------------------------
 add_executable(example example.c)
 target_link_libraries(example
@@ -31,10 +31,18 @@ target_link_libraries(example
                      )
 add_dependencies(example tangramfs)
 
+add_executable(workflow workflow.c)
+target_link_libraries(workflow
+                      PUBLIC ${MPI_C_LIBRARIES}
+                      tangramfs
+                     )
+add_dependencies(workflow tangramfs)
+
+
 #-----------------------------------------------------------------------------
 # Add Target(s) to CMake Install
 #-----------------------------------------------------------------------------
-set(targets example)
+set(targets example workflow)
 foreach(target ${targets})
     install(
         TARGETS
