@@ -55,7 +55,7 @@ void tangram_ms_handle_post(tangram_uct_addr_t* client, char* filename, size_t o
     }
 
     // TODO should ask clients to post local offset as well
-    int res = seg_tree_add(&entry->tree, offset, offset+count-1, 0, client);
+    int res = seg_tree_add(&entry->tree, offset, offset+count-1, 0, client, true);
     assert(res == 0);
 }
 

@@ -130,7 +130,7 @@ size_t tfs_write(tfs_file_t* tf, const void* buf, size_t size) {
     size_t local_offset = TANGRAM_REAL_CALL(lseek)(tf->local_fd, 0, SEEK_END);
     size_t res = TANGRAM_REAL_CALL(pwrite)(tf->local_fd, buf, size, local_offset);
     //TANGRAM_REAL_CALL(fsync)(tf->local_fd);
-    seg_tree_add(&tf->it2, tf->offset, tf->offset+size-1, local_offset, tangram_rpc_get_client_addr());
+    seg_tree_add(&tf->it2, tf->offset, tf->offset+size-1, local_offset, tangram_rpc_get_client_addr(), false);
     tf->offset += size;
     return res;
 }
@@ -141,24 +141,36 @@ size_t tfs_read(tfs_file_t* tf, void* buf, size_t size) {
     int res = tfs_query(tf, tf->offset, size, &owner);
     //printf("[tangramfs %d] read %s (%d, [%lu,%lu])\n", tfs.mpi_rank, tf->filename, out.rank, tf->offset, size);
 
-    // 1. turns out myself has the latest data, then just read it locally.
-    // 2. in case server does not know who has the data, we'll also try it locally.
+
+    // Another client holds the latest data,
+    // issue a RMA request to get the data
+    if(res == 0 && tangram_uct_addr_compare(owner, self) != 0) {
+        size_t offset = tf->offset;
+        double t1 = MPI_Wtime();
+        tangram_issue_rma(AM_ID_RMA_REQUEST, tf->filename, owner, &offset, &size, 1, buf);
+        tf->offset += size;
+        double t2 = MPI_Wtime();
+        //printf("[tangramfs %d] rpc for read: %.6fseconds, %.3fMB/s\n", tfs.mpi_rank, (t2-t1), size/1024.0/1024.0/(t2-t1));
+
+        if(owner)
+            tangram_uct_addr_free(owner);
+
+        return size;
+    }
+
+    // Otherwise, two cases:
+    // 1. res != 0, server doesn't know, which means:
+    //      (a) client (possibly myself) has not posted, or
+    //      (b) the file already exists on PFS
+    // 2. res = 0, but myself has the latest data
+    // In both case, we read it locally
     if(res != 0 || tangram_uct_addr_compare(owner, self) == 0) {
         if(owner)
             tangram_uct_addr_free(owner);
         return tfs_read_lazy(tf, buf, size);
     }
 
-    // read from peers through RMA
-    size_t offset = tf->offset;
-    double t1 = MPI_Wtime();
-    tangram_issue_rma(AM_ID_RMA_REQUEST, tf->filename, owner, &offset, &size, 1, buf);
-    tf->offset += size;
-    double t2 = MPI_Wtime();
 
-    if(owner)
-        tangram_uct_addr_free(owner);
-    //printf("[tangramfs %d] rpc for read: %.6fseconds, %.3fMB/s\n", tfs.mpi_rank, (t2-t1), size/1024.0/1024.0/(t2-t1));
     return size;
 }
 
@@ -282,37 +294,58 @@ size_t tfs_tell(tfs_file_t* tf) {
 
 void tfs_post(tfs_file_t* tf, size_t offset, size_t count) {
     if(count <= 0 || offset < 0) return;
+
+    // Check if this is a valid range,
+    // we only allow commiting an exact previous write range
+    struct seg_tree_node* node = seg_tree_find_exact(&tf->it2, offset, offset+count-1);
+    assert(node);
+
     int* ack;
     tangram_issue_rpc(AM_ID_POST_REQUEST, tf->filename, &offset, &count, 1, (void**)&ack);
-    // TODO: need to check the range to make sure it is valid.
-    // Also need to set those ranges as posted, so when we do
-    // post_all() later we only send the unposted ones.
     free(ack);
+
+    seg_tree_wrlock(&tf->it2);
+    seg_tree_set_posted_nolock(&tf->it2, node);
+    seg_tree_coalesce_nolock(&tf->it2, node);
+    seg_tree_unlock(&tf->it2);
 }
 
 void tfs_post_all(tfs_file_t* tf) {
-    // TODO only send unposted ones
-    int num = seg_tree_count(&tf->it2);
-    if(num == 0) return;
 
-    size_t offsets[num];
-    size_t counts[num];
-
-    seg_tree_rdlock(&tf->it2);
-
+    int num = 0;
     int i = 0;
+    size_t *offsets = NULL;
+    size_t *counts  = NULL;
+
+    seg_tree_wrlock(&tf->it2);
+
     struct seg_tree_node *node = NULL;
     while ((node = seg_tree_iter(&tf->it2, node))) {
-        offsets[i] = node->start;
-        counts[i]  = node->end - node->start + 1;
-        i++;
+        if(!node->posted) num++;
     }
 
-    seg_tree_unlock(&tf->it2);
+    offsets = tangram_malloc(sizeof(size_t) * num);
+    counts  = tangram_malloc(sizeof(size_t) * num);
+
+    node = NULL;
+    while ((node = seg_tree_iter(&tf->it2, node))) {
+        if(!seg_tree_posted_nolock(&tf->it2, node)) {
+            offsets[i]  = node->start;
+            counts[i++] = node->end - node->start + 1;
+
+            seg_tree_set_posted_nolock(&tf->it2, node);
+            seg_tree_coalesce_nolock(&tf->it2, node);
+        }
+    }
 
     int* ack;
     tangram_issue_rpc(AM_ID_POST_REQUEST, tf->filename, offsets, counts, num, (void**)&ack);
     free(ack);
+
+    tangram_free(offsets, sizeof(size_t)*num);
+    tangram_free(counts, sizeof(size_t)*num);
+
+    seg_tree_unlock(&tf->it2);
 }
 
 int tfs_query(tfs_file_t* tf, size_t offset, size_t size, tangram_uct_addr_t** owner) {

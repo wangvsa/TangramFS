@@ -22,6 +22,7 @@
 struct seg_tree_node {
     RB_ENTRY(seg_tree_node) entry;
     tangram_uct_addr_t* owner;      /* owner of this segment, use by metadata server */
+    bool posted;                    /* wheather the segment has been posted, only meaningful on clients */
     unsigned long start;            /* starting logical offset of range */
     unsigned long end;              /* ending logical offset of range */
     unsigned long ptr;              /* physical offset of data in log */
@@ -51,8 +52,8 @@ void seg_tree_destroy(struct seg_tree* seg_tree);
 /*
  * Add an entry to the range tree.  Returns 0 on success, nonzero otherwise.
  */
-int seg_tree_add(struct seg_tree* seg_tree, unsigned long start,
-                 unsigned long end, unsigned long ptr, tangram_uct_addr_t* owner);
+int seg_tree_add(struct seg_tree* seg_tree, unsigned long start, unsigned long end,
+                 unsigned long ptr, tangram_uct_addr_t* owner, bool posted);
 
 /*
  * Remove or truncate one or more entries from the range tree
@@ -70,6 +71,15 @@ int seg_tree_remove(
  * Find the first seg_tree_node that falls in a [start, end] range.
  */
 struct seg_tree_node* seg_tree_find(
+    struct seg_tree* seg_tree,
+    unsigned long start,
+    unsigned long end
+);
+
+/*
+ * Find the exact range match of [start, end]
+ */
+struct seg_tree_node* seg_tree_find_exact(
     struct seg_tree* seg_tree,
     unsigned long start,
     unsigned long end
@@ -148,5 +158,11 @@ void seg_tree_wrlock(struct seg_tree* seg_tree);
  * own locking.
  */
 void seg_tree_unlock(struct seg_tree* seg_tree);
+
+bool seg_tree_posted_nolock(struct seg_tree* seg_tree, struct seg_tree_node* node);
+
+void seg_tree_set_posted_nolock(struct seg_tree* seg_tree, struct seg_tree_node* node);
+
+void seg_tree_coalesce_nolock(struct seg_tree* seg_tree, struct seg_tree_node* node);
 
 #endif

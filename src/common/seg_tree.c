@@ -71,7 +71,8 @@ void seg_tree_destroy(struct seg_tree* seg_tree)
 
 /* Allocate a node for the range tree.  Free node with free() when finished */
 static struct seg_tree_node*
-seg_tree_node_alloc(unsigned long start, unsigned long end, unsigned long ptr, tangram_uct_addr_t* owner)
+seg_tree_node_alloc(unsigned long start, unsigned long end, unsigned long ptr,
+                    tangram_uct_addr_t* owner, bool posted)
 {
     /* allocate a new node structure */
     struct seg_tree_node* node;
@@ -81,10 +82,11 @@ seg_tree_node_alloc(unsigned long start, unsigned long end, unsigned long ptr, t
     }
 
     /* record logical range and physical offset */
-    node->start = start;
-    node->end = end;
-    node->ptr = ptr;
-    node->owner = owner;
+    node->start  = start;
+    node->end    = end;
+    node->ptr    = ptr;
+    node->owner  = owner;
+    node->posted = posted;
 
     return node;
 }
@@ -145,8 +147,9 @@ static int get_non_overlapping_range(
 /*
  * Add an entry to the range tree.  Returns 0 on success, nonzero otherwise.
  */
-int seg_tree_add(struct seg_tree* seg_tree, unsigned long start,
-                 unsigned long end, unsigned long ptr, tangram_uct_addr_t* owner)
+int seg_tree_add(struct seg_tree* seg_tree,
+                 unsigned long start, unsigned long end, unsigned long ptr,
+                 tangram_uct_addr_t* owner, bool posted)
 {
     /* Assume we'll succeed */
     int rc = 0;
@@ -155,15 +158,12 @@ int seg_tree_add(struct seg_tree* seg_tree, unsigned long start,
     struct seg_tree_node* resized;
     struct seg_tree_node* overlap;
     struct seg_tree_node* target;
-    struct seg_tree_node* prev;
-    struct seg_tree_node* next;
     long new_start;
     long new_end;
-    unsigned long ptr_end;
     int ret;
 
     /* Create our range */
-    node = seg_tree_node_alloc(start, end, ptr, owner);
+    node = seg_tree_node_alloc(start, end, ptr, owner, posted);
     if (!node) {
         return ENOMEM;
     }
@@ -205,7 +205,7 @@ int seg_tree_add(struct seg_tree* seg_tree, unsigned long start,
              * on the next pass of this while() loop.
              */
             resized = seg_tree_node_alloc(new_start, new_end,
-                overlap->ptr+(new_start-overlap->start), overlap->owner);
+                overlap->ptr+(new_start-overlap->start), overlap->owner, overlap->posted);
             if (!resized) {
                 free(node);
                 rc = ENOMEM;
@@ -226,7 +226,7 @@ int seg_tree_add(struct seg_tree* seg_tree, unsigned long start,
                  */
                 remaining = seg_tree_node_alloc(
                     resized->end + 1, overlap->end,
-                    overlap->ptr+(resized->end+1-overlap->start), overlap->owner);
+                    overlap->ptr+(resized->end+1-overlap->start), overlap->owner, overlap->posted);
                 if (!remaining) {
                     free(node);
                     free(resized);
@@ -267,10 +267,41 @@ int seg_tree_add(struct seg_tree* seg_tree, unsigned long start,
 
     /* Get temporary pointer to the node we just added. */
     target = node;
+    seg_tree_coalesce_nolock(seg_tree, target);
+
+release_add:
+
+    seg_tree_unlock(seg_tree);
+
+    return rc;
+}
+
+void seg_tree_set_posted_nolock(struct seg_tree* seg_tree, struct seg_tree_node* node) {
+    node->posted = true;
+}
+
+bool seg_tree_posted_nolock(struct seg_tree* seg_tree, struct seg_tree_node* node) {
+    return node->posted;
+}
+
+
+/**
+ * Coalesce two ranges if the followings are met:
+ * 1. they are adjacent
+ * 2. their local file offset are contiguous
+ * 3. both are posted     (only for client)
+ * 4. have the same owner (only for server)
+ */
+void seg_tree_coalesce_nolock(struct seg_tree* seg_tree, struct seg_tree_node* target) {
+
+    struct seg_tree_node* prev;
+    struct seg_tree_node* next;
+    unsigned long ptr_end;
 
     /* Check whether we can coalesce new extent with any preceding extent. */
     prev = RB_PREV(inttree, &seg_tree->head, target);
     if ((prev != NULL) && ((prev->end + 1) == target->start) &&
+        (prev->posted == target->posted) && (target->posted) &&
         (tangram_uct_addr_compare(prev->owner, target->owner) == 0)) {
         /*
          * We found a extent that ends just before the new extent starts.
@@ -301,6 +332,7 @@ int seg_tree_add(struct seg_tree* seg_tree, unsigned long start,
     /* Check whether we can coalesce new extent with any trailing extent. */
     next = RB_NEXT(inttree, &seg_tree->head, target);
     if ((next != NULL) && ((target->end + 1) == next->start) &&
+            (next->posted == target->posted) && (target->posted) &&
             (tangram_uct_addr_compare(next->owner, target->owner) == 0)) {
         /*
          * We found a extent that starts just after the new extent ends.
@@ -321,12 +353,6 @@ int seg_tree_add(struct seg_tree* seg_tree, unsigned long start,
             seg_tree->count--;
         }
     }
-
-release_add:
-
-    seg_tree_unlock(seg_tree);
-
-    return rc;
 }
 
 /*
@@ -371,13 +397,14 @@ int seg_tree_remove(
                 unsigned long a_start = end + 1;
                 unsigned long a_ptr = node->ptr + (a_start - node->start);
                 tangram_uct_addr_t* a_owner = node->owner;
+                bool a_posted = node->posted;
 
                 /* truncate existing (before) node */
                 node->end = start - 1;
 
                 /* add new (after) node */
                 seg_tree_unlock(seg_tree);
-                int rc = seg_tree_add(seg_tree, a_start, a_end, a_ptr, a_owner);
+                int rc = seg_tree_add(seg_tree, a_start, a_end, a_ptr, a_owner, a_posted);
                 if (rc) {
                     return rc;
                 }
@@ -405,7 +432,7 @@ struct seg_tree_node* seg_tree_find_nolock(
     unsigned long end)
 {
     /* Create a range of just our starting byte offset */
-    struct seg_tree_node* node = seg_tree_node_alloc(start, start, 0, TANGRAM_UCT_ADDR_IGNORE);
+    struct seg_tree_node* node = seg_tree_node_alloc(start, start, 0, TANGRAM_UCT_ADDR_IGNORE, false);
     if (!node) {
         return NULL;
     }
@@ -448,6 +475,25 @@ struct seg_tree_node* seg_tree_find(
 
     return node;
 }
+
+/*
+ * Find a exact range match
+ * return NULL if not exists
+ *
+ */
+struct seg_tree_node* seg_tree_find_exact(
+    struct seg_tree* seg_tree,
+    unsigned long start,
+    unsigned long end)
+{
+    struct seg_tree_node* node = seg_tree_find(seg_tree, start, end);
+    if(node) {
+        if(node->start != start || node->end != end)
+            node = NULL;
+    }
+    return node;
+}
+
 
 /*
  * Given a range tree and a starting node, iterate though all the nodes
