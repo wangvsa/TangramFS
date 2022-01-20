@@ -96,32 +96,39 @@ void tfs_stat(tfs_file_t* tf, struct stat* buf) {
     free(tmp);
 }
 
-// Flush local file to PFS
+/*
+ * Flush from local buffer file to PFS
+ *
+ */
 void tfs_flush(tfs_file_t *tf) {
-    seg_tree_rdlock(&tf->it2);
-
     size_t chunk_size = 4096;
-
     char* buf = tangram_malloc(chunk_size);
+
+    seg_tree_rdlock(&tf->it2);
     struct seg_tree_node *node = NULL;
+
     while ((node = seg_tree_iter(&tf->it2, node))) {
 
         ssize_t n;  // cannot use size_t, as n can be -1
-        ssize_t res = node->end - node->start + 1;
+        ssize_t all = node->end - node->start + 1;
 
-        while(res > 0) {
-            n = TANGRAM_REAL_CALL(pread)(tf->local_fd, buf, chunk_size, node->start);
+        ssize_t local_offset;
+        ssize_t done = 0;
+
+        while(done < all) {
+
+            n = TANGRAM_REAL_CALL(pread)(tf->local_fd, buf, chunk_size, node->ptr+done);
             // something wrong, the file was deleted?
             if(n <= 0) break;
 
-            //printf("flush %s %ld [%ld-%ld]\n", tf->filename, n, node->start, node->end);
+            done += n;
 
-            TANGRAM_REAL_CALL(pwrite)(tf->fd, buf, n, node->start);
-            res -= n;
+            TANGRAM_REAL_CALL(pwrite)(tf->fd, buf, n, node->start+done);
         }
     }
 
     seg_tree_unlock(&tf->it2);
+
     tangram_free(buf, chunk_size);
 }
 
@@ -219,17 +226,19 @@ size_t read_local(tfs_file_t* tf, void* buf, size_t req_start, size_t req_end) {
         have_local = 0;
     }
 
-    /* TODO: check for correctness
+    /*
      * If we can't fully satisfy the request,
-     * directly read from PFS
+     * flush first my local writes, then directly read from PFS
      */
     if(!have_local) {
         seg_tree_unlock(extents);
         tangram_debug("[tangramfs] read from PFS %s, [%ld, %ld]\n", tf->filename, req_start, req_end-req_start+1);
-        // TODO need optimize when to flush.
+
+        // TODO opt possible: can we avoid the flush?
         tfs_flush(tf);
         return TANGRAM_REAL_CALL(pread)(tf->fd, buf, req_end-req_start+1, req_start);
     }
+
 
     /* otherwise we can copy the data locally, iterate
      * over the extents and copy data into request buffer.
@@ -269,6 +278,11 @@ size_t tfs_read_lazy(tfs_file_t* tf, void* buf, size_t size) {
     return res;
 }
 
+
+/**
+ * Like POSIX lseek()
+ * this function shall not, by itself, extend the size of a file.
+ */
 size_t tfs_seek(tfs_file_t *tf, size_t offset, int whence) {
     if(whence == SEEK_SET)
         tf->offset = offset;
@@ -278,6 +292,7 @@ size_t tfs_seek(tfs_file_t *tf, size_t offset, int whence) {
     // TODO
     // now we assume the local file end offset
     // is the global end offset
+    // we need to ask server for the EOF
     if(whence == SEEK_END) {
         if( seg_tree_count(&tf->it2) > 0)
             tf->offset = seg_tree_max(&tf->it2) + 1;
@@ -296,7 +311,7 @@ void tfs_post(tfs_file_t* tf, size_t offset, size_t count) {
     if(count <= 0 || offset < 0) return;
 
     // Check if this is a valid range,
-    // we only allow commiting an exact previous write range
+    // we only allow commiting an exact previous write(offset, count)
     struct seg_tree_node* node = seg_tree_find_exact(&tf->it2, offset, offset+count-1);
     assert(node);
 
