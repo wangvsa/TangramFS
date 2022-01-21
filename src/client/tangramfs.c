@@ -12,12 +12,18 @@
 #include "tangramfs-utils.h"
 #include "tangramfs-posix-wrapper.h"
 
-tfs_info_t  tfs;
+tfs_info_t tfs;
 tfs_file_t* tfs_files;
 
 void* serve_rma_data(void* in_arg, size_t* size);
 
 void tfs_init() {
+
+    if(tfs.initialized) {
+        printf("double init!\n");
+        return;
+    }
+
     tangram_get_info(&tfs);
 
     tangram_map_real_calls();
@@ -32,12 +38,15 @@ void tfs_finalize() {
     if(!tfs.initialized)
         return;
 
+    tfs.initialized = false;
+
     // Need to have a barrier here because we can not allow
     // server stoped before all other clients
     MPI_Barrier(tfs.mpi_comm);
 
     tangram_rma_service_stop();
     tangram_rpc_service_stop();
+
 
     // Clear all resources
     tfs_file_t *tf, *tmp;
@@ -326,14 +335,12 @@ void tfs_post(tfs_file_t* tf, size_t offset, size_t count) {
 }
 
 void tfs_post_all(tfs_file_t* tf) {
-
     int num = 0;
     int i = 0;
     size_t *offsets = NULL;
     size_t *counts  = NULL;
 
     seg_tree_wrlock(&tf->it2);
-
     struct seg_tree_node *node = NULL;
     while ((node = seg_tree_iter(&tf->it2, node))) {
         if(!node->posted) num++;
@@ -347,11 +354,12 @@ void tfs_post_all(tfs_file_t* tf) {
         if(!seg_tree_posted_nolock(&tf->it2, node)) {
             offsets[i]  = node->start;
             counts[i++] = node->end - node->start + 1;
-
             seg_tree_set_posted_nolock(&tf->it2, node);
-            seg_tree_coalesce_nolock(&tf->it2, node);
         }
     }
+
+    // Coalesce all ranges in the tree
+    seg_tree_coalesce_all_nolock(&tf->it2);
 
     int* ack;
     tangram_issue_rpc(AM_ID_POST_REQUEST, tf->filename, offsets, counts, num, (void**)&ack);

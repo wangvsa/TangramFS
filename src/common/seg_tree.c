@@ -285,21 +285,16 @@ bool seg_tree_posted_nolock(struct seg_tree* seg_tree, struct seg_tree_node* nod
 }
 
 
-/**
- * Coalesce two ranges if the followings are met:
- * 1. they are adjacent
- * 2. their local file offset are contiguous
- * 3. both are posted     (only for client)
- * 4. have the same owner (only for server)
- */
-void seg_tree_coalesce_nolock(struct seg_tree* seg_tree, struct seg_tree_node* target) {
 
-    struct seg_tree_node* prev;
-    struct seg_tree_node* next;
+/*
+ * Check whether we can coalesce new extent with any preceding extent.
+ * return 1 if coalesced
+ */
+int seg_tree_coalesce_prev_nolock(struct seg_tree* seg_tree,
+                                  struct seg_tree_node* target, struct seg_tree_node* prev) {
+
     unsigned long ptr_end;
 
-    /* Check whether we can coalesce new extent with any preceding extent. */
-    prev = RB_PREV(inttree, &seg_tree->head, target);
     if ((prev != NULL) && ((prev->end + 1) == target->start) &&
         (prev->posted == target->posted) && (target->posted) &&
         (tangram_uct_addr_compare(prev->owner, target->owner) == 0)) {
@@ -321,16 +316,24 @@ void seg_tree_coalesce_nolock(struct seg_tree* seg_tree, struct seg_tree_node* t
             free(target);
             seg_tree->count--;
 
-            /*
-             * Update target to point at previous extent since we just
-             * merged our new extent into it.
-             */
-            target = prev;
+
+            return 1;
         }
+
     }
 
-    /* Check whether we can coalesce new extent with any trailing extent. */
-    next = RB_NEXT(inttree, &seg_tree->head, target);
+    return 0;
+}
+
+/*
+ * Check whether we can coalesce new extent with any trailing extent.
+ * return 1 if coalesced
+ */
+int seg_tree_coalesce_next_nolock(struct seg_tree* seg_tree,
+                                   struct seg_tree_node* target, struct seg_tree_node* next) {
+
+    unsigned long ptr_end;
+
     if ((next != NULL) && ((target->end + 1) == next->start) &&
             (next->posted == target->posted) && (target->posted) &&
             (tangram_uct_addr_compare(next->owner, target->owner) == 0)) {
@@ -351,7 +354,75 @@ void seg_tree_coalesce_nolock(struct seg_tree* seg_tree, struct seg_tree_node* t
             RB_REMOVE(inttree, &seg_tree->head, next);
             free(next);
             seg_tree->count--;
+
+            return 1;
         }
+    }
+
+    return 0;
+}
+
+
+/**
+ * Coalesce two ranges if the followings are met:
+ * 1. they are adjacent
+ * 2. their local file offset are contiguous
+ * 3. both are posted     (only for client)
+ * 4. have the same owner (only for server)
+ *
+ * Note: do not use this call inside a seg_tree_iter() loop,
+ * because this function calls RB_PREV.
+ */
+void seg_tree_coalesce_nolock(struct seg_tree* seg_tree, struct seg_tree_node* target) {
+
+    struct seg_tree_node* prev;
+    struct seg_tree_node* next;
+    int coalesced = 0;
+
+    /* Check whether we can coalesce new extent with any preceding extent. */
+    prev = RB_PREV(inttree, &seg_tree->head, target);
+    coalesced = seg_tree_coalesce_prev_nolock(seg_tree, target, prev);
+
+    /*
+     * Update target to point at previous extent since we just
+     * merged our new extent into it.
+     */
+    if(coalesced)
+        target = prev;
+
+    /* Check whether we can coalesce new extent with any trailing extent. */
+    next = RB_NEXT(inttree, &seg_tree->head, target);
+    seg_tree_coalesce_next_nolock(seg_tree, target, next);
+}
+
+
+/**
+ * Iteratively coalesce all ndoes in the tree
+ */
+void seg_tree_coalesce_all_nolock(struct seg_tree* seg_tree) {
+
+    struct seg_tree_node* next   = NULL;
+    struct seg_tree_node* target = NULL;
+    int coalesced = 0;
+
+    /* seg_tree is empty, nothing to do */
+    if (RB_EMPTY(&seg_tree->head)) {
+        return;
+    }
+
+    /* Coalesce the current and the previous node in each iteration
+     */
+    target = seg_tree_iter(seg_tree, target);
+    while (target) {
+        next = seg_tree_iter(seg_tree, target);
+
+        if (next) {
+            coalesced = seg_tree_coalesce_next_nolock(seg_tree, target, next);
+            if(coalesced)
+                continue;
+        }
+
+        target = next;
     }
 }
 

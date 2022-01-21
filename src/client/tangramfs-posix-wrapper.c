@@ -32,11 +32,6 @@ static tfs_file_entry_t* tf_by_fd     = NULL;
 
 pthread_rwlock_t uthash_lock = PTHREAD_RWLOCK_INITIALIZER;
 
-#define HASH_FIND_RLOCK(hh, head, key, keylen, entry)           \
-    pthread_rwlock_rdlock(&uthash_lock);                        \
-    HASH_FIND(hh, head, key, keylen, entry);                    \
-    pthread_rwlock_unlock(&uthash_lock);
-
 #define HASH_ADD_WLOCK(hh, head, key, keylen, entry)            \
     pthread_rwlock_wrlock(&uthash_lock);                        \
     HASH_ADD(hh, head, key, keylen, entry);                     \
@@ -47,33 +42,38 @@ pthread_rwlock_t uthash_lock = PTHREAD_RWLOCK_INITIALIZER;
     HASH_ADD_KEYPTR(hh, head, key, keylen, entry);              \
     pthread_rwlock_unlock(&uthash_lock);
 
+#define HASH_FIND_RLOCK(hh, head, key, keylen, file)            \
+    pthread_rwlock_rdlock(&uthash_lock);                        \
+    tfs_file_entry_t *entry = NULL;                             \
+    HASH_FIND(hh, head, key, keylen, entry);                    \
+    if(entry) {                                                 \
+        assert(entry);                                          \
+        file = entry->tf;                                       \
+    }                                                           \
+    /* realse the lock only after we retrived found->tf */      \
+    /* because `found` can be potentially freed at finalize()*/ \
+    pthread_rwlock_unlock(&uthash_lock);
+
+
 tfs_file_t* stream2tf(FILE* stream) {
-    tfs_file_entry_t *found = NULL;
-    HASH_FIND_RLOCK(hh_stream, tf_by_stream, &stream, sizeof(FILE*), found);
-    if(found)
-        return found->tf;
-    return NULL;
+    tfs_file_t* tf = NULL;
+    HASH_FIND_RLOCK(hh_stream, tf_by_stream, &stream, sizeof(FILE*), tf);
+    return tf;
 }
 
 tfs_file_t* fd2tf(int fd) {
-    tfs_file_entry_t *found = NULL;
-    HASH_FIND_RLOCK(hh_fd, tf_by_fd, &fd, sizeof(int), found);
-    if(found)
-        return found->tf;
-    return NULL;
+    tfs_file_t* tf = NULL;
+    HASH_FIND_RLOCK(hh_fd, tf_by_fd, &fd, sizeof(int), tf);
+    return tf;
 }
 
 tfs_file_t* path2tf(const char* path) {
     char *key = realpath(path, NULL);
     if(key == NULL || path == NULL) return NULL;
-
-    tfs_file_entry_t *found = NULL;
-    HASH_FIND_RLOCK(hh_path, tf_by_path, key, strlen(key), found);
-
+    tfs_file_t* tf = NULL;
+    HASH_FIND_RLOCK(hh_path, tf_by_path, key, strlen(key), tf);
     free(key);
-    if(found)
-        return found->tf;
-    return NULL;
+    return tf;
 }
 
 
@@ -95,12 +95,6 @@ tfs_file_entry_t* add_to_map(tfs_file_t* tf) {
 
     if(entry->path != NULL) {
         HASH_ADD_KEYPTR_WLOCK(hh_path, tf_by_path, entry->path, strlen(entry->path), entry);
-
-        char* key = entry->path;
-        tfs_file_entry_t *found = NULL;
-        HASH_FIND_RLOCK(hh_path, tf_by_path, key, strlen(key), found);
-        assert(found != NULL);
-
     }
 
     return entry;
@@ -467,10 +461,22 @@ int TANGRAM_WRAP(MPI_Finalize)() {
     // in tf_by_path
     HASH_ITER(hh_path, tf_by_path, entry, tmp) {
         HASH_DELETE(hh_path, tf_by_path, entry);
-        if(entry->path)
+        if(entry->path) {
             free(entry->path);
+        }
         free(entry);
+        entry = NULL;
     }
+    // Must set all hash table to NULL to avoid
+    // query after finalize(), because the entries in
+    // tf_by_fd are all deleted above, but the entries
+    // are not set to NULL.
+    //
+    // e.g., close()->fd2tf() after finalize.
+    tf_by_path    = NULL;
+    tf_by_stream  = NULL;
+    tf_by_fd      = NULL;
+
     pthread_rwlock_unlock(&uthash_lock);
 
     return PMPI_Finalize();

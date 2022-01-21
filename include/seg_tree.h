@@ -160,9 +160,9 @@ void seg_tree_wrlock(struct seg_tree* seg_tree);
 void seg_tree_unlock(struct seg_tree* seg_tree);
 
 bool seg_tree_posted_nolock(struct seg_tree* seg_tree, struct seg_tree_node* node);
-
 void seg_tree_set_posted_nolock(struct seg_tree* seg_tree, struct seg_tree_node* node);
 
-void seg_tree_coalesce_nolock(struct seg_tree* seg_tree, struct seg_tree_node* node);
+void seg_tree_coalesce_nolock(struct seg_tree* seg_tree, struct seg_tree_node* target);
+void seg_tree_coalesce_all_nolock(struct seg_tree* seg_tree);
 
 #endif
