@@ -557,11 +557,15 @@ struct seg_tree_node* seg_tree_find_exact(
     unsigned long start,
     unsigned long end)
 {
-    struct seg_tree_node* node = seg_tree_find(seg_tree, start, end);
-    if(node) {
-        if(node->start != start || node->end != end)
+    seg_tree_rdlock(seg_tree);
+    struct seg_tree_node* node = seg_tree_find_nolock(seg_tree, start, end);
+    if(node != NULL) {
+        if(node->start != start || node->end != end) {
             node = NULL;
+        }
     }
+    seg_tree_unlock(seg_tree);
+
     return node;
 }
 

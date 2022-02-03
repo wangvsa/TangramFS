@@ -24,6 +24,11 @@ void tfs_init() {
         return;
     }
 
+    int flag;
+    MPI_Initialized(&flag);
+    if(!flag)
+        MPI_Init(NULL, NULL);
+
     tangram_get_info(&tfs);
 
     tangram_map_real_calls();
@@ -60,6 +65,10 @@ void tfs_finalize() {
     }
 
     tangram_release_info(&tfs);
+
+    // TODO:
+    // Need to notify the server to delete all records
+    // about me, in case others asking the file I was writing
 }
 
 
@@ -146,7 +155,10 @@ size_t tfs_write(tfs_file_t* tf, const void* buf, size_t size) {
     size_t local_offset = TANGRAM_REAL_CALL(lseek)(tf->local_fd, 0, SEEK_END);
     size_t res = TANGRAM_REAL_CALL(pwrite)(tf->local_fd, buf, size, local_offset);
     //TANGRAM_REAL_CALL(fsync)(tf->local_fd);
-    seg_tree_add(&tf->it2, tf->offset, tf->offset+size-1, local_offset, tangram_rpc_get_client_addr(), false);
+
+    int rc = seg_tree_add(&tf->it2, tf->offset, tf->offset+size-1, local_offset, tangram_rpc_get_client_addr(), false);
+    assert(rc == 0);
+
     tf->offset += size;
     return res;
 }
@@ -243,6 +255,11 @@ size_t read_local(tfs_file_t* tf, void* buf, size_t req_start, size_t req_end) {
         seg_tree_unlock(extents);
         tangram_debug("[tangramfs] read from PFS %s, [%ld, %ld]\n", tf->filename, req_start, req_end-req_start+1);
 
+        // the original file is possibly not opened
+        // when running on TANGRAM_PRELOAD=OFF mode
+        if(tf->fd == -1)
+            tf->fd = TANGRAM_REAL_CALL(open)(tf->filename, O_RDWR);
+
         // TODO opt possible: can we avoid the flush?
         tfs_flush(tf);
         return TANGRAM_REAL_CALL(pread)(tf->fd, buf, req_end-req_start+1, req_start);
@@ -322,7 +339,7 @@ void tfs_post(tfs_file_t* tf, size_t offset, size_t count) {
     // Check if this is a valid range,
     // we only allow commiting an exact previous write(offset, count)
     struct seg_tree_node* node = seg_tree_find_exact(&tf->it2, offset, offset+count-1);
-    assert(node);
+    assert(node != NULL);
 
     int* ack;
     tangram_issue_rpc(AM_ID_POST_REQUEST, tf->filename, &offset, &count, 1, (void**)&ack);
@@ -408,6 +425,59 @@ int tfs_close(tfs_file_t* tf) {
     // TODO this assumes we have enough buffer space.
     return res;
 }
+
+
+// Fetch the entire file
+size_t tfs_fetch(const char* filename, void* buf) {
+    tfs_file_t* tf = tfs_open(filename);
+
+    struct stat stat_buf;
+    tfs_stat(tf, &stat_buf);
+    size_t size = stat_buf.st_size;
+
+    tangram_uct_addr_t *self  = tangram_rpc_get_client_addr();
+    tangram_uct_addr_t *owner = NULL;
+
+    int res = tfs_query(tf, 0, size, &owner);
+
+    // Server knows who has the data
+    if(res == 0 ) {
+        // Other clients have a copy in their buffer
+        if( tangram_uct_addr_compare(owner, self) != 0 ) {
+            size_t offset = 0;
+            double t1 = MPI_Wtime();
+            tangram_issue_rma(AM_ID_RMA_REQUEST, tf->filename, owner, &offset, &size, 1, buf);
+            tf->offset += size;
+            double t2 = MPI_Wtime();
+        }
+        // I have read it before - I have a copy in my buffer
+        else {
+            tfs_read_lazy(tf, buf, size);
+        }
+    }
+
+    // Server doesn't know, meaning no one has read it before
+    // I am the first one reading this file.
+    // Read from PFS then buffer it and notify the server.
+    if(res != 0) {
+
+        tf->offset = 0;
+        tfs_read_lazy(tf, buf, size);
+
+        tf->offset = 0;
+        tfs_write(tf, buf, size);
+
+        tfs_post(tf, 0, size);
+    }
+    printf("read, %s, size:%ld, remote_read:%d\n", filename, size, res==0);
+
+    if(owner)
+        tangram_uct_addr_free(owner);
+
+    tfs_close(tf);
+    return size;
+}
+
 
 bool tangram_should_intercept(const char* filename) {
     // Not initialized yet
