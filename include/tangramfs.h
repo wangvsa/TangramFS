@@ -59,7 +59,8 @@ void tfs_post_all(tfs_file_t* tf);
 int  tfs_query(tfs_file_t* tf, size_t offset, size_t count, tangram_uct_addr_t** owner);
 
 // Python API
-size_t tfs_fetch(const char* filename, void* buf);
+size_t tfs_fetch(const char* filename, void* buf, size_t size);
+size_t tfs_fetch_pfs(const char* filename, void* buf, size_t size);
 
 
 /*

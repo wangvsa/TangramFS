@@ -7,6 +7,7 @@
 #include <fcntl.h>
 #include <assert.h>
 #include <mpi.h>
+#include <errno.h>
 #include "uthash.h"
 #include "tangramfs.h"
 #include "tangramfs-utils.h"
@@ -426,19 +427,36 @@ int tfs_close(tfs_file_t* tf) {
     return res;
 }
 
+size_t tfs_fetch_pfs(const char* filename, void* buf, size_t size) {
+
+    int fd = TANGRAM_REAL_CALL(open)(filename, O_RDONLY|O_DIRECT);
+
+    // With O_DIRECT, the buffer must be ailgned
+    // And read() call must read `alignment` bytes
+    struct stat fstat;
+    stat(filename, &fstat);
+    int blksize = (int)fstat.st_blksize;
+    int alignment = blksize;
+    void* tmp = aligned_alloc(alignment, size);
+
+    ssize_t rc = TANGRAM_REAL_CALL(read)(fd, tmp, alignment);
+    TANGRAM_REAL_CALL(close)(fd);
+    memcpy(buf, tmp, size);
+    free(tmp);
+
+    return size;
+}
+
 
 // Fetch the entire file
-size_t tfs_fetch(const char* filename, void* buf) {
+size_t tfs_fetch(const char* filename, void* buf, size_t size) {
     tfs_file_t* tf = tfs_open(filename);
-
-    struct stat stat_buf;
-    tfs_stat(tf, &stat_buf);
-    size_t size = stat_buf.st_size;
 
     tangram_uct_addr_t *self  = tangram_rpc_get_client_addr();
     tangram_uct_addr_t *owner = NULL;
 
-    int res = tfs_query(tf, 0, size, &owner);
+    //int res = tfs_query(tf, 0, size, &owner);
+    int res = -1;
 
     // Server knows who has the data
     if(res == 0 ) {
@@ -469,7 +487,7 @@ size_t tfs_fetch(const char* filename, void* buf) {
 
         tfs_post(tf, 0, size);
     }
-    printf("read, %s, size:%ld, remote_read:%d\n", filename, size, res==0);
+    //printf("read, %s, size:%ld, remote_read:%d\n", filename, size, res==0);
 
     if(owner)
         tangram_uct_addr_free(owner);
