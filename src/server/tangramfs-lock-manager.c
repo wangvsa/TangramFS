@@ -13,8 +13,8 @@ typedef struct lock_table {
 } lock_table_t;
 
 
-// Hash Map <filename, seg_tree>
-static lock_table_t *g_lt = NULL;
+// Hash Map <filename, token_list>
+static lock_table_t *g_lt;
 
 
 lock_token_t* tangram_lockmgr_acquire_lock(tangram_uct_addr_t* client, char* filename, size_t offset, size_t count, int type) {
@@ -76,17 +76,20 @@ void tangram_lockmgr_release_lock(tangram_uct_addr_t* client, char* filename, si
 void tangram_lockmgr_release_all_lock(tangram_uct_addr_t* client) {
     lock_table_t *entry, *tmp;
     HASH_ITER(hh, g_lt, entry, tmp) {
-        lock_token_t *token, *tmp2;
         lock_token_delete_client(&entry->token_list, client);
     }
 }
 
-
 void tangram_lockmgr_init() {
+    g_lt = NULL;
 }
 
 void tangram_lockmgr_finalize() {
-    // TODO: Remeber to release/free all data structures
+    lock_table_t *entry, *tmp;
+    HASH_ITER(hh, g_lt, entry, tmp) {
+        lock_token_list_destroy(&entry->token_list);
+        HASH_DEL(g_lt, entry);
+        tangram_free(entry, sizeof(lock_table_t*));
+    }
 }
-
 

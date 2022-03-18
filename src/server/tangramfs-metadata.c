@@ -14,8 +14,6 @@ typedef struct seg_tree_table {
 // Hash Map <filename, seg_tree>
 static seg_tree_table_t *g_stt = NULL;
 
-void tangram_ms_init() {
-}
 
 char* print_tree(char* dst, struct seg_tree* seg_tree)
 {
@@ -32,14 +30,6 @@ char* print_tree(char* dst, struct seg_tree* seg_tree)
     seg_tree_unlock(seg_tree);
 }
 
-void tangram_ms_finalize() {
-    seg_tree_table_t * entry, *tmp;
-    HASH_ITER(hh, g_stt, entry, tmp) {
-        HASH_DEL(g_stt, entry);
-        seg_tree_destroy(&entry->tree);
-        tangram_free(entry, sizeof(seg_tree_table_t));
-    }
-}
 
 void tangram_ms_handle_post(tangram_uct_addr_t* client, char* filename, size_t offset, size_t count) {
 
@@ -128,5 +118,18 @@ void tangram_ms_handle_stat(char* filename, struct stat *buf) {
         char* path = realpath(filename, NULL);
         lstat(path, buf);
         free(path);
+    }
+}
+
+void tangram_ms_init() {
+    g_stt = NULL;
+}
+
+void tangram_ms_finalize() {
+    seg_tree_table_t * entry, *tmp;
+    HASH_ITER(hh, g_stt, entry, tmp) {
+        HASH_DEL(g_stt, entry);
+        seg_tree_destroy(&entry->tree);
+        tangram_free(entry, sizeof(seg_tree_table_t));
     }
 }

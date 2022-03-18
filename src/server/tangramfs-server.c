@@ -83,14 +83,19 @@ int main(int argc, char* argv[]) {
 
     if( strcmp(argv[1], "start") == 0 ) {
         tangram_ucx_server_init(&tfs_info);
-        tangram_info("[tangramfs] Server started\n");
+        tangram_ms_init();
         tangram_ucx_server_register_rpc(rpc_handler);
         tangram_ucx_server_start();
+
+        tangram_info("[tangramfs] Server started\n");
 
     } else if( strcmp(argv[1], "stop") == 0 ) {
         tangram_rpc_service_start(&tfs_info, NULL);
         tangram_ucx_stop_server();
         tangram_rpc_service_stop();
+        tangram_ms_finalize();
+        tangram_lockmgr_finalize();
+
         tangram_info("[tangramfs] Server stoped\n");
     }
 
