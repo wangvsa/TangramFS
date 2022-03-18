@@ -39,17 +39,20 @@ lock_token_t* tangram_lockmgr_acquire_lock(tangram_uct_addr_t* client, char* fil
         return token;
     }
 
-
     // Someone has already held the lock
 
     // Case 1. Both are read locks
     if(type == token->type && type == LOCK_TYPE_RD) {
     // Case 2. Different lock type, revoke the current owner's lock
     // Then delete the old token and add a new one
+    //
+    // TODO we don't consider the case wehere we have multiple conflicting owners.
+    // e.g. P1:[0-10], P2:[10-20], Accquire[0-20]
     } else {
         size_t data_len;
         void* data = rpc_in_pack(filename, 1, &offset, &count, NULL, &data_len);
-        tangram_ucx_revoke_lock(token->owner, data, data_len, NULL);
+
+        tangram_ucx_revoke_lock(token->owner, data, data_len);
         free(data);
 
         lock_token_delete(&entry->token_list, token);

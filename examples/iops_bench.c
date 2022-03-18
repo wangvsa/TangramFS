@@ -66,15 +66,13 @@ void read_sequential() {
 void read_random() {
     FILE* fp = fopen(FILENAME, "rb");
     struct stat st;
-    lstat(FILENAME, &st);
 
     char* data = malloc(sizeof(char)*DATA_SIZE);
 
     time_t t;
     srand((unsigned) time(&t));
-    int num_blocks = st.st_size / DATA_SIZE;
+    int num_blocks = N * mpi_size;
     size_t offset;
-
 
     MPI_Barrier(MPI_COMM_WORLD);
     double tstart = MPI_Wtime();
@@ -104,8 +102,8 @@ int main(int argc, char* argv[]) {
 
     for(int i = 0; i < 1; i++) {
         MPI_Barrier(MPI_COMM_WORLD);
-        read_sequential();
-        //read_random();
+        //read_sequential();
+        read_random();
     }
 
     MPI_Barrier(MPI_COMM_WORLD);

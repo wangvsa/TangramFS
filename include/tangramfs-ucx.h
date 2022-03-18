@@ -34,7 +34,7 @@
 void tangram_ucx_server_init(tfs_info_t* tfs_info);
 void tangram_ucx_server_register_rpc(void* (*user_handler)(int8_t, tangram_uct_addr_t*, void*, uint8_t*, size_t*));
 void tangram_ucx_server_start();
-void tangram_ucx_revoke_lock(tangram_uct_addr_t* client, void* data, size_t length, void** respond_ptr);
+void tangram_ucx_revoke_lock(tangram_uct_addr_t* client, void* data, size_t length);
 
 // Client
 void tangram_ucx_sendrecv_server(uint8_t id, void* data, size_t length, void** respond_ptr);

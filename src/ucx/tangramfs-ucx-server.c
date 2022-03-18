@@ -177,16 +177,15 @@ void* rpc_task_worker_func(void* arg) {
 }
 
 
-void tangram_ucx_revoke_lock(tangram_uct_addr_t* client, void* data, size_t length, void** respond_ptr) {
-
+void tangram_ucx_revoke_lock(tangram_uct_addr_t* client, void* data, size_t length) {
     pthread_mutex_lock(&g_server_context.mutex);
-    g_server_context.respond_ptr  = respond_ptr;
     g_server_context.respond_flag = false;
 
     uct_ep_h ep;
     uct_ep_create_connect(g_server_context.iface, client, &ep);
     pthread_mutex_unlock(&g_server_context.mutex);
 
+    // this call will lock the mutext itself
     do_uct_am_short(&g_server_context.mutex, ep, AM_ID_REVOKE_LOCK_REQUEST, &g_server_context.self_addr, data, length);
 
     pthread_mutex_lock(&g_server_context.cond_mutex);
@@ -195,8 +194,9 @@ void tangram_ucx_revoke_lock(tangram_uct_addr_t* client, void* data, size_t leng
     pthread_mutex_unlock(&g_server_context.cond_mutex);
 
     uct_ep_destroy(ep);
-    pthread_mutex_unlock(&g_server_context.mutex);
+    //pthread_mutex_unlock(&g_server_context.mutex);
 }
+
 
 
 void tangram_ucx_server_init(tfs_info_t *tfs_info) {

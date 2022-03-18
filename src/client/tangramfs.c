@@ -603,16 +603,18 @@ void* serve_rma_data_cb(void* in_arg, size_t* size) {
 
 // Asked by lock server to revoke my lock
 void revoke_lock_cb(void* in_arg) {
+
     rpc_in_t* in = rpc_in_unpack(in_arg);
 
     tfs_file_t* tf = NULL;
     HASH_FIND_STR(tfs_files, in->filename, tf);
+    if(tf == NULL) return;
 
-    assert(tf != NULL);
 
     lock_token_t* token;
     token = lock_token_find_cover(&tf->token_list, in->intervals[0].offset, in->intervals[0].count);
     assert(token);
+
 
     lock_token_delete(&tf->token_list, token);
     rpc_in_free(in);

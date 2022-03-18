@@ -52,10 +52,9 @@ void (*g_revoke_lock_cb)(void*);
  * Handles both query and post respond from server
  */
 static ucs_status_t am_server_respond_listener(void *arg, void *buf, size_t buf_len, unsigned flags) {
-    pthread_mutex_lock(&g_send_context.cond_mutex);
-
     unpack_rpc_buffer(buf, buf_len, TANGRAM_UCT_ADDR_IGNORE, g_send_context.respond_ptr);
 
+    pthread_mutex_lock(&g_send_context.cond_mutex);
     g_send_context.respond_flag = true;
     pthread_cond_signal(&g_send_context.cond);
     pthread_mutex_unlock(&g_send_context.cond_mutex);
@@ -65,16 +64,29 @@ static ucs_status_t am_server_respond_listener(void *arg, void *buf, size_t buf_
 void* handle_revoke_lock_request(void* arg) {
     g_revoke_lock_cb(arg);
     free(arg);
-    // send the respond to server
-    tangram_ucx_sendrecv_server(AM_ID_REVOKE_LOCK_RESPOND, NULL, 0, NULL);
+
+    // Note here we use g_recv_context to send out the respond
+    //
+    // We can not use g_send_context, as it is used by the main thread
+    // only, and it allow only one outgoing RPC at a time:
+    //   -- Using it can cause deadlock when acquiring and revoking at the same time
+    pthread_mutex_lock(&g_recv_context.mutex);
+    uct_ep_h ep;
+    uct_ep_create_connect(g_recv_context.iface, &g_recv_context.server_addr, &ep);
+
+    do_uct_am_short_progress(g_recv_context.worker, ep, AM_ID_REVOKE_LOCK_RESPOND, &g_recv_context.self_addr, NULL, 0);
+
+    uct_ep_destroy(ep);
+    pthread_mutex_unlock(&g_recv_context.mutex);
     return NULL;
 }
 
 static ucs_status_t am_revoke_lock_request_listener(void *arg, void *buf, size_t buf_len, unsigned flags) {
-    void* buf_dup = malloc(buf_len);
-    memcpy(buf_dup, buf, buf_len);
+    void* data;
+    unpack_rpc_buffer(buf, buf_len, TANGRAM_UCT_ADDR_IGNORE, &data);
+
     pthread_t thread;
-    pthread_create(&thread, NULL, handle_revoke_lock_request, buf_dup);
+    pthread_create(&thread, NULL, handle_revoke_lock_request, data);
     return UCS_OK;
 }
 
@@ -94,10 +106,9 @@ static ucs_status_t am_rma_request_listener(void *arg, void *buf, size_t buf_len
 }
 
 static ucs_status_t am_ep_addr_listener(void *arg, void *buf, size_t buf_len, unsigned flags) {
-    pthread_mutex_lock(&g_send_context.cond_mutex);
-
     unpack_rpc_buffer(buf, buf_len, TANGRAM_UCT_ADDR_IGNORE, g_send_context.respond_ptr);
 
+    pthread_mutex_lock(&g_send_context.cond_mutex);
     g_send_context.respond_flag = true;
     pthread_cond_signal(&g_send_context.cond);
     pthread_mutex_unlock(&g_send_context.cond_mutex);
@@ -107,7 +118,9 @@ static ucs_status_t am_ep_addr_listener(void *arg, void *buf, size_t buf_len, un
 
 void* receiver_progress_loop(void* arg) {
     while(g_running) {
+        pthread_mutex_lock(&g_recv_context.mutex);
         uct_worker_progress(g_recv_context.worker);
+        pthread_mutex_unlock(&g_recv_context.mutex);
     }
 }
 
