@@ -20,7 +20,7 @@ static int N = 100;
 int mpi_size, mpi_rank;
 int write_iops, read_iops;
 
-void write_sequential() {
+void write_nonstrided() {
     FILE* fp = fopen(FILENAME, "wb");
 
     char* data = malloc(sizeof(char)*DATA_SIZE);
@@ -37,6 +37,29 @@ void write_sequential() {
 
     write_iops = N / (tend-tstart);
 
+    free(data);
+    fclose(fp);
+}
+
+void write_strided() {
+    FILE* fp = fopen(FILENAME, "wb");
+
+    size_t offset;
+    char* data = malloc(sizeof(char)*DATA_SIZE);
+
+    MPI_Barrier(MPI_COMM_WORLD);
+    double tstart = MPI_Wtime();
+
+    for(int i = 0; i < N; i++) {
+        size_t offset = mpi_size*DATA_SIZE*i + mpi_rank*DATA_SIZE;
+        fseek(fp, offset, SEEK_SET);
+        fwrite(data, 1, DATA_SIZE, fp);
+    }
+
+    MPI_Barrier(MPI_COMM_WORLD);
+    double tend = MPI_Wtime();
+
+    write_iops = N / (tend-tstart);
     free(data);
     fclose(fp);
 }
@@ -79,7 +102,7 @@ void read_random() {
     for(int i = 0; i < N; i++) {
         offset = (rand() % num_blocks) * DATA_SIZE;
         fseek(fp, offset, SEEK_SET);
-        fwrite(data, 1, DATA_SIZE, fp);
+        fread(data, 1, DATA_SIZE, fp);
     }
     MPI_Barrier(MPI_COMM_WORLD);
     double tend = MPI_Wtime();
@@ -97,7 +120,8 @@ int main(int argc, char* argv[]) {
 
     for(int i = 0; i < 1; i++) {
         MPI_Barrier(MPI_COMM_WORLD);
-        write_sequential();
+        //write_nonstrided();
+        write_strided();
     }
 
     for(int i = 0; i < 1; i++) {
