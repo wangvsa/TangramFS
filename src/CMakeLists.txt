@@ -45,6 +45,7 @@ set(TANGRAMFS_SRCS
         ${CMAKE_CURRENT_SOURCE_DIR}/client/tangramfs-semantics-impl.c
         ${CMAKE_CURRENT_SOURCE_DIR}/common/tangramfs-utils.c
         ${CMAKE_CURRENT_SOURCE_DIR}/common/seg_tree.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/common/lock-token.c
         ${CMAKE_CURRENT_SOURCE_DIR}/ucx/tangramfs-ucx-comm.c
         ${CMAKE_CURRENT_SOURCE_DIR}/ucx/tangramfs-ucx-server.c
         ${CMAKE_CURRENT_SOURCE_DIR}/ucx/tangramfs-ucx-client.c
@@ -71,9 +72,11 @@ tangramfs_set_lib_options(tangramfs "tangramfs" ${TANGRAMFS_LIBTYPE})
 #------------------------------------------------------------------------------
 set(TFS_SERVER_SRCS
         ${CMAKE_CURRENT_SOURCE_DIR}/server/tangramfs-metadata.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/server/tangramfs-lock-manager.c
         ${CMAKE_CURRENT_SOURCE_DIR}/server/tangramfs-server.c
         ${CMAKE_CURRENT_SOURCE_DIR}/client/tangramfs-rpc.c
         ${CMAKE_CURRENT_SOURCE_DIR}/common/tangramfs-utils.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/common/lock-token.c
         ${CMAKE_CURRENT_SOURCE_DIR}/common/seg_tree.c
         ${CMAKE_CURRENT_SOURCE_DIR}/ucx/tangramfs-ucx-comm.c
         ${CMAKE_CURRENT_SOURCE_DIR}/ucx/tangramfs-ucx-server.c

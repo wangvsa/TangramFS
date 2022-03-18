@@ -41,7 +41,7 @@ typedef struct zcopy_comp {
 // The user of RMA serice needs to provide
 // this funciton to provide the actual data to
 // send though RMA
-void* (*g_serve_rma_data)(void*, size_t *size);
+void* (*g_serve_rma_data_cb)(void*, size_t *size);
 
 
 void* pack_request_arg(void* ep_addr, void* my_addr, void* rkey_buf, size_t rkey_buf_size,
@@ -235,7 +235,7 @@ void* rma_respond(void* arg_in) {
 
     // RMA
     size_t buf_len;
-    void* buf = g_serve_rma_data(user_arg, &buf_len);
+    void* buf = g_serve_rma_data_cb(user_arg, &buf_len);
     do_put_zcopy(ep, &g_respond_context, remote_addr, rkey_ob.rkey, buf, buf_len);
 
     // Send ACK
@@ -248,6 +248,7 @@ void* rma_respond(void* arg_in) {
     free(arg->src.dev);
     free(arg->src.iface);
     free(arg->data);
+    // TODO free arg?
 
     pthread_mutex_unlock(&g_respond_context.mutex);
     return NULL;
@@ -341,10 +342,10 @@ void tangram_ucx_rma_request(tangram_uct_addr_t* dest, void* user_arg, size_t us
     pthread_mutex_unlock(&g_request_context.mutex);
 }
 
-void tangram_ucx_rma_service_start(tfs_info_t* tfs_info, void* (serve_rma_data)(void*, size_t*)) {
+void tangram_ucx_rma_service_start(tfs_info_t* tfs_info, void* (serve_rma_data_cb)(void*, size_t*)) {
     gg_tfs_info = tfs_info;
 
-    g_serve_rma_data = serve_rma_data;
+    g_serve_rma_data_cb = serve_rma_data_cb;
 
     ucs_status_t status;
     ucs_async_context_create(UCS_ASYNC_MODE_THREAD_SPINLOCK, &g_rma_async);

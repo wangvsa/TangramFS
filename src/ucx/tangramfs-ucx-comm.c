@@ -321,6 +321,8 @@ void tangram_uct_addr_deserialize(void* buf, tangram_uct_addr_t* addr) {
 }
 
 tangram_uct_addr_t* tangram_uct_addr_duplicate(tangram_uct_addr_t* in) {
+    if(in == TANGRAM_UCT_ADDR_IGNORE)
+        return TANGRAM_UCT_ADDR_IGNORE;
     tangram_uct_addr_t* out = malloc(sizeof(tangram_uct_addr_t));
     out->dev_len = in->dev_len;
     out->iface_len = in->iface_len;
@@ -332,6 +334,8 @@ tangram_uct_addr_t* tangram_uct_addr_duplicate(tangram_uct_addr_t* in) {
 }
 
 void tangram_uct_addr_free(tangram_uct_addr_t* addr) {
+    if(addr == TANGRAM_UCT_ADDR_IGNORE) return;
+
     if(addr->dev != NULL)
         free(addr->dev);
     if(addr->iface != NULL)
@@ -339,6 +343,7 @@ void tangram_uct_addr_free(tangram_uct_addr_t* addr) {
 
     addr->dev = NULL;
     addr->iface = NULL;
+    // TODO free(addr)?
 }
 
 int tangram_uct_addr_compare(tangram_uct_addr_t* a, tangram_uct_addr_t* b) {

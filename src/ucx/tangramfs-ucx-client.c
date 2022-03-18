@@ -46,6 +46,7 @@ static tangram_uct_context_t g_send_context;
 static tangram_uct_context_t g_epaddr_context;
 
 
+void (*g_revoke_lock_cb)(void*);
 
 /**
  * Handles both query and post respond from server
@@ -61,11 +62,26 @@ static ucs_status_t am_server_respond_listener(void *arg, void *buf, size_t buf_
     return UCS_OK;
 }
 
+void* handle_revoke_lock_request(void* arg) {
+    g_revoke_lock_cb(arg);
+    free(arg);
+    // send the respond to server
+    tangram_ucx_sendrecv_server(AM_ID_REVOKE_LOCK_RESPOND, NULL, 0, NULL);
+    return NULL;
+}
+
+static ucs_status_t am_revoke_lock_request_listener(void *arg, void *buf, size_t buf_len, unsigned flags) {
+    void* buf_dup = malloc(buf_len);
+    memcpy(buf_dup, buf, buf_len);
+    pthread_t thread;
+    pthread_create(&thread, NULL, handle_revoke_lock_request, buf_dup);
+    return UCS_OK;
+}
 
 /**
  * Note this am handler func is called by pthread-progress funciton.
- * we can not do am_send here as no one will perform the progress
- * So we create a new thread to handle this rma request
+ * We can not do am_send here as no one will be performing the progress
+ * We need to create a new thread to handle this rma request
  */
 static ucs_status_t am_rma_request_listener(void *arg, void *buf, size_t buf_len, unsigned flags) {
 
@@ -95,6 +111,7 @@ void* receiver_progress_loop(void* arg) {
     }
 }
 
+
 /**
  * Send server a RPC request and wait for the respond
  *
@@ -111,10 +128,12 @@ void tangram_ucx_sendrecv_server(uint8_t id, void* data, size_t length, void** r
 
     do_uct_am_short_progress(g_send_context.worker, ep, id, &g_recv_context.self_addr, data, length);
 
-    pthread_mutex_lock(&g_send_context.cond_mutex);
-    while(!g_send_context.respond_flag)
-        pthread_cond_wait(&g_send_context.cond, &g_send_context.cond_mutex);
-    pthread_mutex_unlock(&g_send_context.cond_mutex);
+    if(respond_ptr != NULL) { // need to wait for respond
+        pthread_mutex_lock(&g_send_context.cond_mutex);
+        while(!g_send_context.respond_flag)
+            pthread_cond_wait(&g_send_context.cond, &g_send_context.cond_mutex);
+        pthread_mutex_unlock(&g_send_context.cond_mutex);
+    }
 
     uct_ep_destroy(ep);
     pthread_mutex_unlock(&g_send_context.mutex);
@@ -182,8 +201,10 @@ void tangram_ucx_stop_server() {
     tangram_ucx_send_server(AM_ID_STOP_REQUEST);
 }
 
-void tangram_ucx_rpc_service_start(tfs_info_t *tfs_info) {
+void tangram_ucx_rpc_service_start(tfs_info_t *tfs_info, void (revoke_lock_cb)(void*)) {
     g_tfs_info = tfs_info;
+
+    g_revoke_lock_cb = revoke_lock_cb;
 
     ucs_status_t status;
     ucs_async_context_create(UCS_ASYNC_MODE_THREAD_SPINLOCK, &g_client_async);
@@ -200,6 +221,14 @@ void tangram_ucx_rpc_service_start(tfs_info_t *tfs_info) {
     status = uct_iface_set_am_handler(g_recv_context.iface, AM_ID_POST_RESPOND, am_server_respond_listener, NULL, 0);
     assert(status == UCS_OK);
     status = uct_iface_set_am_handler(g_recv_context.iface, AM_ID_STAT_RESPOND, am_server_respond_listener, NULL, 0);
+    assert(status == UCS_OK);
+    status = uct_iface_set_am_handler(g_recv_context.iface, AM_ID_ACQUIRE_LOCK_RESPOND, am_server_respond_listener, NULL, 0);
+    assert(status == UCS_OK);
+    status = uct_iface_set_am_handler(g_recv_context.iface, AM_ID_RELEASE_LOCK_RESPOND, am_server_respond_listener, NULL, 0);
+    assert(status == UCS_OK);
+    status = uct_iface_set_am_handler(g_recv_context.iface, AM_ID_RELEASE_ALL_LOCK_RESPOND, am_server_respond_listener, NULL, 0);
+    assert(status == UCS_OK);
+    status = uct_iface_set_am_handler(g_recv_context.iface, AM_ID_REVOKE_LOCK_REQUEST, am_revoke_lock_request_listener, NULL, 0);
     assert(status == UCS_OK);
     status = uct_iface_set_am_handler(g_recv_context.iface, AM_ID_RMA_REQUEST, am_rma_request_listener, NULL, 0);
     assert(status == UCS_OK);

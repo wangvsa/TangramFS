@@ -7,6 +7,7 @@
 typedef struct rpc_interval {
     size_t offset;
     size_t count;
+    int    type;        // used for lock type
 } interval_t;
 
 typedef struct rpc_in {
@@ -18,16 +19,22 @@ typedef struct rpc_in {
 
 
 
-static void* rpc_in_pack(char* filename, int num_intervals, size_t *offsets, size_t *counts, size_t *size) {
+static void* rpc_in_pack(char* filename, int num_intervals, size_t *offsets, size_t *counts, int* types, size_t *size) {
+    if(num_intervals == 0) {
+        *size = 0;
+        return NULL;
+    }
+
     int filename_len = strlen(filename);
 
     size_t total = sizeof(int)*2;           // filename_len, num_intervals
     total += strlen(filename);              // filename
-    for(int i = 0; i < num_intervals; i++)  // intervals (offset, count)
-        total += sizeof(size_t) * 2;
+    for(int i = 0; i < num_intervals; i++)  // intervals (offset, count, type)
+        total += (sizeof(size_t) * 2 + sizeof(int));
 
     int pos = 0;
     void* data = malloc(total);
+    memset(data, 0, total);
     memcpy(data+pos, &num_intervals, sizeof(int));
     pos+= sizeof(int);
     memcpy(data+pos, &filename_len, sizeof(int));
@@ -39,6 +46,9 @@ static void* rpc_in_pack(char* filename, int num_intervals, size_t *offsets, siz
         pos += sizeof(size_t);
         memcpy(data+pos, &counts[i], sizeof(size_t));
         pos += sizeof(size_t);
+        if(types != NULL)
+            memcpy(data+pos, &types[i], sizeof(int));
+        pos += sizeof(int);
     }
 
     *size = total;
@@ -66,6 +76,8 @@ static rpc_in_t* rpc_in_unpack(void* data) {
         pos += sizeof(size_t);
         memcpy(&(in->intervals[i].count), data+pos, sizeof(size_t));
         pos += sizeof(size_t);
+        memcpy(&(in->intervals[i].type), data+pos, sizeof(int));
+        pos += sizeof(int);
     }
     return in;
 }
@@ -76,12 +88,12 @@ static void rpc_in_free(rpc_in_t *in) {
     free(in);
 }
 
-void tangram_issue_rpc(uint8_t id, char* filename, size_t *offsets, size_t *counts, int len, void** respond_ptr);
+void tangram_issue_rpc(uint8_t id, char* filename, size_t* offsets, size_t* counts, int* types, int len, void** respond_ptr);
 void tangram_issue_rma(uint8_t id, char* filename, tangram_uct_addr_t* dest, size_t *offsets, size_t *counts, int len, void* recv_buf);
 void tangram_issue_metadata_rpc(uint8_t id, const char* filename, void** respond_ptr);
-void tangram_rma_service_start(tfs_info_t *tfs_info, void* (*serve_rma_data)(void*, size_t*));
+void tangram_rma_service_start(tfs_info_t *tfs_info, void* (*serve_rma_data_cb)(void*, size_t*));
 void tangram_rma_service_stop();
-void tangram_rpc_service_start(tfs_info_t *tfs_info);
+void tangram_rpc_service_start(tfs_info_t *tfs_info, void (*revoke_lock_cb)(void*));
 void tangram_rpc_service_stop();
 tangram_uct_addr_t* tangram_rpc_get_client_addr();
 

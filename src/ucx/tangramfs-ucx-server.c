@@ -46,7 +46,7 @@ static rpc_task_worker_t g_workers[NUM_THREADS];
 static int who = 0;
 
 
-void* (*user_am_data_handler)(int8_t, tangram_uct_addr_t* client, void* data, size_t *respond_len);
+void* (*user_am_data_handler)(int8_t, tangram_uct_addr_t* client, void* data, uint8_t* respond_id, size_t *respond_len);
 
 
 /**
@@ -76,11 +76,15 @@ void append_task(uint8_t id, void* buf, size_t buf_len) {
 void destroy_task(rpc_task_t* task) {
     if(task->data)
         free(task->data);
-    if(task->respond)
-        free(task->respond);
+
+    // TODO if task->respond is tangram_uct_addr_t*, then we did not release all its memory space.
+    //if(task->respond)
+    //    free(task->respond);
+
     free(task->client.dev);
     free(task->client.iface);
     free(task);
+
 }
 
 static ucs_status_t am_query_listener(void *arg, void *buf, size_t buf_len, unsigned flags) {
@@ -97,31 +101,40 @@ static ucs_status_t am_stat_listener(void *arg, void *buf, size_t buf_len, unsig
     append_task(AM_ID_STAT_REQUEST, buf, buf_len);
     return UCS_OK;
 }
+static ucs_status_t am_acquire_lock_listener(void *arg, void *buf, size_t buf_len, unsigned flags) {
+    append_task(AM_ID_ACQUIRE_LOCK_REQUEST, buf, buf_len);
+    return UCS_OK;
+}
+static ucs_status_t am_release_lock_listener(void *arg, void *buf, size_t buf_len, unsigned flags) {
+    append_task(AM_ID_RELEASE_LOCK_REQUEST, buf, buf_len);
+    return UCS_OK;
+}
+static ucs_status_t am_release_all_lock_listener(void *arg, void *buf, size_t buf_len, unsigned flags) {
+    append_task(AM_ID_RELEASE_ALL_LOCK_REQUEST, buf, buf_len);
+    return UCS_OK;
+}
+static ucs_status_t am_revoke_lock_respond_listener(void *arg, void *buf, size_t buf_len, unsigned flags) {
+    pthread_mutex_lock(&g_server_context.cond_mutex);
+    g_server_context.respond_flag = true;
+    pthread_cond_signal(&g_server_context.cond);
+    pthread_mutex_unlock(&g_server_context.cond_mutex);
+    return UCS_OK;
+}
 
 static ucs_status_t am_stop_listener(void *arg, void *buf, size_t buf_len, unsigned flags) {
     g_server_running = false;
     return UCS_OK;
 }
 
-void handle_one_task(rpc_task_t* task) {
+void handle_task(rpc_task_t* task) {
     pthread_mutex_lock(&g_server_context.mutex);
     uct_ep_h ep;
 
     uct_ep_create_connect(g_server_context.iface, &task->client, &ep);
     pthread_mutex_unlock(&g_server_context.mutex);
 
-    task->respond = (*user_am_data_handler)(task->id, &task->client, task->data, &task->respond_len);
-
-    //if(task->respond) {
-        uint8_t id;
-        if(task->id == AM_ID_QUERY_REQUEST)
-            id = AM_ID_QUERY_RESPOND;
-        if(task->id == AM_ID_POST_REQUEST)
-            id = AM_ID_POST_RESPOND;
-        if(task->id == AM_ID_STAT_REQUEST)
-            id = AM_ID_STAT_RESPOND;
-        do_uct_am_short(&g_server_context.mutex, ep, id, &g_server_context.self_addr, task->respond, task->respond_len);
-    //}
+    task->respond = (*user_am_data_handler)(task->id, &task->client, task->data, &task->id, &task->respond_len);
+    do_uct_am_short(&g_server_context.mutex, ep, task->id, &g_server_context.self_addr, task->respond, task->respond_len);
 
     pthread_mutex_lock(&g_server_context.mutex);
     uct_ep_destroy(ep);
@@ -152,7 +165,7 @@ void* rpc_task_worker_func(void* arg) {
 
         pthread_mutex_unlock(&me->lock);
 
-        handle_one_task(task);
+        handle_task(task);
         destroy_task(task);
     }
 
@@ -161,6 +174,28 @@ void* rpc_task_worker_func(void* arg) {
     //
     // But it is possible that client stoped the server
     // before all their requests have been finished.
+}
+
+
+void tangram_ucx_revoke_lock(tangram_uct_addr_t* client, void* data, size_t length, void** respond_ptr) {
+
+    pthread_mutex_lock(&g_server_context.mutex);
+    g_server_context.respond_ptr  = respond_ptr;
+    g_server_context.respond_flag = false;
+
+    uct_ep_h ep;
+    uct_ep_create_connect(g_server_context.iface, client, &ep);
+    pthread_mutex_unlock(&g_server_context.mutex);
+
+    do_uct_am_short(&g_server_context.mutex, ep, AM_ID_REVOKE_LOCK_REQUEST, &g_server_context.self_addr, data, length);
+
+    pthread_mutex_lock(&g_server_context.cond_mutex);
+    while(!g_server_context.respond_flag)
+        pthread_cond_wait(&g_server_context.cond, &g_server_context.cond_mutex);
+    pthread_mutex_unlock(&g_server_context.cond_mutex);
+
+    uct_ep_destroy(ep);
+    pthread_mutex_unlock(&g_server_context.mutex);
 }
 
 
@@ -176,6 +211,14 @@ void tangram_ucx_server_init(tfs_info_t *tfs_info) {
     assert(status == UCS_OK);
     status = uct_iface_set_am_handler(g_server_context.iface, AM_ID_STAT_REQUEST, am_stat_listener, NULL, 0);
     assert(status == UCS_OK);
+    status = uct_iface_set_am_handler(g_server_context.iface, AM_ID_ACQUIRE_LOCK_REQUEST, am_acquire_lock_listener, NULL, 0);
+    assert(status == UCS_OK);
+    status = uct_iface_set_am_handler(g_server_context.iface, AM_ID_RELEASE_LOCK_REQUEST, am_release_lock_listener, NULL, 0);
+    assert(status == UCS_OK);
+    status = uct_iface_set_am_handler(g_server_context.iface, AM_ID_RELEASE_ALL_LOCK_REQUEST, am_release_all_lock_listener, NULL, 0);
+    assert(status == UCS_OK);
+    status = uct_iface_set_am_handler(g_server_context.iface, AM_ID_REVOKE_LOCK_RESPOND, am_revoke_lock_respond_listener, NULL, 0);
+    assert(status == UCS_OK);
     status = uct_iface_set_am_handler(g_server_context.iface, AM_ID_STOP_REQUEST, am_stop_listener, NULL, 0);
     assert(status == UCS_OK);
 
@@ -188,7 +231,7 @@ void tangram_ucx_server_init(tfs_info_t *tfs_info) {
     }
 }
 
-void tangram_ucx_server_register_rpc(void* (*user_handler)(int8_t, tangram_uct_addr_t*, void*, size_t*)) {
+void tangram_ucx_server_register_rpc(void* (*user_handler)(int8_t, tangram_uct_addr_t*, void*, uint8_t*, size_t*)) {
     user_am_data_handler = user_handler;
 }
 

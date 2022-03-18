@@ -14,7 +14,6 @@ typedef struct seg_tree_table {
 // Hash Map <filename, seg_tree>
 static seg_tree_table_t *g_stt = NULL;
 
-
 void tangram_ms_init() {
 }
 

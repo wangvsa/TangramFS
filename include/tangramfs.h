@@ -3,6 +3,7 @@
 #include <stdbool.h>
 #include <sys/stat.h>
 #include "seg_tree.h"
+#include "lock-token.h"
 #include "uthash.h"
 #include "tangramfs-rpc.h"
 
@@ -36,6 +37,8 @@ typedef struct tfs_file {
     int    local_fd;
     struct seg_tree it2;
 
+    lock_token_list_t token_list; // lock tokens, used only when implmenting POSIX consistency
+
     UT_hash_handle hh;    // filename as key
 
 } tfs_file_t;
@@ -57,6 +60,15 @@ void   tfs_flush(tfs_file_t* tf);
 void tfs_post(tfs_file_t* tf, size_t offset, size_t count);
 void tfs_post_all(tfs_file_t* tf);
 int  tfs_query(tfs_file_t* tf, size_t offset, size_t count, tangram_uct_addr_t** owner);
+
+
+// Lock based API
+// Only used for consistency-centric programming model)
+// to test the performance penalty
+int tfs_acquire_lock(tfs_file_t* tf, size_t offset, size_t count, int type);
+int tfs_release_lock(tfs_file_t* tf, size_t offset, size_t count);
+int tfs_release_all_lock();
+
 
 // Python API
 size_t tfs_fetch(const char* filename, void* buf, size_t size);
