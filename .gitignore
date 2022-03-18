@@ -101,3 +101,5 @@ __pycache__/
 #cmake
 build
 install
+
+examples/ml-apps/data/
