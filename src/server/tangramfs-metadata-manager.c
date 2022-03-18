@@ -3,7 +3,7 @@
 #include "uthash.h"
 #include "seg_tree.h"
 #include "tangramfs-utils.h"
-#include "tangramfs-metadata.h"
+#include "tangramfs-metadata-manager.h"
 
 typedef struct seg_tree_table {
     char filename[256];
@@ -31,7 +31,7 @@ char* print_tree(char* dst, struct seg_tree* seg_tree)
 }
 
 
-void tangram_ms_handle_post(tangram_uct_addr_t* client, char* filename, size_t offset, size_t count) {
+void tangram_metamgr_handle_post(tangram_uct_addr_t* client, char* filename, size_t offset, size_t count) {
 
     seg_tree_table_t *entry = NULL;
     HASH_FIND_STR(g_stt, filename, entry);
@@ -48,7 +48,7 @@ void tangram_ms_handle_post(tangram_uct_addr_t* client, char* filename, size_t o
     assert(res == 0);
 }
 
-tangram_uct_addr_t* tangram_ms_handle_query(char* filename, size_t req_start, size_t req_count) {
+tangram_uct_addr_t* tangram_metamgr_handle_query(char* filename, size_t req_start, size_t req_count) {
     seg_tree_table_t *entry = NULL;
     HASH_FIND_STR(g_stt, filename, entry);
     if(entry == NULL) return false;
@@ -105,7 +105,7 @@ tangram_uct_addr_t* tangram_ms_handle_query(char* filename, size_t req_start, si
     return NULL;
 }
 
-void tangram_ms_handle_stat(char* filename, struct stat *buf) {
+void tangram_metamgr_handle_stat(char* filename, struct stat *buf) {
     seg_tree_table_t *entry = NULL;
     HASH_FIND_STR(g_stt, filename, entry);
 
@@ -121,11 +121,11 @@ void tangram_ms_handle_stat(char* filename, struct stat *buf) {
     }
 }
 
-void tangram_ms_init() {
+void tangram_metamgr_init() {
     g_stt = NULL;
 }
 
-void tangram_ms_finalize() {
+void tangram_metamgr_finalize() {
     seg_tree_table_t * entry, *tmp;
     HASH_ITER(hh, g_stt, entry, tmp) {
         HASH_DEL(g_stt, entry);

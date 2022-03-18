@@ -6,7 +6,7 @@
 #include <assert.h>
 #include <mpi.h>
 #include "tangramfs.h"
-#include "tangramfs-metadata.h"
+#include "tangramfs-metadata-manager.h"
 #include "tangramfs-lock-manager.h"
 
 
@@ -21,7 +21,7 @@ void* rpc_handler(int8_t id, tangram_uct_addr_t* client, void* data, uint8_t* re
         tangram_uct_addr_t* client_dup = tangram_uct_addr_duplicate(client);
         rpc_in_t* in = rpc_in_unpack(data);
         for(int i = 0; i < in->num_intervals; i++)
-            tangram_ms_handle_post(client_dup, in->filename, in->intervals[i].offset, in->intervals[i].count);
+            tangram_metamgr_handle_post(client_dup, in->filename, in->intervals[i].offset, in->intervals[i].count);
         tangram_debug("[tangramfs] post, filename: %s, offset:%lu, count: %lu\n", in->filename, in->intervals[0].offset, in->intervals[0].count);
         rpc_in_free(in);
         respond = malloc(sizeof(int));
@@ -30,7 +30,7 @@ void* rpc_handler(int8_t id, tangram_uct_addr_t* client, void* data, uint8_t* re
     } else if(id == AM_ID_QUERY_REQUEST) {
         rpc_in_t* in = rpc_in_unpack(data);
         tangram_uct_addr_t *owner;
-        owner = tangram_ms_handle_query(in->filename, in->intervals[0].offset, in->intervals[0].count);
+        owner = tangram_metamgr_handle_query(in->filename, in->intervals[0].offset, in->intervals[0].count);
         tangram_debug("[tangramfs] query, filename: %s, offset:%lu, count: %lu\n",
                 in->filename, in->intervals[0].offset, in->intervals[0].count);
         rpc_in_free(in);
@@ -40,7 +40,7 @@ void* rpc_handler(int8_t id, tangram_uct_addr_t* client, void* data, uint8_t* re
         char* path = data;
         *respond_len = sizeof(struct stat);
         respond = malloc(*respond_len);
-        tangram_ms_handle_stat(path, (struct stat*) respond);
+        tangram_metamgr_handle_stat(path, (struct stat*) respond);
         *respond_id = AM_ID_STAT_RESPOND;
     } else if(id == AM_ID_ACQUIRE_LOCK_REQUEST) {
         rpc_in_t* in = rpc_in_unpack(data);
@@ -83,19 +83,16 @@ int main(int argc, char* argv[]) {
 
     if( strcmp(argv[1], "start") == 0 ) {
         tangram_ucx_server_init(&tfs_info);
-        tangram_ms_init();
+        tangram_metamgr_init();
         tangram_ucx_server_register_rpc(rpc_handler);
-        tangram_ucx_server_start();
-
         tangram_info("[tangramfs] Server started\n");
-
+        tangram_ucx_server_start();
     } else if( strcmp(argv[1], "stop") == 0 ) {
         tangram_rpc_service_start(&tfs_info, NULL);
         tangram_ucx_stop_server();
         tangram_rpc_service_stop();
-        tangram_ms_finalize();
+        tangram_metamgr_finalize();
         tangram_lockmgr_finalize();
-
         tangram_info("[tangramfs] Server stoped\n");
     }
 

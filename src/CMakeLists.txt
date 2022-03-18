@@ -71,7 +71,7 @@ tangramfs_set_lib_options(tangramfs "tangramfs" ${TANGRAMFS_LIBTYPE})
 # Binaries - server, test
 #------------------------------------------------------------------------------
 set(TFS_SERVER_SRCS
-        ${CMAKE_CURRENT_SOURCE_DIR}/server/tangramfs-metadata.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/server/tangramfs-metadata-manager.c
         ${CMAKE_CURRENT_SOURCE_DIR}/server/tangramfs-lock-manager.c
         ${CMAKE_CURRENT_SOURCE_DIR}/server/tangramfs-server.c
         ${CMAKE_CURRENT_SOURCE_DIR}/client/tangramfs-rpc.c
