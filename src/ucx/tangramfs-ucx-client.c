@@ -270,3 +270,8 @@ void tangram_ucx_rpc_service_stop() {
 tangram_uct_addr_t* tangram_ucx_get_client_addr() {
     return &g_recv_context.self_addr;
 }
+
+size_t tangram_uct_am_short_max_size() {
+    return g_send_context.iface_attr.cap.am.max_short;
+}
+

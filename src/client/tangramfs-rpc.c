@@ -18,10 +18,33 @@ static double rma_time;
  */
 void tangram_issue_rpc(uint8_t id, char* filename, size_t *offsets, size_t *counts, int* types, int num_intervals, void** respond_ptr) {
 
-    size_t data_size;
-    void* user_data = rpc_in_pack(filename, num_intervals, offsets, counts, types, &data_size);
-    tangram_ucx_sendrecv_server(id, user_data, data_size, respond_ptr);
-    free(user_data);
+    // Some message does not send intervals
+    if(num_intervals == 0) {
+        size_t data_size;
+        void* user_data = rpc_in_pack(filename, num_intervals, offsets, counts, types, &data_size);
+        tangram_ucx_sendrecv_server(id, user_data, data_size, respond_ptr);
+        free(user_data);
+        return;
+    }
+
+    // We need to guarantee the message size
+    // does not exceed max am size
+    // In case its too large, we split it into multiple AM
+    size_t am_max_size = tangram_uct_am_short_max_size();
+    int num = rpc_in_intervals_per_am(filename, am_max_size);
+    int remain = num_intervals;
+
+    int i = 0;
+    while(remain > 0) {
+
+        size_t data_size;
+        void* user_data = rpc_in_pack(filename, num<remain?num:remain, offsets+i*num, counts+i*num, types+i*num, &data_size);
+        tangram_ucx_sendrecv_server(id, user_data, data_size, respond_ptr);
+        free(user_data);
+
+        remain -= num;
+        i++;
+    }
 }
 
 /*

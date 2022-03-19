@@ -44,6 +44,7 @@ void tangram_ucx_stop_server();
 void tangram_ucx_rpc_service_start(tfs_info_t* tfs_info, void (*revoke_lock_cb)(void*));
 void tangram_ucx_rpc_service_stop();
 tangram_uct_addr_t* tangram_ucx_get_client_addr();
+size_t tangram_uct_am_short_max_size();
 
 // RMA
 typedef struct tangram_rma_req_in {

@@ -18,6 +18,19 @@ typedef struct rpc_in {
 } rpc_in_t;
 
 
+/**
+ * Incase we want to send too many intervals a time,
+ * We need to split them into multiple am messages
+ *
+ * This function calculates how many intervals we can
+ * send in one AM
+ */
+static int rpc_in_intervals_per_am(char* filename, size_t am_max_size) {
+    size_t filelen = filename ? strlen(filename) : 0;
+    size_t interval_size = sizeof(size_t)*2+sizeof(int);
+    int num_intervals = (am_max_size - filelen - 16/*a safe guard, just in case*/) / interval_size;
+    return num_intervals;
+}
 
 static void* rpc_in_pack(char* filename, int num_intervals, size_t *offsets, size_t *counts, int* types, size_t *size) {
     if(num_intervals == 0) {
