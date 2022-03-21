@@ -27,8 +27,11 @@ typedef struct rpc_in {
  */
 static int rpc_in_intervals_per_am(char* filename, size_t am_max_size) {
     size_t filelen = filename ? strlen(filename) : 0;
+    filelen += sizeof(int);
+
     size_t interval_size = sizeof(size_t)*2+sizeof(int);
-    int num_intervals = (am_max_size - filelen - 16/*a safe guard, just in case*/) / interval_size;
+
+    int num_intervals = (am_max_size - filelen - 64/*a safe guard, just in case*/) / interval_size;
     return num_intervals;
 }
 

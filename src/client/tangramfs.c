@@ -361,11 +361,6 @@ void tfs_post(tfs_file_t* tf, size_t offset, size_t count) {
     seg_tree_unlock(&tf->it2);
 }
 
-// TODO if we have many intervals to post at once
-// the total size of the rpc buffer may exceed
-// that allowed by UCX.
-// e.g., post 1000 intervals need to transfer 16050 bytes
-// which > 8192 limited by the UCX for AM.
 void tfs_post_all(tfs_file_t* tf) {
     int num = 0;
     int i = 0;

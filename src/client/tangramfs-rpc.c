@@ -38,7 +38,8 @@ void tangram_issue_rpc(uint8_t id, char* filename, size_t *offsets, size_t *coun
     while(remain > 0) {
 
         size_t data_size;
-        void* user_data = rpc_in_pack(filename, num<remain?num:remain, offsets+i*num, counts+i*num, types+i*num, &data_size);
+        void* user_data = rpc_in_pack(filename, num < remain ? num : remain,
+                                      &offsets[i*num], &counts[i*num], types?&types[i*num]:NULL, &data_size);
         tangram_ucx_sendrecv_server(id, user_data, data_size, respond_ptr);
         free(user_data);
 
@@ -46,6 +47,7 @@ void tangram_issue_rpc(uint8_t id, char* filename, size_t *offsets, size_t *coun
         i++;
     }
 }
+
 
 /*
  * Perform RPC (between clients)

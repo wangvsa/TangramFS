@@ -15,6 +15,18 @@ volatile static bool         g_server_running = true;
 static ucs_async_context_t*  g_server_async;
 static tangram_uct_context_t g_server_context;
 
+/*
+ * Use one global mutex to protect revoke rpcs
+ *
+ * We wait on g_server_context.cond, so it is
+ * necessary that we have at most one outgoing revoke
+ * request at a time.
+ * Wait on multiple clients at the same time may cause deadlock
+ *
+ * TODO we can implement it in a way without this global lock.
+ */
+static pthread_mutex_t       g_revoke_lock_mutex = PTHREAD_MUTEX_INITIALIZER;
+
 
 /* Represents one RPC request */
 typedef struct rpc_task {
@@ -178,9 +190,11 @@ void* rpc_task_worker_func(void* arg) {
 
 
 void tangram_ucx_revoke_lock(tangram_uct_addr_t* client, void* data, size_t length) {
-    pthread_mutex_lock(&g_server_context.mutex);
+    pthread_mutex_lock(&g_revoke_lock_mutex);
+
     g_server_context.respond_flag = false;
 
+    pthread_mutex_lock(&g_server_context.mutex);
     uct_ep_h ep;
     uct_ep_create_connect(g_server_context.iface, client, &ep);
     pthread_mutex_unlock(&g_server_context.mutex);
@@ -193,8 +207,11 @@ void tangram_ucx_revoke_lock(tangram_uct_addr_t* client, void* data, size_t leng
         pthread_cond_wait(&g_server_context.cond, &g_server_context.cond_mutex);
     pthread_mutex_unlock(&g_server_context.cond_mutex);
 
+    pthread_mutex_lock(&g_server_context.mutex);
     uct_ep_destroy(ep);
-    //pthread_mutex_unlock(&g_server_context.mutex);
+    pthread_mutex_unlock(&g_server_context.mutex);
+
+    pthread_mutex_unlock(&g_revoke_lock_mutex);
 }
 
 

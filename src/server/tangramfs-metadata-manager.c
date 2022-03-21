@@ -48,6 +48,20 @@ void tangram_metamgr_handle_post(tangram_uct_addr_t* client, char* filename, siz
     assert(res == 0);
 }
 
+void tangram_metamgr_handle_unpost(tangram_uct_addr_t* client, char* filename) {
+    seg_tree_table_t *entry = NULL;
+    HASH_FIND_STR(g_stt, filename, entry);
+
+    if(!entry) {
+        entry = tangram_malloc(sizeof(seg_tree_table_t));
+        seg_tree_init(&entry->tree);
+        strcpy(entry->filename, filename);
+        HASH_ADD_STR(g_stt, filename, entry);
+    }
+
+
+}
+
 tangram_uct_addr_t* tangram_metamgr_handle_query(char* filename, size_t req_start, size_t req_count) {
     seg_tree_table_t *entry = NULL;
     HASH_FIND_STR(g_stt, filename, entry);

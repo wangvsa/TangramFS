@@ -15,7 +15,7 @@
 #define FILENAME "./test.txt"
 
 static size_t DATA_SIZE = 4*KB;
-static int N = 100;
+static int N = 1000;
 
 int mpi_size, mpi_rank;
 int write_iops, read_iops;
@@ -103,6 +103,8 @@ void read_random() {
         offset = (rand() % num_blocks) * DATA_SIZE;
         fseek(fp, offset, SEEK_SET);
         fread(data, 1, DATA_SIZE, fp);
+        //if(i%50 == 0)
+        //    printf("%d/%d\n", i, N);
     }
     MPI_Barrier(MPI_COMM_WORLD);
     double tend = MPI_Wtime();

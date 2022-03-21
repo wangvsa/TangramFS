@@ -68,7 +68,7 @@ void* handle_revoke_lock_request(void* arg) {
     // Note here we use g_recv_context to send out the respond
     //
     // We can not use g_send_context, as it is used by the main thread
-    // only, and it allow only one outgoing RPC at a time:
+    // only, and it allows only one outgoing RPC at a time:
     //   -- Using it can cause deadlock when acquiring and revoking at the same time
     pthread_mutex_lock(&g_recv_context.mutex);
     uct_ep_h ep;
