@@ -694,6 +694,54 @@ void seg_tree_clear(struct seg_tree* seg_tree)
     seg_tree_unlock(seg_tree);
 }
 
+
+/*
+ * Remove all nodes in seg_tree that belong to the given client
+ */
+void seg_tree_clear_client(struct seg_tree* seg_tree, tangram_uct_addr_t* client)
+{
+    struct seg_tree_node* node = NULL;
+    struct seg_tree_node* oldnode = NULL;
+
+    seg_tree_wrlock(seg_tree);
+
+    if (RB_EMPTY(&seg_tree->head)) {
+        /* seg_tree is empty, nothing to do */
+        seg_tree_unlock(seg_tree);
+        return;
+    }
+
+    /* Remove and free each node in the tree */
+    unsigned long removed = 0;
+    unsigned long new_max = 0;
+    while ((node = seg_tree_iter(seg_tree, node))) {
+        if (oldnode) {
+            if(tangram_uct_addr_compare(oldnode->owner, client) == 0) {
+                //printf("remove [%ld-%ld]\n", oldnode->start, oldnode->end);
+                RB_REMOVE(inttree, &seg_tree->head, oldnode);
+                free(oldnode);
+            } else {
+                // Need to update (or recalculate the max end offset)
+                new_max = MAX(new_max, oldnode->end);
+            }
+        }
+        oldnode = node;
+    }
+    if (oldnode) {
+        if(tangram_uct_addr_compare(oldnode->owner, client) == 0) {
+            RB_REMOVE(inttree, &seg_tree->head, oldnode);
+            free(oldnode);
+        } else {
+            new_max = MAX(new_max, oldnode->end);
+        }
+    }
+
+    seg_tree->count -= removed;
+    seg_tree->max    = new_max;
+    seg_tree_unlock(seg_tree);
+}
+
+
 /* Return the number of segments in the segment tree */
 unsigned long seg_tree_count(struct seg_tree* seg_tree)
 {

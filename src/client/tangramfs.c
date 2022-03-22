@@ -49,6 +49,8 @@ void tfs_finalize() {
 
     tfs.initialized = false;
 
+    // Notify the server to unpost all and release all locks
+    tfs_unpost_all();
     tfs_release_all_lock();
 
     // Need to have a barrier here because we can not allow
@@ -57,7 +59,6 @@ void tfs_finalize() {
 
     tangram_rma_service_stop();
     tangram_rpc_service_stop();
-
 
     // Clear all resources
     tfs_file_t *tf, *tmp;
@@ -396,6 +397,12 @@ void tfs_post_all(tfs_file_t* tf) {
     tangram_free(counts, sizeof(size_t)*num);
 
     seg_tree_unlock(&tf->it2);
+}
+
+void tfs_unpost_all() {
+    int* ack;
+    tangram_issue_rpc(AM_ID_UNPOST_ALL_REQUEST, NULL, NULL, NULL, NULL, 0, (void**)&ack);
+    free(ack);
 }
 
 int tfs_query(tfs_file_t* tf, size_t offset, size_t size, tangram_uct_addr_t** owner) {

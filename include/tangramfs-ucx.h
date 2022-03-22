@@ -8,17 +8,20 @@
 
 #define UCX_SERVER_PORT         13432
 
-#define AM_ID_QUERY_REQUEST  1
-#define AM_ID_QUERY_RESPOND  2
-#define AM_ID_POST_REQUEST   3
-#define AM_ID_POST_RESPOND   4
-#define AM_ID_RMA_REQUEST    5
-#define AM_ID_RMA_RESPOND    6
-#define AM_ID_RMA_EP_ADDR    7
-#define AM_ID_STOP_REQUEST   8
-#define AM_ID_STOP_RESPOND   9
-#define AM_ID_STAT_REQUEST   12
-#define AM_ID_STAT_RESPOND   13
+#define AM_ID_QUERY_REQUEST         1
+#define AM_ID_QUERY_RESPOND         2
+#define AM_ID_POST_REQUEST          3
+#define AM_ID_POST_RESPOND          4
+#define AM_ID_RMA_REQUEST           5
+#define AM_ID_RMA_RESPOND           6
+#define AM_ID_RMA_EP_ADDR           7
+#define AM_ID_STOP_REQUEST          8
+#define AM_ID_STOP_RESPOND          9
+#define AM_ID_STAT_REQUEST          12
+#define AM_ID_STAT_RESPOND          13
+#define AM_ID_UNPOST_ALL_REQUEST    14
+#define AM_ID_UNPOST_ALL_RESPOND    15
+
 
 #define AM_ID_ACQUIRE_LOCK_REQUEST      20
 #define AM_ID_ACQUIRE_LOCK_RESPOND      21

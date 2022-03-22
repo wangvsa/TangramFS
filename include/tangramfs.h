@@ -59,6 +59,7 @@ void   tfs_flush(tfs_file_t* tf);
 
 void tfs_post(tfs_file_t* tf, size_t offset, size_t count);
 void tfs_post_all(tfs_file_t* tf);
+void tfs_unpost_all();
 int  tfs_query(tfs_file_t* tf, size_t offset, size_t count, tangram_uct_addr_t** owner);
 
 

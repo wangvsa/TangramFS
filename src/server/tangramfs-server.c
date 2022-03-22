@@ -27,6 +27,12 @@ void* rpc_handler(int8_t id, tangram_uct_addr_t* client, void* data, uint8_t* re
         respond = malloc(sizeof(int));
         *respond_len = sizeof(int);
         *respond_id = AM_ID_POST_RESPOND;
+    } else if(id == AM_ID_UNPOST_ALL_REQUEST) {
+        tangram_metamgr_handle_unpost_all(client);
+        tangram_debug("[tangramfs] unpost all\n");
+        respond = malloc(sizeof(int));
+        *respond_len = sizeof(int);
+        *respond_id = AM_ID_UNPOST_ALL_RESPOND;
     } else if(id == AM_ID_QUERY_REQUEST) {
         rpc_in_t* in = rpc_in_unpack(data);
         tangram_uct_addr_t *owner;

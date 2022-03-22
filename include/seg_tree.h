@@ -45,6 +45,11 @@ int seg_tree_init(struct seg_tree* seg_tree);
 void seg_tree_clear(struct seg_tree* seg_tree);
 
 /*
+ * Remove all nodes in seg_tree that belong to the given client.
+ */
+void seg_tree_clear_client(struct seg_tree* seg_tree, tangram_uct_addr_t* client);
+
+/*
  * Remove and free all nodes in the seg_tree.
  */
 void seg_tree_destroy(struct seg_tree* seg_tree);

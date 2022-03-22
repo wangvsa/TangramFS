@@ -109,6 +109,10 @@ static ucs_status_t am_post_listener(void *arg, void *buf, size_t buf_len, unsig
     append_task(AM_ID_POST_REQUEST, buf, buf_len);
     return UCS_OK;
 }
+static ucs_status_t am_unpost_all_listener(void *arg, void *buf, size_t buf_len, unsigned flags) {
+    append_task(AM_ID_UNPOST_ALL_REQUEST, buf, buf_len);
+    return UCS_OK;
+}
 static ucs_status_t am_stat_listener(void *arg, void *buf, size_t buf_len, unsigned flags) {
     append_task(AM_ID_STAT_REQUEST, buf, buf_len);
     return UCS_OK;
@@ -225,6 +229,8 @@ void tangram_ucx_server_init(tfs_info_t *tfs_info) {
     status = uct_iface_set_am_handler(g_server_context.iface, AM_ID_QUERY_REQUEST, am_query_listener, NULL, 0);
     assert(status == UCS_OK);
     status = uct_iface_set_am_handler(g_server_context.iface, AM_ID_POST_REQUEST, am_post_listener, NULL, 0);
+    assert(status == UCS_OK);
+    status = uct_iface_set_am_handler(g_server_context.iface, AM_ID_UNPOST_ALL_REQUEST, am_unpost_all_listener, NULL, 0);
     assert(status == UCS_OK);
     status = uct_iface_set_am_handler(g_server_context.iface, AM_ID_STAT_REQUEST, am_stat_listener, NULL, 0);
     assert(status == UCS_OK);

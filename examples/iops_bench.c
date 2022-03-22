@@ -15,7 +15,7 @@
 #define FILENAME "./test.txt"
 
 static size_t DATA_SIZE = 4*KB;
-static int N = 1000;
+static int N = 500;
 
 int mpi_size, mpi_rank;
 int write_iops, read_iops;
