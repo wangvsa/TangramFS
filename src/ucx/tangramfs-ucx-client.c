@@ -243,7 +243,9 @@ void tangram_ucx_rpc_service_start(tfs_info_t *tfs_info, void (revoke_lock_cb)(v
     assert(status == UCS_OK);
     status = uct_iface_set_am_handler(g_recv_context.iface, AM_ID_RELEASE_LOCK_RESPOND, am_server_respond_listener, NULL, 0);
     assert(status == UCS_OK);
-    status = uct_iface_set_am_handler(g_recv_context.iface, AM_ID_RELEASE_ALL_LOCK_RESPOND, am_server_respond_listener, NULL, 0);
+    status = uct_iface_set_am_handler(g_recv_context.iface, AM_ID_RELEASE_LOCK_FILE_RESPOND, am_server_respond_listener, NULL, 0);
+    assert(status == UCS_OK);
+    status = uct_iface_set_am_handler(g_recv_context.iface, AM_ID_RELEASE_LOCK_CLIENT_RESPOND, am_server_respond_listener, NULL, 0);
     assert(status == UCS_OK);
     status = uct_iface_set_am_handler(g_recv_context.iface, AM_ID_REVOKE_LOCK_REQUEST, am_revoke_lock_request_listener, NULL, 0);
     assert(status == UCS_OK);

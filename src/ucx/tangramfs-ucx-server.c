@@ -129,8 +129,12 @@ static ucs_status_t am_release_lock_listener(void *arg, void *buf, size_t buf_le
     append_task(AM_ID_RELEASE_LOCK_REQUEST, buf, buf_len);
     return UCS_OK;
 }
-static ucs_status_t am_release_all_lock_listener(void *arg, void *buf, size_t buf_len, unsigned flags) {
-    append_task(AM_ID_RELEASE_ALL_LOCK_REQUEST, buf, buf_len);
+static ucs_status_t am_release_lock_file_listener(void *arg, void *buf, size_t buf_len, unsigned flags) {
+    append_task(AM_ID_RELEASE_LOCK_FILE_REQUEST, buf, buf_len);
+    return UCS_OK;
+}
+static ucs_status_t am_release_lock_client_listener(void *arg, void *buf, size_t buf_len, unsigned flags) {
+    append_task(AM_ID_RELEASE_LOCK_CLIENT_REQUEST, buf, buf_len);
     return UCS_OK;
 }
 static ucs_status_t am_revoke_lock_respond_listener(void *arg, void *buf, size_t buf_len, unsigned flags) {
@@ -244,7 +248,9 @@ void tangram_ucx_server_init(tfs_info_t *tfs_info) {
     assert(status == UCS_OK);
     status = uct_iface_set_am_handler(g_server_context.iface, AM_ID_RELEASE_LOCK_REQUEST, am_release_lock_listener, NULL, 0);
     assert(status == UCS_OK);
-    status = uct_iface_set_am_handler(g_server_context.iface, AM_ID_RELEASE_ALL_LOCK_REQUEST, am_release_all_lock_listener, NULL, 0);
+    status = uct_iface_set_am_handler(g_server_context.iface, AM_ID_RELEASE_LOCK_FILE_REQUEST, am_release_lock_file_listener, NULL, 0);
+    assert(status == UCS_OK);
+    status = uct_iface_set_am_handler(g_server_context.iface, AM_ID_RELEASE_LOCK_CLIENT_REQUEST, am_release_lock_client_listener, NULL, 0);
     assert(status == UCS_OK);
     status = uct_iface_set_am_handler(g_server_context.iface, AM_ID_REVOKE_LOCK_RESPOND, am_revoke_lock_respond_listener, NULL, 0);
     assert(status == UCS_OK);

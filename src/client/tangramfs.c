@@ -51,7 +51,7 @@ void tfs_finalize() {
 
     // Notify the server to unpost all and release all locks
     tfs_unpost_client();
-    tfs_release_all_lock();
+    tfs_release_lock_client();
 
     // Need to have a barrier here because we can not allow
     // server stoped before all other clients
@@ -435,6 +435,10 @@ int tfs_query(tfs_file_t* tf, size_t offset, size_t size, tangram_uct_addr_t** o
 int tfs_close(tfs_file_t* tf) {
     int res = 0;
 
+    // Notify server to unpost and release lock
+    tfs_unpost_file(tf);
+    tfs_release_lock_file(tf);
+
     // Flush from BB to PFS
     tfs_flush(tf);
 
@@ -490,9 +494,15 @@ int tfs_acquire_lock(tfs_file_t* tf, size_t offset, size_t count, int type) {
     free(buf);
 }
 
-int tfs_release_all_lock() {
+int tfs_release_lock_client() {
     int* ack;
-    tangram_issue_rpc(AM_ID_RELEASE_ALL_LOCK_REQUEST, NULL, NULL, NULL, NULL, 0, (void**)&ack);
+    tangram_issue_rpc(AM_ID_RELEASE_LOCK_CLIENT_REQUEST, NULL, NULL, NULL, NULL, 0, (void**)&ack);
+    free(ack);
+}
+
+int tfs_release_lock_file(tfs_file_t* tf) {
+    int* ack;
+    tangram_issue_rpc(AM_ID_RELEASE_LOCK_FILE_REQUEST, tf->filename, NULL, NULL, NULL, 0, (void**)&ack);
     free(ack);
 }
 

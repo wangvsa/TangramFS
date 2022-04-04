@@ -69,7 +69,8 @@ int  tfs_query(tfs_file_t* tf, size_t offset, size_t count, tangram_uct_addr_t**
 // to test the performance penalty
 int tfs_acquire_lock(tfs_file_t* tf, size_t offset, size_t count, int type);
 int tfs_release_lock(tfs_file_t* tf, size_t offset, size_t count);
-int tfs_release_all_lock();
+int tfs_release_lock_file(tfs_file_t* tf);
+int tfs_release_lock_client();
 
 
 // Python API

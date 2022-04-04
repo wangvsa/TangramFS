@@ -30,7 +30,7 @@ void* rpc_handler(int8_t id, tangram_uct_addr_t* client, void* data, uint8_t* re
     } else if(id == AM_ID_UNPOST_FILE_REQUEST) {
         rpc_in_t* in = rpc_in_unpack(data);
         tangram_metamgr_handle_unpost_file(client, in->filename);
-        tangram_debug("[tangramfs] unpost file\n");
+        tangram_debug("[tangramfs] unpost file: %s\n", in->filename);
         respond = malloc(sizeof(int));
         *respond_len = sizeof(int);
         *respond_id = AM_ID_UNPOST_FILE_RESPOND;
@@ -76,12 +76,20 @@ void* rpc_handler(int8_t id, tangram_uct_addr_t* client, void* data, uint8_t* re
         respond = malloc(sizeof(int));
         *respond_len = sizeof(int);
         *respond_id = AM_ID_RELEASE_LOCK_RESPOND;
-    } else if(id == AM_ID_RELEASE_ALL_LOCK_REQUEST) {
-        tangram_lockmgr_release_all_lock(client);
-        tangram_debug("[tangramfs] release all lock");
+    } else if(id == AM_ID_RELEASE_LOCK_FILE_REQUEST) {
+        rpc_in_t* in = rpc_in_unpack(data);
+        tangram_lockmgr_release_lock_file(client, in->filename);
+        tangram_debug("[tangramfs] release lock file: %s\n", in->filename);
+        rpc_in_free(in);
         respond = malloc(sizeof(int));
         *respond_len = sizeof(int);
-        *respond_id = AM_ID_RELEASE_ALL_LOCK_RESPOND;
+        *respond_id = AM_ID_RELEASE_LOCK_FILE_RESPOND;
+    } else if(id == AM_ID_RELEASE_LOCK_CLIENT_REQUEST) {
+        tangram_lockmgr_release_lock_client(client);
+        tangram_debug("[tangramfs] release lock client.\n");
+        respond = malloc(sizeof(int));
+        *respond_len = sizeof(int);
+        *respond_id = AM_ID_RELEASE_LOCK_CLIENT_RESPOND;
     }
 
     return respond;

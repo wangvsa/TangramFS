@@ -76,7 +76,16 @@ void tangram_lockmgr_release_lock(tangram_uct_addr_t* client, char* filename, si
         lock_token_delete(&entry->token_list, token);
 }
 
-void tangram_lockmgr_release_all_lock(tangram_uct_addr_t* client) {
+void tangram_lockmgr_release_lock_file(tangram_uct_addr_t* client, char* filename) {
+    lock_table_t* entry = NULL;
+    HASH_FIND_STR(g_lt, filename, entry);
+
+    if(entry) {
+        lock_token_delete_client(&entry->token_list, client);
+    }
+}
+
+void tangram_lockmgr_release_lock_client(tangram_uct_addr_t* client) {
     lock_table_t *entry, *tmp;
     HASH_ITER(hh, g_lt, entry, tmp) {
         lock_token_delete_client(&entry->token_list, client);

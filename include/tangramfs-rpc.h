@@ -36,7 +36,7 @@ static int rpc_in_intervals_per_am(char* filename, size_t am_max_size) {
 }
 
 static void* rpc_in_pack(char* filename, int num_intervals, size_t *offsets, size_t *counts, int* types, size_t *size) {
-    if(num_intervals == 0) {
+    if(num_intervals == 0 && filename == NULL) {
         *size = 0;
         return NULL;
     }
