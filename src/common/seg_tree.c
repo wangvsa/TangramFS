@@ -69,27 +69,28 @@ void seg_tree_destroy(struct seg_tree* seg_tree)
     seg_tree_clear(seg_tree);
 }
 
-/* Allocate a node for the range tree.  Free node with free() when finished */
+/* Allocate a node for the range tree. Free node with seg_tree_node_free() when finished */
 static struct seg_tree_node*
 seg_tree_node_alloc(unsigned long start, unsigned long end, unsigned long ptr,
                     tangram_uct_addr_t* owner, bool posted)
 {
-    /* allocate a new node structure */
     struct seg_tree_node* node;
     node = calloc(1, sizeof(*node));
-    if (!node) {
-        return NULL;
-    }
 
-    /* record logical range and physical offset */
     node->start  = start;
     node->end    = end;
     node->ptr    = ptr;
-    node->owner  = owner;
+    node->owner  = tangram_uct_addr_duplicate(owner);
     node->posted = posted;
 
     return node;
 }
+
+void seg_tree_node_free(struct seg_tree_node* node) {
+    tangram_uct_addr_free(node->owner);
+    free(node);
+}
+
 
 /*
  * Given two start/end ranges, return a new range from start1/end1 that
@@ -194,7 +195,7 @@ int seg_tree_add(struct seg_tree* seg_tree,
              * non-overlapping range.  Delete the existing range.
              */
             RB_REMOVE(inttree, &seg_tree->head, overlap);
-            free(overlap);
+            seg_tree_node_free(overlap);
             seg_tree->count--;
         } else {
             /*
@@ -206,11 +207,6 @@ int seg_tree_add(struct seg_tree* seg_tree,
              */
             resized = seg_tree_node_alloc(new_start, new_end,
                 overlap->ptr+(new_start-overlap->start), overlap->owner, overlap->posted);
-            if (!resized) {
-                free(node);
-                rc = ENOMEM;
-                goto release_add;
-            }
 
             /*
              * If the non-overlapping part came from the front portion of the
@@ -224,20 +220,13 @@ int seg_tree_add(struct seg_tree* seg_tree,
                  * There's still a remaining section after the non-overlapping
                  * part.  Add it in.
                  */
-                remaining = seg_tree_node_alloc(
-                    resized->end + 1, overlap->end,
+                remaining = seg_tree_node_alloc(resized->end + 1, overlap->end,
                     overlap->ptr+(resized->end+1-overlap->start), overlap->owner, overlap->posted);
-                if (!remaining) {
-                    free(node);
-                    free(resized);
-                    rc = ENOMEM;
-                    goto release_add;
-                }
             }
 
             /* Remove our old range */
             RB_REMOVE(inttree, &seg_tree->head, overlap);
-            free(overlap);
+            seg_tree_node_free(overlap);
             seg_tree->count--;
 
             /* Insert the non-overlapping part of the new range */
@@ -313,7 +302,7 @@ int seg_tree_coalesce_prev_nolock(struct seg_tree* seg_tree,
 
             /* Delete new extent from the tree and free it. */
             RB_REMOVE(inttree, &seg_tree->head, target);
-            free(target);
+            seg_tree_node_free(target);
             seg_tree->count--;
 
 
@@ -352,7 +341,7 @@ int seg_tree_coalesce_next_nolock(struct seg_tree* seg_tree,
 
             /* Delete next extent from the tree and free it. */
             RB_REMOVE(inttree, &seg_tree->head, next);
-            free(next);
+            seg_tree_node_free(next);
             seg_tree->count--;
 
             return 1;
@@ -447,7 +436,7 @@ int seg_tree_remove(
                 /* start <= node_s <= node_e <= end
                  * remove whole extent */
                 RB_REMOVE(inttree, &seg_tree->head, node);
-                free(node);
+                seg_tree_node_free(node);
                 seg_tree->count--;
             } else {
                 /* start <= node_s <= end < node_e
@@ -504,16 +493,13 @@ struct seg_tree_node* seg_tree_find_nolock(
 {
     /* Create a range of just our starting byte offset */
     struct seg_tree_node* node = seg_tree_node_alloc(start, start, 0, TANGRAM_UCT_ADDR_IGNORE, false);
-    if (!node) {
-        return NULL;
-    }
 
     /* Search tree for either a range that overlaps with
      * the target range (starting byte), or otherwise the
      * node for the next biggest starting byte. */
     struct seg_tree_node* next = RB_NFIND(inttree, &seg_tree->head, node);
 
-    free(node);
+    seg_tree_node_free(node);
 
     /* We may have found a node that doesn't include our starting
      * byte offset, but it would be the range with the lowest
@@ -680,13 +666,13 @@ void seg_tree_clear(struct seg_tree* seg_tree)
     while ((node = seg_tree_iter(seg_tree, node))) {
         if (oldnode) {
             RB_REMOVE(inttree, &seg_tree->head, oldnode);
-            free(oldnode);
+            seg_tree_node_free(oldnode);
         }
         oldnode = node;
     }
     if (oldnode) {
         RB_REMOVE(inttree, &seg_tree->head, oldnode);
-        free(oldnode);
+        seg_tree_node_free(oldnode);
     }
 
     seg_tree->count = 0;
@@ -719,7 +705,7 @@ void seg_tree_clear_client(struct seg_tree* seg_tree, tangram_uct_addr_t* client
             if(tangram_uct_addr_compare(oldnode->owner, client) == 0) {
                 //printf("remove [%ld-%ld]\n", oldnode->start, oldnode->end);
                 RB_REMOVE(inttree, &seg_tree->head, oldnode);
-                free(oldnode);
+                seg_tree_node_free(oldnode);
             } else {
                 // Need to update (or recalculate the max end offset)
                 new_max = MAX(new_max, oldnode->end);
@@ -730,7 +716,7 @@ void seg_tree_clear_client(struct seg_tree* seg_tree, tangram_uct_addr_t* client
     if (oldnode) {
         if(tangram_uct_addr_compare(oldnode->owner, client) == 0) {
             RB_REMOVE(inttree, &seg_tree->head, oldnode);
-            free(oldnode);
+            seg_tree_node_free(oldnode);
         } else {
             new_max = MAX(new_max, oldnode->end);
         }

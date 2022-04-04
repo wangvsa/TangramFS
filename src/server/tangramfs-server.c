@@ -18,10 +18,9 @@ void* rpc_handler(int8_t id, tangram_uct_addr_t* client, void* data, uint8_t* re
     void *respond = NULL;
 
     if(id == AM_ID_POST_REQUEST) {
-        tangram_uct_addr_t* client_dup = tangram_uct_addr_duplicate(client);
         rpc_in_t* in = rpc_in_unpack(data);
         for(int i = 0; i < in->num_intervals; i++)
-            tangram_metamgr_handle_post(client_dup, in->filename, in->intervals[i].offset, in->intervals[i].count);
+            tangram_metamgr_handle_post(client, in->filename, in->intervals[i].offset, in->intervals[i].count);
         tangram_debug("[tangramfs] post, filename: %s, offset:%lu, count: %lu\n", in->filename, in->intervals[0].offset, in->intervals[0].count);
         rpc_in_free(in);
         respond = malloc(sizeof(int));
