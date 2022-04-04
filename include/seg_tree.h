@@ -66,39 +66,23 @@ int seg_tree_add(struct seg_tree* seg_tree, unsigned long start, unsigned long e
  *
  * Returns 0 on success, nonzero otherwise.
  */
-int seg_tree_remove(
-    struct seg_tree* seg_tree,
-    unsigned long start,
-    unsigned long end
-);
+int seg_tree_remove(struct seg_tree* seg_tree, unsigned long start, unsigned long end);
 
 /*
  * Find the first seg_tree_node that falls in a [start, end] range.
  */
-struct seg_tree_node* seg_tree_find(
-    struct seg_tree* seg_tree,
-    unsigned long start,
-    unsigned long end
-);
+struct seg_tree_node* seg_tree_find(struct seg_tree* seg_tree, unsigned long start, unsigned long end);
 
 /*
  * Find the exact range match of [start, end]
  */
-struct seg_tree_node* seg_tree_find_exact(
-    struct seg_tree* seg_tree,
-    unsigned long start,
-    unsigned long end
-);
+struct seg_tree_node* seg_tree_find_exact(struct seg_tree* seg_tree, unsigned long start, unsigned long end);
 
 /*
  * Find the first seg_tree_node that falls in a [start, end] range.
  * Assumes you've already locked the tree.
  */
-struct seg_tree_node* seg_tree_find_nolock(
-    struct seg_tree* seg_tree,
-    unsigned long start,
-    unsigned long end
-);
+struct seg_tree_node* seg_tree_find_nolock(struct seg_tree* seg_tree, unsigned long start, unsigned long end);
 
 /*
  * Given a range tree and a starting node, iterate though all the nodes
@@ -120,8 +104,7 @@ struct seg_tree_node* seg_tree_find_nolock(
  * and unlocking the seg_tree before doing the iteration (see
  * seg_tree_rdlock()/seg_tree_wrlock()/seg_tree_unlock()).
  */
-struct seg_tree_node* seg_tree_iter(struct seg_tree* seg_tree,
-    struct seg_tree_node* start);
+struct seg_tree_node* seg_tree_iter(struct seg_tree* seg_tree, struct seg_tree_node* start);
 
 /* Return the number of segments in the segment tree */
 unsigned long seg_tree_count(struct seg_tree* seg_tree);

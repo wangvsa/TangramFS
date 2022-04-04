@@ -103,7 +103,7 @@ tfs_file_t* tfs_open(const char* pathname) {
         // See posix-wrapper.c
         #endif
 
-        seg_tree_init(&tf->it2);
+        seg_tree_init(&tf->seg_tree);
         lock_token_list_init(&tf->token_list);
 
                                 // TODO remove() call is not intercepted
@@ -128,19 +128,22 @@ void tfs_stat(tfs_file_t* tf, struct stat* buf) {
 /*
  * Flush from local buffer file to PFS
  *
- * TODO only flush dirty segments
+ * TODO 1. Only flush dirty segments, i.e., tfs_fetch() also adds to seg_tree
+ *      2. We can not guarantee that our segments are the latest, someone else
+ *         probably has overwriten the same location.
+ *         -- A coordinated flush mechanism is needed.
  */
 void tfs_flush(tfs_file_t *tf) {
 
     size_t chunk_size = 4*1024*1024;
     char* buf = tangram_malloc(chunk_size);
 
-    seg_tree_rdlock(&tf->it2);
+    seg_tree_rdlock(&tf->seg_tree);
     struct seg_tree_node *node = NULL;
 
-    while ((node = seg_tree_iter(&tf->it2, node))) {
+    while ((node = seg_tree_iter(&tf->seg_tree, node))) {
 
-        ssize_t n;  // cannot use size_t, as n can be -1
+        ssize_t n;  // use ssize_t, as n can be -1
         ssize_t all = node->end - node->start + 1;
 
         ssize_t local_offset;
@@ -162,7 +165,7 @@ void tfs_flush(tfs_file_t *tf) {
         }
     }
 
-    seg_tree_unlock(&tf->it2);
+    seg_tree_unlock(&tf->seg_tree);
 
     tangram_free(buf, chunk_size);
 }
@@ -173,7 +176,7 @@ size_t tfs_write(tfs_file_t* tf, const void* buf, size_t size) {
     size_t res = TANGRAM_REAL_CALL(pwrite)(tf->local_fd, buf, size, local_offset);
     //TANGRAM_REAL_CALL(fsync)(tf->local_fd);
 
-    int rc = seg_tree_add(&tf->it2, tf->offset, tf->offset+size-1, local_offset, tangram_rpc_get_client_addr(), false);
+    int rc = seg_tree_add(&tf->seg_tree, tf->offset, tf->offset+size-1, local_offset, tangram_rpc_get_client_addr(), false);
     assert(rc == 0);
 
     tf->offset += size;
@@ -225,7 +228,7 @@ size_t tfs_read(tfs_file_t* tf, void* buf, size_t size) {
  */
 size_t read_local(tfs_file_t* tf, void* buf, size_t req_start, size_t req_end) {
 
-    struct seg_tree *extents = &tf->it2;
+    struct seg_tree *extents = &tf->seg_tree;
 
     seg_tree_rdlock(extents);
 
@@ -337,8 +340,8 @@ size_t tfs_seek(tfs_file_t *tf, size_t offset, int whence) {
     // is the global end offset
     // we need to ask server for the EOF
     if(whence == SEEK_END) {
-        if( seg_tree_count(&tf->it2) > 0)
-            tf->offset = seg_tree_max(&tf->it2) + 1;
+        if( seg_tree_count(&tf->seg_tree) > 0)
+            tf->offset = seg_tree_max(&tf->seg_tree) + 1;
         else
             tf->offset = 0;
     }
@@ -355,17 +358,17 @@ void tfs_post(tfs_file_t* tf, size_t offset, size_t count) {
 
     // Check if this is a valid range,
     // we only allow commiting an exact previous write(offset, count)
-    struct seg_tree_node* node = seg_tree_find_exact(&tf->it2, offset, offset+count-1);
+    struct seg_tree_node* node = seg_tree_find_exact(&tf->seg_tree, offset, offset+count-1);
     assert(node != NULL);
 
     int* ack;
     tangram_issue_rpc(AM_ID_POST_REQUEST, tf->filename, &offset, &count, NULL, 1, (void**)&ack);
     free(ack);
 
-    seg_tree_wrlock(&tf->it2);
-    seg_tree_set_posted_nolock(&tf->it2, node);
-    seg_tree_coalesce_nolock(&tf->it2, node);
-    seg_tree_unlock(&tf->it2);
+    seg_tree_wrlock(&tf->seg_tree);
+    seg_tree_set_posted_nolock(&tf->seg_tree, node);
+    seg_tree_coalesce_nolock(&tf->seg_tree, node);
+    seg_tree_unlock(&tf->seg_tree);
 }
 
 void tfs_post_file(tfs_file_t* tf) {
@@ -374,9 +377,9 @@ void tfs_post_file(tfs_file_t* tf) {
     size_t *offsets = NULL;
     size_t *counts  = NULL;
 
-    seg_tree_wrlock(&tf->it2);
+    seg_tree_wrlock(&tf->seg_tree);
     struct seg_tree_node *node = NULL;
-    while ((node = seg_tree_iter(&tf->it2, node))) {
+    while ((node = seg_tree_iter(&tf->seg_tree, node))) {
         if(!node->posted) num++;
     }
 
@@ -384,16 +387,16 @@ void tfs_post_file(tfs_file_t* tf) {
     counts  = tangram_malloc(sizeof(size_t) * num);
 
     node = NULL;
-    while ((node = seg_tree_iter(&tf->it2, node))) {
-        if(!seg_tree_posted_nolock(&tf->it2, node)) {
+    while ((node = seg_tree_iter(&tf->seg_tree, node))) {
+        if(!seg_tree_posted_nolock(&tf->seg_tree, node)) {
             offsets[i]  = node->start;
             counts[i++] = node->end - node->start + 1;
-            seg_tree_set_posted_nolock(&tf->it2, node);
+            seg_tree_set_posted_nolock(&tf->seg_tree, node);
         }
     }
 
     // Coalesce all ranges in the tree
-    seg_tree_coalesce_all_nolock(&tf->it2);
+    seg_tree_coalesce_all_nolock(&tf->seg_tree);
 
     int* ack;
     tangram_issue_rpc(AM_ID_POST_REQUEST, tf->filename, offsets, counts, NULL, num, (void**)&ack);
@@ -402,7 +405,7 @@ void tfs_post_file(tfs_file_t* tf) {
     tangram_free(offsets, sizeof(size_t)*num);
     tangram_free(counts, sizeof(size_t)*num);
 
-    seg_tree_unlock(&tf->it2);
+    seg_tree_unlock(&tf->seg_tree);
 }
 
 void tfs_unpost_file(tfs_file_t* tf) {
@@ -443,7 +446,7 @@ int tfs_close(tfs_file_t* tf) {
     tfs_flush(tf);
 
     // Clean up seg-tree and lock tokens
-    seg_tree_destroy(&tf->it2);
+    seg_tree_destroy(&tf->seg_tree);
     lock_token_list_destroy(&tf->token_list);
 
     // Delete from hash table

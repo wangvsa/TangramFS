@@ -29,17 +29,19 @@
 
 typedef struct tfs_file {
 
-    char   filename[256]; // file name of the targeting file
-    int    fd;            // file descriptor of the targeting file
-    FILE*  stream;        // file stream of the targeting file
+    char   filename[256];           // File name of the targeting file on PFS
+    int    fd;                      // File descriptor of the targeting file on PFS
+    FILE*  stream;                  // File stream of the targeting file on PFS
 
-    size_t offset;        // offset of the targeting file in this process
-    int    local_fd;
-    struct seg_tree it2;
+    size_t offset;                  // Offset of the targeting file in this process
 
-    lock_token_list_t token_list; // lock tokens, used only when implmenting POSIX consistency
+    int    local_fd;                // File descriptor of the local buffer file
 
-    UT_hash_handle hh;    // filename as key
+    struct seg_tree seg_tree;
+
+    lock_token_list_t token_list;   // lock tokens, used only for implmenting POSIX consistency
+
+    UT_hash_handle hh;              // filename as key
 
 } tfs_file_t;
 
