@@ -50,7 +50,7 @@ void tfs_finalize() {
     tfs.initialized = false;
 
     // Notify the server to unpost all and release all locks
-    tfs_unpost_all();
+    tfs_unpost_client();
     tfs_release_all_lock();
 
     // Need to have a barrier here because we can not allow
@@ -60,25 +60,15 @@ void tfs_finalize() {
     tangram_rma_service_stop();
     tangram_rpc_service_stop();
 
-    // Clear all resources
+    // Here, we should have no files in the table.
+    // Just in case users did not close all files
+    // before calling finalize()
     tfs_file_t *tf, *tmp;
     HASH_ITER(hh, tfs_files, tf, tmp) {
-
-        // TODO need to make sure to avoid concurrent writes from all clients.
-        // tfs_flush(tf);
-
-        seg_tree_destroy(&tf->it2);
-        lock_token_list_destroy(&tf->token_list);
-
-        HASH_DEL(tfs_files, tf);
-        tangram_free(tf, sizeof(tfs_file_t));
+        tfs_close(tf);
     }
 
     tangram_release_info(&tfs);
-
-    // TODO:
-    // Need to notify the server to delete all records
-    // about me, in case others asking the file I was writing
 }
 
 
@@ -106,15 +96,25 @@ tfs_file_t* tfs_open(const char* pathname) {
         tf->fd     = -1;
         tf->offset = 0;
         strcpy(tf->filename, pathname);
+
+        #ifndef TANGRAMFS_PRELOAD
+        tf->fd = TANGRAM_REAL_CALL(open)(tf->filename, O_CREAT|O_RDWR, S_IRWXU);
+        // TANGRAMFS_PRELOAD=ON, the file will be opened by the real POSIX call
+        // See posix-wrapper.c
+        #endif
+
         seg_tree_init(&tf->it2);
         lock_token_list_init(&tf->token_list);
 
+                                // TODO remove() call is not intercepted
         remove(abs_filename);   // delete the local file first
         HASH_ADD_STR(tfs_files, filename, tf);
     }
 
     // open node-local buffer file
     tf->local_fd = TANGRAM_REAL_CALL(open)(abs_filename, O_CREAT|O_RDWR, S_IRWXU);
+
+
     return tf;
 }
 
@@ -128,9 +128,11 @@ void tfs_stat(tfs_file_t* tf, struct stat* buf) {
 /*
  * Flush from local buffer file to PFS
  *
+ * TODO only flush dirty segments
  */
 void tfs_flush(tfs_file_t *tf) {
-    size_t chunk_size = 4096;
+
+    size_t chunk_size = 4*1024*1024;
     char* buf = tangram_malloc(chunk_size);
 
     seg_tree_rdlock(&tf->it2);
@@ -144,15 +146,19 @@ void tfs_flush(tfs_file_t *tf) {
         ssize_t local_offset;
         ssize_t done = 0;
 
+
         while(done < all) {
 
-            n = TANGRAM_REAL_CALL(pread)(tf->local_fd, buf, chunk_size, node->ptr+done);
+            size_t s = chunk_size < all ? chunk_size : all;
+            n = TANGRAM_REAL_CALL(pread)(tf->local_fd, buf, s, node->ptr+done);
+
             // something wrong, the file was deleted?
             if(n <= 0) break;
 
-            done += n;
-
+            // TODO tf->fd was already opened? what if the file was opened as tf->stream
             TANGRAM_REAL_CALL(pwrite)(tf->fd, buf, n, node->start+done);
+
+            done += n;
         }
     }
 
@@ -214,6 +220,9 @@ size_t tfs_read(tfs_file_t* tf, void* buf, size_t size) {
 }
 
 
+/**
+ * Read from local buffer or PFS directly
+ */
 size_t read_local(tfs_file_t* tf, void* buf, size_t req_start, size_t req_end) {
 
     struct seg_tree *extents = &tf->it2;
@@ -266,13 +275,10 @@ size_t read_local(tfs_file_t* tf, void* buf, size_t req_start, size_t req_end) {
         seg_tree_unlock(extents);
         tangram_debug("[tangramfs] read from PFS %s, [%ld, %ld]\n", tf->filename, req_start, req_end-req_start+1);
 
-        // the original file is possibly not opened
-        // when running on TANGRAM_PRELOAD=OFF mode
-        if(tf->fd == -1)
-            tf->fd = TANGRAM_REAL_CALL(open)(tf->filename, O_RDWR);
-
         // TODO opt possible: can we avoid the flush?
         tfs_flush(tf);
+
+        // TODO what if opend as tf->stream?
         return TANGRAM_REAL_CALL(pread)(tf->fd, buf, req_end-req_start+1, req_start);
     }
 
@@ -362,7 +368,7 @@ void tfs_post(tfs_file_t* tf, size_t offset, size_t count) {
     seg_tree_unlock(&tf->it2);
 }
 
-void tfs_post_all(tfs_file_t* tf) {
+void tfs_post_file(tfs_file_t* tf) {
     int num = 0;
     int i = 0;
     size_t *offsets = NULL;
@@ -399,9 +405,15 @@ void tfs_post_all(tfs_file_t* tf) {
     seg_tree_unlock(&tf->it2);
 }
 
-void tfs_unpost_all() {
+void tfs_unpost_file(tfs_file_t* tf) {
     int* ack;
-    tangram_issue_rpc(AM_ID_UNPOST_ALL_REQUEST, NULL, NULL, NULL, NULL, 0, (void**)&ack);
+    tangram_issue_rpc(AM_ID_UNPOST_FILE_REQUEST, tf->filename, NULL, NULL, NULL, 0, (void**)&ack);
+    free(ack);
+}
+
+void tfs_unpost_client() {
+    int* ack;
+    tangram_issue_rpc(AM_ID_UNPOST_CLIENT_REQUEST, NULL, NULL, NULL, NULL, 0, (void**)&ack);
     free(ack);
 }
 
@@ -422,6 +434,19 @@ int tfs_query(tfs_file_t* tf, size_t offset, size_t size, tangram_uct_addr_t** o
 
 int tfs_close(tfs_file_t* tf) {
     int res = 0;
+
+    // Flush from BB to PFS
+    tfs_flush(tf);
+
+    // Clean up seg-tree and lock tokens
+    seg_tree_destroy(&tf->it2);
+    lock_token_list_destroy(&tf->token_list);
+
+    // Delete from hash table
+    HASH_DEL(tfs_files, tf);
+    tangram_free(tf, sizeof(tfs_file_t));
+
+    // Close all file descriptors
     if(tf->fd != -1) {
         TANGRAM_REAL_CALL(close)(tf->fd);
         tf->fd = -1;
@@ -435,11 +460,11 @@ int tfs_close(tfs_file_t* tf) {
         tf->local_fd = -1;
     }
 
+    // TODO: consider the below behaviour?
     // The tfs_file_t and its interval tree is not released
     // just like Linux page cache won't be cleared at close point
-    // because the same file might be opened later for read.
+    // because the same file might be opened later again.
     // We clean all resources at tfs_finalize();
-    // TODO this assumes we have enough buffer space.
     return res;
 }
 

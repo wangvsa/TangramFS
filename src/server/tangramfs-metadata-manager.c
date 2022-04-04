@@ -48,8 +48,15 @@ void tangram_metamgr_handle_post(tangram_uct_addr_t* client, char* filename, siz
     assert(res == 0);
 }
 
+void tangram_metamgr_handle_unpost_file(tangram_uct_addr_t* client, char* filename) {
+    seg_tree_table_t *entry = NULL;
+    HASH_FIND_STR(g_stt, filename, entry);
+    if(entry) {
+        seg_tree_clear_client(&entry->tree, client);
+    }
+}
 
-void tangram_metamgr_handle_unpost_all(tangram_uct_addr_t* client) {
+void tangram_metamgr_handle_unpost_client(tangram_uct_addr_t* client) {
     seg_tree_table_t *entry, *tmp;
     HASH_ITER(hh, g_stt, entry, tmp) {
         seg_tree_clear_client(&entry->tree, client);

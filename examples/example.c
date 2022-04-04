@@ -31,7 +31,7 @@ void write_phase() {
         tfs_post(tf, offset+i*DATA_SIZE, DATA_SIZE);
     }
     // Post all writes in one RPC
-    //tfs_post_all(tf);
+    //tfs_post_file(tf);
     MPI_Barrier(MPI_COMM_WORLD);
     double tend = MPI_Wtime();
 

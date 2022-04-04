@@ -109,8 +109,12 @@ static ucs_status_t am_post_listener(void *arg, void *buf, size_t buf_len, unsig
     append_task(AM_ID_POST_REQUEST, buf, buf_len);
     return UCS_OK;
 }
-static ucs_status_t am_unpost_all_listener(void *arg, void *buf, size_t buf_len, unsigned flags) {
-    append_task(AM_ID_UNPOST_ALL_REQUEST, buf, buf_len);
+static ucs_status_t am_unpost_file_listener(void *arg, void *buf, size_t buf_len, unsigned flags) {
+    append_task(AM_ID_UNPOST_FILE_REQUEST, buf, buf_len);
+    return UCS_OK;
+}
+static ucs_status_t am_unpost_client_listener(void *arg, void *buf, size_t buf_len, unsigned flags) {
+    append_task(AM_ID_UNPOST_CLIENT_REQUEST, buf, buf_len);
     return UCS_OK;
 }
 static ucs_status_t am_stat_listener(void *arg, void *buf, size_t buf_len, unsigned flags) {
@@ -230,7 +234,9 @@ void tangram_ucx_server_init(tfs_info_t *tfs_info) {
     assert(status == UCS_OK);
     status = uct_iface_set_am_handler(g_server_context.iface, AM_ID_POST_REQUEST, am_post_listener, NULL, 0);
     assert(status == UCS_OK);
-    status = uct_iface_set_am_handler(g_server_context.iface, AM_ID_UNPOST_ALL_REQUEST, am_unpost_all_listener, NULL, 0);
+    status = uct_iface_set_am_handler(g_server_context.iface, AM_ID_UNPOST_FILE_REQUEST, am_unpost_file_listener, NULL, 0);
+    assert(status == UCS_OK);
+    status = uct_iface_set_am_handler(g_server_context.iface, AM_ID_UNPOST_CLIENT_REQUEST, am_unpost_client_listener, NULL, 0);
     assert(status == UCS_OK);
     status = uct_iface_set_am_handler(g_server_context.iface, AM_ID_STAT_REQUEST, am_stat_listener, NULL, 0);
     assert(status == UCS_OK);
