@@ -37,6 +37,7 @@ pthread_rwlock_t uthash_lock = PTHREAD_RWLOCK_INITIALIZER;
     HASH_ADD(hh, head, key, keylen, entry);                     \
     pthread_rwlock_unlock(&uthash_lock);
 
+
 #define HASH_ADD_KEYPTR_WLOCK(hh, head, key, keylen, entry)     \
     pthread_rwlock_wrlock(&uthash_lock);                        \
     HASH_ADD_KEYPTR(hh, head, key, keylen, entry);              \
@@ -52,6 +53,14 @@ pthread_rwlock_t uthash_lock = PTHREAD_RWLOCK_INITIALIZER;
     }                                                           \
     /* realse the lock only after we retrived found->tf */      \
     /* because `found` can be potentially freed at finalize()*/ \
+    pthread_rwlock_unlock(&uthash_lock);
+
+#define HASH_REMOVE_WLOCK(hh, head, key, keylen, entry)         \
+    pthread_rwlock_wrlock(&uthash_lock);                        \
+    HASH_FIND(hh, head, key, keylen, entry);                    \
+    if(entry) {                                                 \
+        HASH_DELETE(hh, head, entry);                           \
+    }                                                           \
     pthread_rwlock_unlock(&uthash_lock);
 
 
@@ -76,28 +85,61 @@ tfs_file_t* path2tf(const char* path) {
     return tf;
 }
 
-
-tfs_file_entry_t* add_to_map(tfs_file_t* tf) {
-
+tfs_file_entry_t* file_entry_alloc(tfs_file_t* tf) {
     tfs_file_entry_t *entry = malloc(sizeof(tfs_file_entry_t));
     entry->tf     = tf;
     entry->fd     = tf->fd;
     entry->stream = tf->stream;
     entry->path   = realpath(tf->filename, NULL);
+    return entry;
+}
+void file_entry_free(tfs_file_entry_t* entry) {
+    if(entry) {
+        if(entry->path)
+            free(entry->path);
+        entry = NULL;
+    }
+    free(entry);
+}
 
-    if(entry->fd != -1) {   // must have "{}", because the macro below will translate to multiple lines.
+void add_to_map(tfs_file_t* tf) {
+
+    if(tf->fd != -1) {   // must have "{}", because the macro below will translate to multiple lines.
+        tfs_file_entry_t* entry = file_entry_alloc(tf);
         HASH_ADD_WLOCK(hh_fd, tf_by_fd, fd, sizeof(int), entry);
     }
-
-    if(entry->stream != NULL) {
+    if(tf->stream != NULL) {
+        tfs_file_entry_t* entry = file_entry_alloc(tf);
         HASH_ADD_WLOCK(hh_stream, tf_by_stream, stream, sizeof(FILE*), entry);
     }
+    if(tf->filename != NULL) {
+        // Since we don't delete the <path, entry> entry at close()
+        // time, so at open() time we only need to update if it exists
+        tfs_file_entry_t* entry = NULL;
 
-    if(entry->path != NULL) {
+        HASH_REMOVE_WLOCK(hh_path, tf_by_path, &(tf->filename), sizeof(FILE*), entry);
+
+        if(entry)
+            entry->tf = tf;
+        else
+            entry = file_entry_alloc(tf);
         HASH_ADD_KEYPTR_WLOCK(hh_path, tf_by_path, entry->path, strlen(entry->path), entry);
     }
+}
 
-    return entry;
+void remove_from_map(tfs_file_t* tf) {
+    if(tf->fd != -1) {
+        tfs_file_entry_t* entry = NULL;
+        HASH_REMOVE_WLOCK(hh_fd, tf_by_fd, &(tf->fd), sizeof(int), entry);
+        if(entry) file_entry_free(entry);
+    }
+    if(tf->stream != NULL) {
+        tfs_file_entry_t* entry = NULL;
+        HASH_REMOVE_WLOCK(hh_stream, tf_by_stream, &(tf->stream), sizeof(FILE*), entry);
+        if(entry) file_entry_free(entry);
+    }
+    // Do not remove from the <path, entry> map,
+    // the entry may be accessed by stat() function.
 }
 
 
@@ -110,11 +152,11 @@ FILE* TANGRAM_WRAP(fopen)(const char *filename, const char *mode)
     MAP_OR_FAIL(fopen);
     stream = TANGRAM_REAL_CALL(fopen)(filename, mode);
 
-    if(intercept) {
+    if(intercept && stream!=NULL) {
         tfs_file_t* tf = tfs_open(filename);
         tf->stream     = stream;
         tangram_debug("[tangramfs] fopen %s\n", filename);
-        tfs_file_entry_t* entry = add_to_map(tf);
+        add_to_map(tf);
     }
 
     return stream;
@@ -164,10 +206,10 @@ size_t TANGRAM_WRAP(fwrite)(const void *ptr, size_t size, size_t count, FILE * s
 {
     tfs_file_t *tf = stream2tf(stream);
     if(tf) {
-        size_t res = tangram_write_impl(tf, ptr, count*size);
+        ssize_t res = tangram_write_impl(tf, ptr, count*size);
         // Note that fwrite on success returns the count not total bytes.
         res = (res == size*count) ? count: res;
-        tangram_debug("[tangramfs] fwrite %s (%lu, %lu), return: %lu\n", tf->filename, size, count, res);
+        tangram_debug("[tangramfs] fwrite %s (%lu, %lu), return: %ld\n", tf->filename, size, count, res);
         return res;
     }
 
@@ -179,9 +221,9 @@ size_t TANGRAM_WRAP(fread)(void * ptr, size_t size, size_t count, FILE * stream)
 {
     tfs_file_t *tf = stream2tf(stream);
     if(tf) {
-        size_t res = tangram_read_impl(tf, ptr, count*size);
+        ssize_t res = tangram_read_impl(tf, ptr, count*size);
         res = (res == size*count) ? count: res;
-        tangram_debug("[tangramfs] fread %s (%lu, %lu), return: %lu\n", tf->filename, size, count, res);
+        tangram_debug("[tangramfs] fread %s (%lu, %lu), return: %ld\n", tf->filename, size, count, res);
         return res;
     }
 
@@ -191,10 +233,9 @@ size_t TANGRAM_WRAP(fread)(void * ptr, size_t size, size_t count, FILE * stream)
 
 int TANGRAM_WRAP(fclose)(FILE * stream)
 {
-
     tfs_file_t *tf = stream2tf(stream);
-
     if(tf) {
+        remove_from_map(tf);
         tangram_debug("[tangramfs] fclose %s\n", tf->filename);
         return tangram_close_impl(tf);
     }
@@ -219,11 +260,11 @@ int TANGRAM_WRAP(open)(const char *pathname, int flags, ...)
         fd = TANGRAM_REAL_CALL(open)(pathname, flags);
     }
 
-    if(intercept) {
+    if(intercept && fd!=-1) {
         tfs_file_t* tf = tfs_open(pathname);
         tf->fd = fd;
-        tangram_debug("[tangramfs] open %s %d\n", pathname, tf->local_fd);
-        tfs_file_entry_t* entry = add_to_map(tf);
+        tangram_debug("[tangramfs] open %s %d\n", pathname, tf->fd);
+        add_to_map(tf);
     }
     return fd;
 }
@@ -244,10 +285,11 @@ int TANGRAM_WRAP(open64)(const char *pathname, int flags, ...)
         fd = TANGRAM_REAL_CALL(open64)(pathname, flags);
     }
 
-    if(intercept) {
+    if(intercept && fd!=-1) {
         tfs_file_t* tf = tfs_open(pathname);
         tf->fd = fd;
-        tfs_file_entry_t* entry = add_to_map(tf);
+        tangram_debug("[tangramfs] open64 %s %d\n", pathname, tf->fd);
+        add_to_map(tf);
     }
 
     return fd;
@@ -257,7 +299,7 @@ off_t TANGRAM_WRAP(lseek)(int fd, off_t offset, int whence)
 {
     tfs_file_t* tf = fd2tf(fd);
     if(tf) {
-        tangram_debug("[tangramfs] lseek %s, offset: %lu, whence: %d)\n", tf->filename, offset, whence);
+        tangram_debug("[tangramfs] lseek %s, offset: %lu, whence: %d\n", tf->filename, offset, whence);
         return tfs_seek(tf, offset, whence);
     }
 
@@ -269,7 +311,7 @@ off64_t TANGRAM_WRAP(lseek64)(int fd, off64_t offset, int whence)
 {
     tfs_file_t* tf = fd2tf(fd);
     if(tf) {
-        tangram_debug("[tangramfs] lseek64 %s, offset: %lu, whence: %d)\n", tf->filename, offset, whence);
+        tangram_debug("[tangramfs] lseek64 %s, offset: %lu, whence: %d\n", tf->filename, offset, whence);
         return tfs_seek(tf, offset, whence);
     }
 
@@ -283,8 +325,8 @@ ssize_t TANGRAM_WRAP(write)(int fd, const void *buf, size_t count)
     tfs_file_t* tf = fd2tf(fd);
     if(tf) {
         tangram_debug("[tangramfs] write start %s (%lu, %lu)\n", tf->filename, tf->offset, count);
-        size_t res = tangram_write_impl(tf, buf, count);
-        tangram_debug("[tangramfs] write done %s (%lu), return: %lu\n", tf->filename, count, res);
+        ssize_t res = tangram_write_impl(tf, buf, count);
+        tangram_debug("[tangramfs] write done %s (%lu), return: %ld\n", tf->filename, count, res);
         return res;
     }
 
@@ -296,8 +338,8 @@ ssize_t TANGRAM_WRAP(read)(int fd, void *buf, size_t count)
 {
     tfs_file_t* tf = fd2tf(fd);
     if(tf) {
-        size_t res = tangram_read_impl(tf, buf, count);
-        tangram_debug("[tangramfs] read %s (%lu), return: %lu\n", tf->filename, count, res);
+        ssize_t res = tangram_read_impl(tf, buf, count);
+        tangram_debug("[tangramfs] read %s (%lu), return: %ld\n", tf->filename, count, res);
         return res;
     }
 
@@ -308,6 +350,7 @@ ssize_t TANGRAM_WRAP(read)(int fd, void *buf, size_t count)
 int TANGRAM_WRAP(close)(int fd) {
     tfs_file_t* tf = fd2tf(fd);
     if(tf) {
+        remove_from_map(tf);
         tangram_debug("[tangramfs] close %s\n", tf->filename);
         return tangram_close_impl(tf);
     }
@@ -321,9 +364,9 @@ ssize_t TANGRAM_WRAP(pwrite)(int fd, const void *buf, size_t count, off_t offset
     tfs_file_t *tf = fd2tf(fd);
     if(tf) {
         tfs_seek(tf, offset, SEEK_SET);
-        size_t res = tangram_write_impl(tf, buf, count);
+        ssize_t res = tangram_write_impl(tf, buf, count);
         // Note that fwrite on success returns the count not total bytes.
-        tangram_debug("[tangramfs] pwrite %s (%lu, %lu), return: %lu\n", tf->filename, offset, count, res);
+        tangram_debug("[tangramfs] pwrite %s (%lu, %lu), return: %ld\n", tf->filename, offset, count, res);
         return res;
     }
 
@@ -336,8 +379,8 @@ ssize_t TANGRAM_WRAP(pread)(int fd, void *buf, size_t count, off_t offset)
     tfs_file_t *tf = fd2tf(fd);
     if(tf) {
         tfs_seek(tf, offset, SEEK_SET);
-        size_t res = tangram_read_impl(tf, buf, count);
-        tangram_debug("[tangramfs] pread %s (%lu, %lu), return: %lu\n", tf->filename, offset, count, res);
+        ssize_t res = tangram_read_impl(tf, buf, count);
+        tangram_debug("[tangramfs] pread %s (%lu, %lu), return: %ld\n", tf->filename, offset, count, res);
         return res;
     }
 
@@ -458,14 +501,11 @@ int TANGRAM_WRAP(MPI_Finalize)() {
     pthread_rwlock_wrlock(&uthash_lock);
     tfs_file_entry_t *entry, *tmp;
     // Should be enough to just free entries
-    // in tf_by_path
+    // in tf_by_path, other two map entries
+    // should be freed at the close() time.
     HASH_ITER(hh_path, tf_by_path, entry, tmp) {
         HASH_DELETE(hh_path, tf_by_path, entry);
-        if(entry->path) {
-            free(entry->path);
-        }
-        free(entry);
-        entry = NULL;
+        file_entry_free(entry);
     }
     // Must set all hash table to NULL to avoid
     // query after finalize(), because the entries in

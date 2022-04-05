@@ -51,9 +51,9 @@ void tfs_finalize();
 tfs_file_t* tfs_open(const char* pathname);
 int tfs_close(tfs_file_t* tf);
 
-size_t tfs_write(tfs_file_t* tf, const void* buf, size_t size);
-size_t tfs_read(tfs_file_t* tf, void* buf, size_t size);
-size_t tfs_read_lazy(tfs_file_t* tf, void* buf, size_t size);
+ssize_t tfs_write(tfs_file_t* tf, const void* buf, size_t size);
+ssize_t tfs_read(tfs_file_t* tf, void* buf, size_t size);
+ssize_t tfs_read_lazy(tfs_file_t* tf, void* buf, size_t size);
 size_t tfs_seek(tfs_file_t* tf, size_t offset, int whence);
 size_t tfs_tell(tfs_file_t* tf);
 void   tfs_stat(tfs_file_t* tf, struct stat* buf);

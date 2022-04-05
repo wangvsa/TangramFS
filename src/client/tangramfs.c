@@ -177,9 +177,9 @@ void tfs_flush(tfs_file_t *tf) {
 }
 
 
-size_t tfs_write(tfs_file_t* tf, const void* buf, size_t size) {
+ssize_t tfs_write(tfs_file_t* tf, const void* buf, size_t size) {
     size_t local_offset = TANGRAM_REAL_CALL(lseek)(tf->local_fd, 0, SEEK_END);
-    size_t res = TANGRAM_REAL_CALL(pwrite)(tf->local_fd, buf, size, local_offset);
+    ssize_t res = TANGRAM_REAL_CALL(pwrite)(tf->local_fd, buf, size, local_offset);
     //TANGRAM_REAL_CALL(fsync)(tf->local_fd);
 
     int rc = seg_tree_add(&tf->seg_tree, tf->offset, tf->offset+size-1, local_offset, tangram_rpc_get_client_addr(), false);
@@ -189,7 +189,7 @@ size_t tfs_write(tfs_file_t* tf, const void* buf, size_t size) {
     return res;
 }
 
-size_t tfs_read(tfs_file_t* tf, void* buf, size_t size) {
+ssize_t tfs_read(tfs_file_t* tf, void* buf, size_t size) {
     tangram_uct_addr_t *self  = tangram_rpc_get_client_addr();
     tangram_uct_addr_t *owner = NULL;
     int res = tfs_query(tf, tf->offset, size, &owner);
@@ -224,7 +224,6 @@ size_t tfs_read(tfs_file_t* tf, void* buf, size_t size) {
         return tfs_read_lazy(tf, buf, size);
     }
 
-
     return size;
 }
 
@@ -232,7 +231,7 @@ size_t tfs_read(tfs_file_t* tf, void* buf, size_t size) {
 /**
  * Read from local buffer or PFS directly
  */
-size_t read_local(tfs_file_t* tf, void* buf, size_t req_start, size_t req_end) {
+ssize_t read_local(tfs_file_t* tf, void* buf, size_t req_start, size_t req_end) {
 
     struct seg_tree *extents = &tf->seg_tree;
 
@@ -322,10 +321,10 @@ size_t read_local(tfs_file_t* tf, void* buf, size_t req_start, size_t req_end) {
     return req_end-req_start+1;
 }
 
-size_t tfs_read_lazy(tfs_file_t* tf, void* buf, size_t size) {
+ssize_t tfs_read_lazy(tfs_file_t* tf, void* buf, size_t size) {
     size_t req_start = tf->offset;
     size_t req_end   = tf->offset + size - 1;
-    size_t res = read_local(tf, buf, req_start, req_end);
+    ssize_t res = read_local(tf, buf, req_start, req_end);
     tf->offset += res;
     return res;
 }
@@ -348,8 +347,11 @@ size_t tfs_seek(tfs_file_t *tf, size_t offset, int whence) {
     if(whence == SEEK_END) {
         if( seg_tree_count(&tf->seg_tree) > 0)
             tf->offset = seg_tree_max(&tf->seg_tree) + 1;
-        else
-            tf->offset = 0;
+        else {
+            // Directly perform the lseek() on PFS file
+            tf->offset = TANGRAM_REAL_CALL(lseek64)(tf->fd, offset, SEEK_END);
+            tangram_debug("[tangramfs] tfs_seek on PFS, offset: %lu, whence: %d, res: %ld\n", offset, whence, tf->offset);
+        }
     }
 
     return tf->offset;
@@ -455,10 +457,6 @@ int tfs_close(tfs_file_t* tf) {
     seg_tree_destroy(&tf->seg_tree);
     lock_token_list_destroy(&tf->token_list);
 
-    // Delete from hash table
-    HASH_DEL(tfs_files, tf);
-    tangram_free(tf, sizeof(tfs_file_t));
-
     // Close all file descriptors
     if(tf->stream != NULL) {
         TANGRAM_REAL_CALL(fclose)(tf->stream);
@@ -472,6 +470,11 @@ int tfs_close(tfs_file_t* tf) {
         res = TANGRAM_REAL_CALL(close)(tf->local_fd);
         tf->local_fd = -1;
     }
+
+    // Delete from hash table
+    HASH_DEL(tfs_files, tf);
+    tangram_free(tf, sizeof(tfs_file_t));
+    tf = NULL;
 
     // TODO: consider the below behaviour?
     // The tfs_file_t and its interval tree is not released
@@ -608,7 +611,15 @@ bool tangram_should_intercept(const char* filename) {
 
     char abs_path[PATH_MAX];
     realpath(filename, abs_path);
-    // file in buffer directory and not exist in the backend file system.
+
+    /*
+    if(strcmp("/p/lustre2/wang116/applications/FLASH4.4/Sedov_2d_ug_fbs/sedov.dat", abs_path) == 0) {
+        return true;
+    }
+    return false;
+    */
+
+    // file in persist directory and not exist in the backend file system.
     if ( strncmp(tfs.persist_dir, abs_path, strlen(tfs.persist_dir)) == 0 ) {
         //if(TANGRAM_REAL_CALL(access)(filename, F_OK) != 0)
         //    return true;
@@ -640,7 +651,7 @@ void* serve_rma_data_cb(void* in_arg, size_t* size) {
     size_t req_start = in->intervals[0].offset;
     size_t req_end = req_start + in->intervals[0].count - 1;
 
-    size_t res = read_local(tf, data, req_start, req_end);
+    ssize_t res = read_local(tf, data, req_start, req_end);
     assert(res == *size);
 
     rpc_in_free(in);
