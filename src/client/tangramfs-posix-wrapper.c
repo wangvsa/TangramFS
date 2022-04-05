@@ -112,7 +112,7 @@ FILE* TANGRAM_WRAP(fopen)(const char *filename, const char *mode)
 
     if(intercept) {
         tfs_file_t* tf = tfs_open(filename);
-        tf->stream = stream;
+        tf->stream     = stream;
         tangram_debug("[tangramfs] fopen %s\n", filename);
         tfs_file_entry_t* entry = add_to_map(tf);
     }

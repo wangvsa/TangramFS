@@ -160,8 +160,12 @@ void tfs_flush(tfs_file_t *tf) {
             // something wrong, the file was deleted?
             if(n <= 0) break;
 
-            // TODO tf->fd was already opened? what if the file was opened as tf->stream
-            TANGRAM_REAL_CALL(pwrite)(tf->fd, buf, n, node->start+done);
+            // In case file opend with fopen()
+            int fd = tf->fd;
+            if(fd == -1 && tf->stream != NULL)
+                fd = fileno(tf->stream);
+
+            TANGRAM_REAL_CALL(pwrite)(fd, buf, n, node->start+done);
 
             done += n;
         }
@@ -456,13 +460,13 @@ int tfs_close(tfs_file_t* tf) {
     tangram_free(tf, sizeof(tfs_file_t));
 
     // Close all file descriptors
-    if(tf->fd != -1) {
-        TANGRAM_REAL_CALL(close)(tf->fd);
-        tf->fd = -1;
-    }
     if(tf->stream != NULL) {
         TANGRAM_REAL_CALL(fclose)(tf->stream);
         tf->stream = NULL;
+    }
+    if(tf->fd != -1) {
+        TANGRAM_REAL_CALL(close)(tf->fd);
+        tf->fd = -1;
     }
     if(tf->local_fd != -1) {
         res = TANGRAM_REAL_CALL(close)(tf->local_fd);
