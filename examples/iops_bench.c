@@ -15,7 +15,7 @@
 #define FILENAME "./test.txt"
 
 static size_t DATA_SIZE = 4*KB;
-static int N = 500;
+static int N = 100;
 
 int mpi_size, mpi_rank;
 int write_iops, read_iops;
@@ -112,6 +112,7 @@ void read_random() {
     read_iops = N / (tend-tstart);
 
     free(data);
+    fclose(fp);
 }
 
 int main(int argc, char* argv[]) {

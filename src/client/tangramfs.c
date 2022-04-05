@@ -53,6 +53,15 @@ void tfs_finalize() {
     tfs_unpost_client();
     tfs_release_lock_client();
 
+    // We should have no files in the table now.
+    // Just in case users did not close all files
+    // before calling finalize()
+    tfs_file_t *tf, *tmp;
+    HASH_ITER(hh, tfs_files, tf, tmp) {
+        tfs_close(tf);
+    }
+
+
     // Need to have a barrier here because we can not allow
     // server stoped before all other clients
     MPI_Barrier(tfs.mpi_comm);
@@ -60,13 +69,6 @@ void tfs_finalize() {
     tangram_rma_service_stop();
     tangram_rpc_service_stop();
 
-    // Here, we should have no files in the table.
-    // Just in case users did not close all files
-    // before calling finalize()
-    tfs_file_t *tf, *tmp;
-    HASH_ITER(hh, tfs_files, tf, tmp) {
-        tfs_close(tf);
-    }
 
     tangram_release_info(&tfs);
 }
