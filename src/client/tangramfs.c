@@ -407,7 +407,6 @@ void tfs_post_file(tfs_file_t* tf) {
             offsets[i]  = node->start;
             counts[i++] = node->end - node->start + 1;
             seg_tree_set_posted_nolock(&tf->seg_tree, node);
-            printf("CHEN rank: %d, post: [%ld-%ld]\n", tfs.mpi_rank, node->start, node->end);
         }
     }
 

@@ -26,10 +26,10 @@ size_t tangram_read_impl(tfs_file_t *tf, void* buf, size_t count) {
 
 int tangram_commit_impl(tfs_file_t* tf) {
     int semantics = tangram_get_semantics();
-    if(semantics == TANGRAM_STRONG_SEMANTICS ||
-        semantics == TANGRAM_COMMIT_SEMANTICS) {
+    if(semantics == TANGRAM_COMMIT_SEMANTICS) {
         tfs_post_file(tf);
     }
+
     // TODO return value of fsync?
     return 0;
 }
