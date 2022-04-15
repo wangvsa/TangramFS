@@ -19,9 +19,11 @@ void* rpc_handler(int8_t id, tangram_uct_addr_t* client, void* data, uint8_t* re
 
     if(id == AM_ID_POST_REQUEST) {
         rpc_in_t* in = rpc_in_unpack(data);
+        tangram_debug("[tangramfs] post, filename: %s, num_intervals: %d, offset:%lu, count: %lu\n",
+                        in->filename, in->num_intervals, in->intervals[0].offset, in->intervals[0].count);
+
         for(int i = 0; i < in->num_intervals; i++)
             tangram_metamgr_handle_post(client, in->filename, in->intervals[i].offset, in->intervals[i].count);
-        tangram_debug("[tangramfs] post, filename: %s, offset:%lu, count: %lu\n", in->filename, in->intervals[0].offset, in->intervals[0].count);
         rpc_in_free(in);
         respond = malloc(sizeof(int));
         *respond_len = sizeof(int);

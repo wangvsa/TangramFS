@@ -388,7 +388,14 @@ void tfs_post_file(tfs_file_t* tf) {
     seg_tree_wrlock(&tf->seg_tree);
     struct seg_tree_node *node = NULL;
     while ((node = seg_tree_iter(&tf->seg_tree, node))) {
-        if(!node->posted) num++;
+        if(!seg_tree_posted_nolock(&tf->seg_tree, node))
+            num++;
+    }
+
+    // Nothing to post simply reutrn.
+    if(num == 0) {
+        seg_tree_unlock(&tf->seg_tree);
+        return;
     }
 
     offsets = tangram_malloc(sizeof(size_t) * num);
@@ -400,6 +407,7 @@ void tfs_post_file(tfs_file_t* tf) {
             offsets[i]  = node->start;
             counts[i++] = node->end - node->start + 1;
             seg_tree_set_posted_nolock(&tf->seg_tree, node);
+            printf("CHEN rank: %d, post: [%ld-%ld]\n", tfs.mpi_rank, node->start, node->end);
         }
     }
 
@@ -612,12 +620,10 @@ bool tangram_should_intercept(const char* filename) {
     char abs_path[PATH_MAX];
     realpath(filename, abs_path);
 
-    /*
     const char* prefix = "/p/lustre2/wang116/applications/FLASH4.4/Sedov_2d_ug_fbs/sedov_hdf5_chk_";
     if(strncmp(prefix, abs_path, strlen(prefix)) == 0)
         return true;
     return false;
-    */
 
     // file in persist directory and not exist in the backend file system.
     if ( strncmp(tfs.persist_dir, abs_path, strlen(tfs.persist_dir)) == 0 ) {
