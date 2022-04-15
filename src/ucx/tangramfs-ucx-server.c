@@ -65,10 +65,21 @@ void* (*user_am_data_handler)(int8_t, tangram_uct_addr_t* client, void* data, ui
  * Append a task into one worker's task queue,
  * then notify that worker.
  *
+ * g_workers[who].lock is used to protect the task list.
+ *
  * uint64_t is the header in am_short();
  * We do not use it for now.
+ *
+ * Sync-based implementation only uses append_task() call
+ * which uses a round-robin mannter to assign tasks to workers
+ *
+ * For lock-based implementation, we provide this
+ * append_task_to_woker() call to allow
+ * specifying a single worker to handle all lock related tasks.
+ * This guarantees no concurrent lock related tasks are processed
+ * at the same time. This is necessary for correctness.
  */
-void append_task(uint8_t id, void* buf, size_t buf_len) {
+void append_task_to_worker(uint8_t id, void* buf, size_t buf_len, int tid) {
     rpc_task_t *task = malloc(sizeof(rpc_task_t));
 
     task->id = id;
@@ -77,11 +88,15 @@ void append_task(uint8_t id, void* buf, size_t buf_len) {
     task->data = NULL;
     unpack_rpc_buffer(buf, buf_len, &task->client, &task->data);
 
-    pthread_mutex_lock(&g_workers[who].lock);
-    DL_APPEND(g_workers[who].tasks, task);
-    pthread_cond_signal(&g_workers[who].cond);
-    pthread_mutex_unlock(&g_workers[who].lock);
+    pthread_mutex_lock(&g_workers[tid].lock);
+    DL_APPEND(g_workers[tid].tasks, task);
+    pthread_cond_signal(&g_workers[tid].cond);
+    pthread_mutex_unlock(&g_workers[tid].lock);
 
+}
+
+void append_task(uint8_t id, void* buf, size_t buf_len) {
+    append_task_to_worker(id, buf, buf_len, who);
     who = (who + 1) % NUM_THREADS;
 }
 
@@ -122,19 +137,19 @@ static ucs_status_t am_stat_listener(void *arg, void *buf, size_t buf_len, unsig
     return UCS_OK;
 }
 static ucs_status_t am_acquire_lock_listener(void *arg, void *buf, size_t buf_len, unsigned flags) {
-    append_task(AM_ID_ACQUIRE_LOCK_REQUEST, buf, buf_len);
+    append_task_to_worker(AM_ID_ACQUIRE_LOCK_REQUEST, buf, buf_len, 0);
     return UCS_OK;
 }
 static ucs_status_t am_release_lock_listener(void *arg, void *buf, size_t buf_len, unsigned flags) {
-    append_task(AM_ID_RELEASE_LOCK_REQUEST, buf, buf_len);
+    append_task_to_worker(AM_ID_RELEASE_LOCK_REQUEST, buf, buf_len, 0);
     return UCS_OK;
 }
 static ucs_status_t am_release_lock_file_listener(void *arg, void *buf, size_t buf_len, unsigned flags) {
-    append_task(AM_ID_RELEASE_LOCK_FILE_REQUEST, buf, buf_len);
+    append_task_to_worker(AM_ID_RELEASE_LOCK_FILE_REQUEST, buf, buf_len, 0);
     return UCS_OK;
 }
 static ucs_status_t am_release_lock_client_listener(void *arg, void *buf, size_t buf_len, unsigned flags) {
-    append_task(AM_ID_RELEASE_LOCK_CLIENT_REQUEST, buf, buf_len);
+    append_task_to_worker(AM_ID_RELEASE_LOCK_CLIENT_REQUEST, buf, buf_len, 0);
     return UCS_OK;
 }
 static ucs_status_t am_revoke_lock_respond_listener(void *arg, void *buf, size_t buf_len, unsigned flags) {

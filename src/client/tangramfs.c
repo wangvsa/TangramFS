@@ -613,9 +613,9 @@ bool tangram_should_intercept(const char* filename) {
     realpath(filename, abs_path);
 
     /*
-    if(strcmp("/p/lustre2/wang116/applications/FLASH4.4/Sedov_2d_ug_fbs/sedov.dat", abs_path) == 0) {
+    const char* prefix = "/p/lustre2/wang116/applications/FLASH4.4/Sedov_2d_ug_fbs/sedov_hdf5_chk_";
+    if(strncmp(prefix, abs_path, strlen(prefix)) == 0)
         return true;
-    }
     return false;
     */
 
@@ -670,9 +670,11 @@ void revoke_lock_cb(void* in_arg) {
 
     lock_token_t* token;
     token = lock_token_find_cover(&tf->token_list, in->intervals[0].offset, in->intervals[0].count);
-    assert(token);
 
+    // the if(token) should be uncessary, we should be certain
+    // that we hold the lock that server wants to revoke
+    if(token)
+        lock_token_delete(&tf->token_list, token);
 
-    lock_token_delete(&tf->token_list, token);
     rpc_in_free(in);
 }

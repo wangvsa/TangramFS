@@ -11,6 +11,7 @@
 void lock_token_free(lock_token_t* token) {
     tangram_uct_addr_free(token->owner);
     tangram_free(token, sizeof(lock_token_t));
+    token = NULL;
 }
 
 lock_token_t* lock_token_find_conflict(lock_token_list_t* token_list, size_t offset, size_t count) {
@@ -111,6 +112,7 @@ lock_token_t* lock_token_add_from_buf(lock_token_list_t* token_list, void* buf) 
 void lock_token_delete(lock_token_list_t* token_list, lock_token_t* token) {
     pthread_rwlock_wrlock(&token_list->rwlock);
     LL_DELETE(token_list->head, token);
+    lock_token_free(token);
     pthread_rwlock_unlock(&token_list->rwlock);
 }
 

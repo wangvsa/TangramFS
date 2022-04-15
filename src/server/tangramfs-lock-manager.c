@@ -32,7 +32,7 @@ lock_token_t* tangram_lockmgr_acquire_lock(tangram_uct_addr_t* client, char* fil
     lock_token_t* token = NULL;
     token = lock_token_find_conflict(&entry->token_list, offset, count);
 
-    // No one has the lock for the rank yet
+    // No one has the lock for the range yet
     // We can safely grant the lock
     if(!token) {
         token = lock_token_add(&entry->token_list, offset, count, type, client);
@@ -43,6 +43,8 @@ lock_token_t* tangram_lockmgr_acquire_lock(tangram_uct_addr_t* client, char* fil
 
     // Case 1. Both are read locks
     if(type == token->type && type == LOCK_TYPE_RD) {
+
+
     // Case 2. Different lock type, revoke the current owner's lock
     // Then delete the old token and add a new one
     //
