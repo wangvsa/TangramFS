@@ -34,8 +34,14 @@ lock_token_t* tangram_lockmgr_acquire_lock(tangram_uct_addr_t* client, char* fil
 
     // No one has the lock for the range yet
     // We can safely grant the lock
+    //
+    // Two implementations:
+    // 1. Grant the lock range as asked
+    // 2. We can try to extend the lock range
+    //    e.g., user asks for [0, 100], we can give [0, infinity]
     if(!token) {
-        token = lock_token_add(&entry->token_list, offset, count, type, client);
+        //token = lock_token_add(&entry->token_list, offset, count, type, client);
+        token = lock_token_add_extend(&entry->token_list, offset, count, type, client);
         return token;
     }
 
@@ -43,7 +49,6 @@ lock_token_t* tangram_lockmgr_acquire_lock(tangram_uct_addr_t* client, char* fil
 
     // Case 1. Both are read locks
     if(type == token->type && type == LOCK_TYPE_RD) {
-
 
     // Case 2. Different lock type, revoke the current owner's lock
     // Then delete the old token and add a new one

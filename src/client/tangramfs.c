@@ -619,10 +619,12 @@ bool tangram_should_intercept(const char* filename) {
     char abs_path[PATH_MAX];
     realpath(filename, abs_path);
 
+    /*
     const char* prefix = "/p/lustre2/wang116/applications/FLASH4.4/Sedov_2d_ug_fbs/sedov_hdf5_chk_";
     if(strncmp(prefix, abs_path, strlen(prefix)) == 0)
         return true;
     return false;
+    */
 
     // file in persist directory and not exist in the backend file system.
     if ( strncmp(tfs.persist_dir, abs_path, strlen(tfs.persist_dir)) == 0 ) {
