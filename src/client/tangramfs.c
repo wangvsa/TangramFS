@@ -281,13 +281,15 @@ ssize_t read_local(tfs_file_t* tf, void* buf, size_t req_start, size_t req_end) 
      */
     if(!have_local) {
         seg_tree_unlock(extents);
-        tangram_debug("[tangramfs] read from PFS %s, [%ld, %ld]\n", tf->filename, req_start, req_end-req_start+1);
 
         // TODO opt possible: can we avoid the flush?
         tfs_flush(tf);
 
         // TODO what if opend as tf->stream?
-        return TANGRAM_REAL_CALL(pread)(tf->fd, buf, req_end-req_start+1, req_start);
+        ssize_t res = TANGRAM_REAL_CALL(pread)(tf->fd, buf, req_end-req_start+1, req_start);
+        tangram_debug("[tangramfs] read from PFS %s, [%ld, %ld], res: %ld\n", tf->filename, req_start, req_end-req_start+1, res);
+
+        return res;
     }
 
 
