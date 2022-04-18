@@ -30,6 +30,17 @@ lock_token_t* tangram_lockmgr_acquire_lock(tangram_uct_addr_t* client, char* fil
     }
 
     lock_token_t* token = NULL;
+
+    // First see if the requestor already hold the lock
+    // but simply ask to upgrade it, i.e., RD->WR
+    token = lock_token_find_cover(&entry->token_list, offset, count);
+    if( token && (tangram_uct_addr_compare(token->owner , client) == 0) ) {
+        if(type == LOCK_TYPE_WR)
+            lock_token_update_type(token, type);
+        return token;
+    }
+
+
     token = lock_token_find_conflict(&entry->token_list, offset, count);
 
     // No one has the lock for the range yet
@@ -40,8 +51,8 @@ lock_token_t* tangram_lockmgr_acquire_lock(tangram_uct_addr_t* client, char* fil
     // 2. We can try to extend the lock range
     //    e.g., user asks for [0, 100], we can give [0, infinity]
     if(!token) {
-        //token = lock_token_add(&entry->token_list, offset, count, type, client);
-        token = lock_token_add_extend(&entry->token_list, offset, count, type, client);
+        token = lock_token_add(&entry->token_list, offset, count, type, client);
+        //token = lock_token_add_extend(&entry->token_list, offset, count, type, client);
         return token;
     }
 
@@ -77,7 +88,7 @@ void tangram_lockmgr_release_lock(tangram_uct_addr_t* client, char* filename, si
     if(!entry) return;
 
     lock_token_t* token = NULL;
-    token = lock_token_find_exact(&entry->token_list, offset, count);
+    token = lock_token_find_cover(&entry->token_list, offset, count);
 
     if(token && tangram_uct_addr_compare(token->owner, client) == 0)
         lock_token_delete(&entry->token_list, token);

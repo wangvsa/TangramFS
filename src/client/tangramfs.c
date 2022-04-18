@@ -53,6 +53,9 @@ void tfs_finalize() {
     tfs_unpost_client();
     tfs_release_lock_client();
 
+    // TODO
+    // need to free lock tokens
+
     // We should have no files in the table now.
     // Just in case users did not close all files
     // before calling finalize()
@@ -497,13 +500,19 @@ int tfs_acquire_lock(tfs_file_t* tf, size_t offset, size_t count, int type) {
 
     lock_token_t* token;
 
-    // already has the lock, simply return
+    // already hold the lock - 2 cases
     token = lock_token_find_cover(&tf->token_list, offset, count);
     if(token) {
+        // Case 1:
         // Had the read lock but ask for a write lock
+        // Delete my lock token locally and
+        // ask the server to upgrade my lock
+        // use the same AM_ID_ACQUIRE_LOCK_REQUEST RPC
         if(token->type != type && type == LOCK_TYPE_WR) {
-            tfs_release_lock(tf, offset, count);
+            lock_token_delete(&tf->token_list, token);
         } else {
+        // Case 2:
+        // Had the write lock alraedy, nothing to do.
             return 0;
         }
     }
@@ -530,7 +539,7 @@ int tfs_release_lock_file(tfs_file_t* tf) {
 int tfs_release_lock(tfs_file_t* tf, size_t offset, size_t count) {
 
     lock_token_t* token;
-    token = lock_token_find_exact(&tf->token_list, offset, count);
+    token = lock_token_find_cover(&tf->token_list, offset, count);
     assert(token);
 
     int* ack;

@@ -21,7 +21,6 @@ ssize_t tangram_read_impl(tfs_file_t *tf, void* buf, size_t count) {
 
     if(semantics == TANGRAM_STRONG_SEMANTICS)
         tfs_acquire_lock(tf, tf->offset, count, LOCK_TYPE_RD);
-        //tfs_acquire_lock(tf, tf->offset, count, LOCK_TYPE_WR);
 
     // All three semantics use tfs_read()
     return tfs_read(tf, buf, count);

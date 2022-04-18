@@ -64,15 +64,14 @@ void* rpc_handler(int8_t id, tangram_uct_addr_t* client, void* data, uint8_t* re
         assert(tangram_uct_addr_comp(token->owner, client) == 0);
         tangram_debug("[tangramfs] acquire lock, filename: %s, offset:%lu, count: %lu\n", in->filename, in->intervals[0].offset, in->intervals[0].count);
         rpc_in_free(in);
-
         *respond_id = AM_ID_ACQUIRE_LOCK_RESPOND;
         respond = lock_token_serialize(token, respond_len);
-
     } else if(id == AM_ID_RELEASE_LOCK_REQUEST) {
         rpc_in_t* in = rpc_in_unpack(data);
         assert(in->num_intervals == 1);
-        tangram_lockmgr_release_lock(client, in->filename, in->intervals[0].offset, in->intervals[0].count);
         tangram_debug("[tangramfs] release lock, filename: %s, offset:%lu, count: %lu\n", in->filename, in->intervals[0].offset, in->intervals[0].count);
+        tangram_lockmgr_release_lock(client, in->filename, in->intervals[0].offset, in->intervals[0].count);
+        //tangram_debug("[tangramfs] release lock success, filename: %s, offset:%lu, count: %lu\n", in->filename, in->intervals[0].offset, in->intervals[0].count);
         rpc_in_free(in);
         respond = malloc(sizeof(int));
         *respond_len = sizeof(int);

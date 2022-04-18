@@ -172,3 +172,8 @@ void lock_token_list_destroy(lock_token_list_t* token_list) {
     pthread_rwlock_unlock(&token_list->rwlock);
 }
 
+void lock_token_update_type(lock_token_t* token, int type) {
+    // TODO should we protect this with a lock?
+    // should this funciton be thread-safe?
+    token->type = type;
+}
