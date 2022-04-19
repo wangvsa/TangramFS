@@ -14,11 +14,16 @@
 
 #define FILENAME "./test.txt"
 
-static size_t DATA_SIZE = 4*KB;
-static int N = 100;
+// Can be modified by input arguments
+static size_t DATA_SIZE = 4*MB;
+static int    N = 10;
 
 int mpi_size, mpi_rank;
-int write_iops, read_iops;
+
+// Final output result
+double tstart, tend;
+int    write_iops, read_iops;
+double write_bandwidth, read_bandwidth;
 
 void write_nonstrided() {
     FILE* fp = fopen(FILENAME, "wb");
@@ -28,14 +33,12 @@ void write_nonstrided() {
     fseek(fp, offset, SEEK_SET);
 
     MPI_Barrier(MPI_COMM_WORLD);
-    double tstart = MPI_Wtime();
+    tstart = MPI_Wtime();
     for(int i = 0; i < N; i++) {
         fwrite(data, 1, DATA_SIZE, fp);
     }
     MPI_Barrier(MPI_COMM_WORLD);
-    double tend = MPI_Wtime();
-
-    write_iops = N / (tend-tstart);
+    tend = MPI_Wtime();
 
     free(data);
     fclose(fp);
@@ -48,7 +51,7 @@ void write_strided() {
     char* data = malloc(sizeof(char)*DATA_SIZE);
 
     MPI_Barrier(MPI_COMM_WORLD);
-    double tstart = MPI_Wtime();
+    tstart = MPI_Wtime();
 
     for(int i = 0; i < N; i++) {
         size_t offset = mpi_size*DATA_SIZE*i + mpi_rank*DATA_SIZE;
@@ -57,9 +60,8 @@ void write_strided() {
     }
 
     MPI_Barrier(MPI_COMM_WORLD);
-    double tend = MPI_Wtime();
+    tend = MPI_Wtime();
 
-    write_iops = N / (tend-tstart);
     free(data);
     fclose(fp);
 }
@@ -73,14 +75,12 @@ void read_sequential() {
     fseek(fp, offset, SEEK_SET);
 
     MPI_Barrier(MPI_COMM_WORLD);
-    double tstart = MPI_Wtime();
+    tstart = MPI_Wtime();
     for(int i = 0; i < N; i++) {
         fwrite(data, 1, DATA_SIZE, fp);
     }
     MPI_Barrier(MPI_COMM_WORLD);
-    double tend = MPI_Wtime();
-
-    read_iops = N / (tend-tstart);
+    tend = MPI_Wtime();
 
     free(data);
     fclose(fp);
@@ -98,7 +98,7 @@ void read_random() {
     size_t offset;
 
     MPI_Barrier(MPI_COMM_WORLD);
-    double tstart = MPI_Wtime();
+    tstart = MPI_Wtime();
     for(int i = 0; i < N; i++) {
         offset = (rand() % num_blocks) * DATA_SIZE;
         fseek(fp, offset, SEEK_SET);
@@ -107,9 +107,7 @@ void read_random() {
         //    printf("%d/%d\n", i, N);
     }
     MPI_Barrier(MPI_COMM_WORLD);
-    double tend = MPI_Wtime();
-
-    read_iops = N / (tend-tstart);
+    tend = MPI_Wtime();
 
     free(data);
     fclose(fp);
@@ -121,21 +119,32 @@ int main(int argc, char* argv[]) {
     MPI_Comm_size(MPI_COMM_WORLD, &mpi_size);
     MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
 
+    if(mpi_rank == 0) {
+        if(argc == 3) {
+            N = argv[1];
+            DATA_SIZE = argv[2] * MB;
+        }
+    }
+    MPI_Bcast(&N, 1, MPI_INT, 0, MPI_COMM_WORLD);
+    MPI_Bcast(&DATA_SIZE, 1, MPI_LONG, 0, MPI_COMM_WORLD);
+
     for(int i = 0; i < 1; i++) {
         MPI_Barrier(MPI_COMM_WORLD);
-        //write_nonstrided();
-        write_strided();
+        write_nonstrided();
+        //write_strided();
     }
 
     for(int i = 0; i < 1; i++) {
         MPI_Barrier(MPI_COMM_WORLD);
-        read_sequential();
+        //read_sequential();
         //read_random();
     }
 
     MPI_Barrier(MPI_COMM_WORLD);
     if(mpi_rank == 0) {
-        printf("Write IOPS: %d\t\tRead IOPS: %d\n", write_iops, read_iops);
+        write_iops = N / (tend-tstart);
+        write_bandwidth = DATA_SIZE / MB * N * mpi_size / (tend-tstart);
+        printf("Write IOPS: %d, Bandwidth: %.3f\t\tRead IOPS: %d, Bandwidth: %.3f\n", write_iops, write_bandwidth, read_iops, read_bandwidth);
     }
 
     MPI_Finalize();
