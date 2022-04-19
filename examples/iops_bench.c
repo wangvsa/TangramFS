@@ -15,7 +15,7 @@
 #define FILENAME "./test.txt"
 
 static size_t DATA_SIZE = 4*KB;
-static int N = 1;
+static int N = 100;
 
 int mpi_size, mpi_rank;
 int write_iops, read_iops;
@@ -123,17 +123,15 @@ int main(int argc, char* argv[]) {
 
     for(int i = 0; i < 1; i++) {
         MPI_Barrier(MPI_COMM_WORLD);
-        write_nonstrided();
-        //write_strided();
+        //write_nonstrided();
+        write_strided();
     }
 
-    /*
     for(int i = 0; i < 1; i++) {
         MPI_Barrier(MPI_COMM_WORLD);
-        //read_sequential();
-        read_random();
+        read_sequential();
+        //read_random();
     }
-    */
 
     MPI_Barrier(MPI_COMM_WORLD);
     if(mpi_rank == 0) {
