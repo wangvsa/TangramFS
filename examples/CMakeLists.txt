@@ -31,12 +31,12 @@ target_link_libraries(example
                      )
 add_dependencies(example tangramfs)
 
-add_executable(iops_bench iops_bench.c)
-target_link_libraries(iops_bench
+add_executable(iobench iobench.c)
+target_link_libraries(iobench
                       PUBLIC ${MPI_C_LIBRARIES}
                       tangramfs
                      )
-add_dependencies(iops_bench tangramfs)
+add_dependencies(iobench tangramfs)
 
 add_executable(workflow workflow.c)
 target_link_libraries(workflow
@@ -49,7 +49,7 @@ add_dependencies(workflow tangramfs)
 #-----------------------------------------------------------------------------
 # Add Target(s) to CMake Install
 #-----------------------------------------------------------------------------
-set(targets example workflow iops_bench)
+set(targets example workflow iobench)
 foreach(target ${targets})
     install(
         TARGETS
