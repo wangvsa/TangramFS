@@ -34,9 +34,7 @@ add_dependencies(example tangramfs)
 add_executable(iobench iobench.c)
 target_link_libraries(iobench
                       PUBLIC ${MPI_C_LIBRARIES}
-                      tangramfs
                      )
-add_dependencies(iobench tangramfs)
 
 add_executable(workflow workflow.c)
 target_link_libraries(workflow
