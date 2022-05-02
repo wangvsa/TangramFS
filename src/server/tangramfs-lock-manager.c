@@ -54,7 +54,7 @@ lock_token_t* tangram_lockmgr_acquire_lock(lock_table_t* lt, tangram_uct_addr_t*
     // Case 2. Different lock type, revoke the current owner's lock
     // Then delete the old token and add a new one
     //
-    // TODO we don't consider the case wehere we have multiple conflicting owners.
+    // TODO we don't consider the case where we have multiple conflicting owners.
     // e.g. P1:[0-10], P2:[10-20], Accquire[0-20]
     } else {
         size_t data_len;
