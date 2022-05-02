@@ -125,36 +125,55 @@ void exchange_dev_iface_addr(tangram_uct_context_t* context, tangram_uct_addr_t*
     free(all_addrs);
 }
 
-void tangram_uct_context_init(ucs_async_context_t* async, char* dev_name, char* tl_name, bool server, tangram_uct_context_t *context) {
+void tangram_uct_context_init(ucs_async_context_t* async, tfs_info_t* tfs_info, tangram_uct_context_t *context) {
     uct_worker_create(async, UCS_THREAD_MODE_SERIALIZED, &context->worker);
 
     // search for dev and tl
     // This will open context->md and set context->md_attr
-    dev_tl_lookup(dev_name, tl_name, context);
+    dev_tl_lookup(tfs_info->rpc_dev_name, tfs_info->rpc_tl_name, context);
 
     // This will open the context->iface and set context->iface_attr
-    init_iface(dev_name, tl_name, context);
+    init_iface(tfs_info->rpc_dev_name, tfs_info->rpc_tl_name, context);
 
-
-    context->self_addr.dev_len     = context->iface_attr.device_addr_len;
-    context->self_addr.iface_len   = context->iface_attr.iface_addr_len;
-    // TODO same dev_len and iface_len?
-    context->server_addr.dev_len   = context->iface_attr.device_addr_len;
-    context->server_addr.iface_len = context->iface_attr.iface_addr_len;
-
-    context->self_addr.dev         = malloc(context->self_addr.dev_len);
-    context->self_addr.iface       = malloc(context->self_addr.iface_len);
-    context->server_addr.dev       = malloc(context->server_addr.dev_len);
-    context->server_addr.iface     = malloc(context->server_addr.iface_len);
-
+    // Set up myself's addr
+    context->self_addr.dev_len   = context->iface_attr.device_addr_len;
+    context->self_addr.iface_len = context->iface_attr.iface_addr_len;
+    context->self_addr.dev       = malloc(context->self_addr.dev_len);
+    context->self_addr.iface     = malloc(context->self_addr.iface_len);
     uct_iface_get_device_address(context->iface, context->self_addr.dev);
     uct_iface_get_address(context->iface, context->self_addr.iface);
 
-    if(server)
-        tangram_write_uct_server_addr(context->self_addr.dev, context->self_addr.dev_len,
+    // context->local_server and context->global_server
+    // will be allocated and filled in the read_uct_server_addr() function.
+    context->local_server_addr.dev    = NULL;
+    context->local_server_addr.iface  = NULL;
+    context->global_server_addr.dev   = NULL;
+    context->global_server_addr.iface = NULL;
+
+    if (tfs_info->role == TANGRAM_UCX_ROLE_RMA_CLIENT ||
+        tfs_info->role == TANGRAM_UCX_ROLE_RPC_CLIENT) {
+        // read both local and global server address
+        tangram_read_uct_server_addr(true, (void**)&context->global_server_addr.dev, &context->global_server_addr.dev_len,
+                                           (void**)&context->global_server_addr.iface, &context->global_server_addr.iface_len);
+        if(tfs_info->use_local_server)
+            tangram_read_uct_server_addr(false, (void**)&context->local_server_addr.dev, &context->local_server_addr.dev_len,
+                                                (void**)&context->local_server_addr.iface, &context->local_server_addr.iface_len);
+    }
+
+    if (tfs_info->role == TANGRAM_UCX_ROLE_LOCAL_SERVER) {
+        // read only global server address
+        tangram_read_uct_server_addr(true, (void**)&context->global_server_addr.dev, &context->global_server_addr.dev_len,
+                                           (void**)&context->global_server_addr.iface, &context->global_server_addr.iface_len);
+        // write out my address
+        tangram_write_uct_server_addr(false, context->self_addr.dev, context->self_addr.dev_len,
                                       context->self_addr.iface, context->self_addr.iface_len);
-    else
-        tangram_read_uct_server_addr((void**)&context->server_addr.dev, (void**)&context->server_addr.iface);
+    }
+
+    if(tfs_info->role == TANGRAM_UCX_ROLE_GLOBAL_SERVER) {
+        // write out my address
+        tangram_write_uct_server_addr(true, context->self_addr.dev, context->self_addr.dev_len,
+                                      context->self_addr.iface, context->self_addr.iface_len);
+    }
 
     pthread_mutex_init(&context->mutex, NULL);
     pthread_mutex_init(&context->cond_mutex, NULL);
@@ -165,11 +184,23 @@ void tangram_uct_context_init(ucs_async_context_t* async, char* dev_name, char* 
 void tangram_uct_context_destroy(tangram_uct_context_t *context) {
     uct_iface_close(context->iface);
     uct_md_close(context->md);
+
+
+    // TODO use tangram_uct_addr_free() instead
     free(context->self_addr.dev);
     free(context->self_addr.iface);
-    free(context->server_addr.dev);
-    free(context->server_addr.iface);
+    if(context->local_server_addr.dev)
+        free(context->local_server_addr.dev);
+    if(context->local_server_addr.iface)
+        free(context->local_server_addr.iface);
+    if(context->global_server_addr.dev)
+        free(context->global_server_addr.dev);
+    if(context->global_server_addr.iface)
+        free(context->global_server_addr.iface);
+
+
     uct_worker_destroy(context->worker);
+
 
     pthread_mutex_destroy(&context->mutex);
     pthread_mutex_destroy(&context->cond_mutex);

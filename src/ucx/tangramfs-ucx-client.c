@@ -48,6 +48,15 @@ static tangram_uct_context_t g_epaddr_context;
 
 void (*g_revoke_lock_cb)(void*);
 
+
+tangram_uct_addr_t* get_server_addr(tangram_uct_context_t* context) {
+    if(g_tfs_info->use_local_server)
+        return &context->local_server_addr;
+    else
+        return &context->global_server_addr;
+}
+
+
 /**
  * Handles both query and post respond from server
  */
@@ -72,7 +81,7 @@ void* handle_revoke_lock_request(void* arg) {
     //   -- Using it can cause deadlock when acquiring and revoking at the same time
     pthread_mutex_lock(&g_recv_context.mutex);
     uct_ep_h ep;
-    uct_ep_create_connect(g_recv_context.iface, &g_recv_context.server_addr, &ep);
+    uct_ep_create_connect(g_recv_context.iface, get_server_addr(&g_recv_context), &ep);
 
     do_uct_am_short_progress(g_recv_context.worker, ep, AM_ID_REVOKE_LOCK_RESPOND, &g_recv_context.self_addr, NULL, 0);
 
@@ -137,7 +146,7 @@ void tangram_ucx_sendrecv_server(uint8_t id, void* data, size_t length, void** r
     g_send_context.respond_flag = false;
 
     uct_ep_h ep;
-    uct_ep_create_connect(g_send_context.iface, &g_send_context.server_addr, &ep);
+    uct_ep_create_connect(g_send_context.iface, get_server_addr(&g_send_context), &ep);
 
     do_uct_am_short_progress(g_send_context.worker, ep, id, &g_recv_context.self_addr, data, length);
 
@@ -196,35 +205,44 @@ void tangram_ucx_send_ep_addr(uint8_t id, tangram_uct_addr_t* dest, void* data, 
  * Send server a short AM that contains only the header
  * Do not require a respond from server
  *
- * This is used to send server the mpi size, and the stop server signal
+ * Used to send the stop server signal
  */
-void tangram_ucx_send_server(uint8_t id) {
+void tangram_ucx_stop_local_server() {
     pthread_mutex_lock(&g_send_context.mutex);
 
     uct_ep_h ep;
-    uct_ep_create_connect(g_send_context.iface, &g_send_context.server_addr, &ep);
+    uct_ep_create_connect(g_send_context.iface, &g_send_context.local_server_addr, &ep);
 
-    do_uct_am_short_progress(g_send_context.worker, ep, id, &g_recv_context.self_addr, NULL, 0);
+    do_uct_am_short_progress(g_send_context.worker, ep, AM_ID_STOP_REQUEST, &g_recv_context.self_addr, NULL, 0);
     uct_ep_destroy(ep);
 
     pthread_mutex_unlock(&g_send_context.mutex);
 }
 
-void tangram_ucx_stop_server() {
-    tangram_ucx_send_server(AM_ID_STOP_REQUEST);
+void tangram_ucx_stop_global_server() {
+    pthread_mutex_lock(&g_send_context.mutex);
+
+    uct_ep_h ep;
+    uct_ep_create_connect(g_send_context.iface, &g_send_context.global_server_addr, &ep);
+
+    do_uct_am_short_progress(g_send_context.worker, ep, AM_ID_STOP_REQUEST, &g_recv_context.self_addr, NULL, 0);
+    uct_ep_destroy(ep);
+
+    pthread_mutex_unlock(&g_send_context.mutex);
 }
 
 void tangram_ucx_rpc_service_start(tfs_info_t *tfs_info, void (revoke_lock_cb)(void*)) {
     g_tfs_info = tfs_info;
+    g_tfs_info->role = TANGRAM_UCX_ROLE_RPC_CLIENT;
 
     g_revoke_lock_cb = revoke_lock_cb;
 
     ucs_status_t status;
     ucs_async_context_create(UCS_ASYNC_MODE_THREAD_SPINLOCK, &g_client_async);
 
-    tangram_uct_context_init(g_client_async, g_tfs_info->rpc_dev_name, g_tfs_info->rpc_tl_name, false, &g_send_context);
-    tangram_uct_context_init(g_client_async, g_tfs_info->rpc_dev_name, g_tfs_info->rpc_tl_name, false, &g_recv_context);
-    tangram_uct_context_init(g_client_async, g_tfs_info->rpc_dev_name, g_tfs_info->rpc_tl_name, false, &g_epaddr_context);
+    tangram_uct_context_init(g_client_async, g_tfs_info, &g_send_context);
+    tangram_uct_context_init(g_client_async, g_tfs_info, &g_recv_context);
+    tangram_uct_context_init(g_client_async, g_tfs_info, &g_epaddr_context);
 
     g_peer_addrs = malloc(g_tfs_info->mpi_size * sizeof(tangram_uct_addr_t));
     exchange_dev_iface_addr(&g_recv_context, g_peer_addrs);

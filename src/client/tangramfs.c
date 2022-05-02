@@ -50,8 +50,10 @@ void tfs_finalize() {
     tfs.initialized = false;
 
     // Notify the server to unpost all and release all locks
-    tfs_unpost_client();
-    tfs_release_lock_client();
+    if(tfs.semantics != TANGRAM_STRONG_SEMANTICS)
+        tfs_unpost_client();
+    else
+        tfs_release_lock_client();
 
     // TODO
     // need to free lock tokens
@@ -459,8 +461,10 @@ int tfs_close(tfs_file_t* tf) {
     int res = 0;
 
     // Notify server to unpost and release lock
-    tfs_unpost_file(tf);
-    tfs_release_lock_file(tf);
+    if(tfs.semantics != TANGRAM_STRONG_SEMANTICS)
+        tfs_unpost_file(tf);
+    else
+        tfs_release_lock_file(tf);
 
     // Flush from BB to PFS
     tfs_flush(tf);

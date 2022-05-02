@@ -161,6 +161,8 @@ static ucs_status_t am_revoke_lock_respond_listener(void *arg, void *buf, size_t
 }
 
 static ucs_status_t am_stop_listener(void *arg, void *buf, size_t buf_len, unsigned flags) {
+    // TODO server.c need to be notified
+    //append_task_to_worker(AM_ID_STOP_REQUEST, buf, buf_len, 0);
     g_server_running = false;
     return UCS_OK;
 }
@@ -247,7 +249,7 @@ void tangram_ucx_server_init(tfs_info_t *tfs_info) {
     ucs_status_t status;
     ucs_async_context_create(UCS_ASYNC_MODE_THREAD_SPINLOCK, &g_server_async);
 
-    tangram_uct_context_init(g_server_async, tfs_info->rpc_dev_name, tfs_info->rpc_tl_name, true, &g_server_context);
+    tangram_uct_context_init(g_server_async, tfs_info, &g_server_context);
 
     status = uct_iface_set_am_handler(g_server_context.iface, AM_ID_QUERY_REQUEST, am_query_listener, NULL, 0);
     assert(status == UCS_OK);

@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <sys/time.h>
+#include <assert.h>
 
 #include "tangramfs.h"
 #include "tangramfs-utils.h"
@@ -53,23 +54,42 @@ void tangram_get_info(tfs_info_t* tfs_info) {
     if(semantics_str)
         tfs_info->semantics = atoi(semantics_str);
 
+    tfs_info->debug = false;
     const char* debug = getenv(TANGRAM_DEBUG_ENV);
-    tfs_info->debug = (debug == NULL);
+    if(debug)
+        tfs_info->debug = atoi(debug);
+
+    const char* use_local_server = getenv(TANGRAM_USE_LOCAL_SERVER_ENV);
+    if(use_local_server)
+        tfs_info->use_local_server = atoi(use_local_server);
 }
 
 void tangram_release_info(tfs_info_t *tfs_info) {
     MPI_Comm_free(&tfs_info->mpi_comm);
 }
 
-void tangram_write_uct_server_addr(void* dev_addr, size_t dev_addr_len,
-                                    void* iface_addr, size_t iface_addr_len) {
+void fill_addr_config_filename(bool global_server, char* cfg_path) {
+    if(global_server) {
+        const char* persist_dir = getenv(TANGRAM_PERSIST_DIR_ENV);
+        sprintf(cfg_path, "%s/tfs.cfg", persist_dir);
+    } else {
+        const char* buffer_dir  = getenv(TANGRAM_BUFFER_DIR_ENV);
+        char hostname[128] = {0};
+        gethostname(hostname, 128);
+        sprintf(cfg_path, "%s/tfs-%s.cfg", buffer_dir, hostname);
+    }
+}
+
+void tangram_write_uct_server_addr(bool global_server, void* dev_addr, size_t dev_addr_len,
+                                   void* iface_addr, size_t iface_addr_len) {
     tangram_map_real_calls();
 
-    const char* persist_dir = getenv(TANGRAM_PERSIST_DIR_ENV);
     char cfg_path[512] = {0};
-    sprintf(cfg_path, "%s/tfs.cfg", persist_dir);
+    fill_addr_config_filename(global_server, cfg_path);
 
     FILE* f = TANGRAM_REAL_CALL(fopen)(cfg_path, "wb");
+    assert(f != NULL);
+
     TANGRAM_REAL_CALL(fwrite)(&dev_addr_len, sizeof(dev_addr_len), 1, f);
     TANGRAM_REAL_CALL(fwrite)(dev_addr, 1, dev_addr_len, f);
     TANGRAM_REAL_CALL(fwrite)(&iface_addr_len, sizeof(iface_addr_len), 1, f);
@@ -78,23 +98,23 @@ void tangram_write_uct_server_addr(void* dev_addr, size_t dev_addr_len,
     TANGRAM_REAL_CALL(fclose)(f);
 }
 
-void tangram_read_uct_server_addr(void** dev_addr, void** iface_addr) {
+void tangram_read_uct_server_addr(bool global_server, void** dev_addr, size_t* dev_addr_len,
+                                  void** iface_addr, size_t* iface_addr_len) {
     tangram_map_real_calls();
 
-    const char* persist_dir = getenv(TANGRAM_PERSIST_DIR_ENV);
     char cfg_path[512] = {0};
-    sprintf(cfg_path, "%s/tfs.cfg", persist_dir);
+    fill_addr_config_filename(global_server, cfg_path);
 
-    size_t addr_len;
     FILE* f = TANGRAM_REAL_CALL(fopen)(cfg_path, "r");
+    assert(f != NULL);
 
-    TANGRAM_REAL_CALL(fread)(&addr_len, sizeof(size_t), 1, f);
-    *dev_addr = malloc(addr_len);
-    TANGRAM_REAL_CALL(fread)(*dev_addr, 1, addr_len, f);
+    TANGRAM_REAL_CALL(fread)(dev_addr_len, sizeof(size_t), 1, f);
+    *dev_addr = malloc(*dev_addr_len);
+    TANGRAM_REAL_CALL(fread)(*dev_addr, 1, *dev_addr_len, f);
+    TANGRAM_REAL_CALL(fread)(iface_addr_len, sizeof(size_t), 1, f);
+    *iface_addr = malloc(*iface_addr_len);
+    TANGRAM_REAL_CALL(fread)(*iface_addr, 1, *iface_addr_len, f);
 
-    TANGRAM_REAL_CALL(fread)(&addr_len, sizeof(size_t), 1, f);
-    *iface_addr = malloc(addr_len);
-    TANGRAM_REAL_CALL(fread)(*iface_addr, 1, addr_len, f);
     TANGRAM_REAL_CALL(fclose)(f);
 }
 

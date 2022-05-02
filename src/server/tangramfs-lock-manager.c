@@ -6,27 +6,17 @@
 #include "tangramfs-utils.h"
 #include "tangramfs-lock-manager.h"
 
-typedef struct lock_table {
-    char filename[256];
-    lock_token_list_t token_list;
-    UT_hash_handle hh;
-} lock_table_t;
 
-
-// Hash Map <filename, token_list>
-static lock_table_t *g_lt;
-
-
-lock_token_t* tangram_lockmgr_acquire_lock(tangram_uct_addr_t* client, char* filename, size_t offset, size_t count, int type) {
+lock_token_t* tangram_lockmgr_acquire_lock(lock_table_t* lt, tangram_uct_addr_t* client, char* filename, size_t offset, size_t count, int type) {
 
     lock_table_t* entry = NULL;
-    HASH_FIND_STR(g_lt, filename, entry);
+    HASH_FIND_STR(lt, filename, entry);
 
     if(!entry) {
         entry = tangram_malloc(sizeof(lock_table_t));
         lock_token_list_init(&entry->token_list);
         strcpy(entry->filename, filename);
-        HASH_ADD_STR(g_lt, filename, entry);
+        HASH_ADD_STR(lt, filename, entry);
     }
 
     lock_token_t* token = NULL;
@@ -80,10 +70,10 @@ lock_token_t* tangram_lockmgr_acquire_lock(tangram_uct_addr_t* client, char* fil
     return token;
 }
 
-void tangram_lockmgr_release_lock(tangram_uct_addr_t* client, char* filename, size_t offset, size_t count) {
+void tangram_lockmgr_release_lock(lock_table_t* lt, tangram_uct_addr_t* client, char* filename, size_t offset, size_t count) {
 
     lock_table_t* entry = NULL;
-    HASH_FIND_STR(g_lt, filename, entry);
+    HASH_FIND_STR(lt, filename, entry);
 
     if(!entry) return;
 
@@ -94,31 +84,31 @@ void tangram_lockmgr_release_lock(tangram_uct_addr_t* client, char* filename, si
         lock_token_delete(&entry->token_list, token);
 }
 
-void tangram_lockmgr_release_lock_file(tangram_uct_addr_t* client, char* filename) {
+void tangram_lockmgr_release_lock_file(lock_table_t* lt, tangram_uct_addr_t* client, char* filename) {
     lock_table_t* entry = NULL;
-    HASH_FIND_STR(g_lt, filename, entry);
+    HASH_FIND_STR(lt, filename, entry);
 
     if(entry) {
         lock_token_delete_client(&entry->token_list, client);
     }
 }
 
-void tangram_lockmgr_release_lock_client(tangram_uct_addr_t* client) {
+void tangram_lockmgr_release_lock_client(lock_table_t* lt, tangram_uct_addr_t* client) {
     lock_table_t *entry, *tmp;
-    HASH_ITER(hh, g_lt, entry, tmp) {
+    HASH_ITER(hh, lt, entry, tmp) {
         lock_token_delete_client(&entry->token_list, client);
     }
 }
 
-void tangram_lockmgr_init() {
-    g_lt = NULL;
+void tangram_lockmgr_init(lock_table_t* lt) {
+    lt = NULL;
 }
 
-void tangram_lockmgr_finalize() {
+void tangram_lockmgr_finalize(lock_table_t* lt) {
     lock_table_t *entry, *tmp;
-    HASH_ITER(hh, g_lt, entry, tmp) {
+    HASH_ITER(hh, lt, entry, tmp) {
         lock_token_list_destroy(&entry->token_list);
-        HASH_DEL(g_lt, entry);
+        HASH_DEL(lt, entry);
         tangram_free(entry, sizeof(lock_table_t*));
     }
 }

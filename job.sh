@@ -15,8 +15,7 @@ export I_MPI_EXTRA_FILESYSTEM=on
 #export I_MPI_EXTRA_FILESYSTEM_LIST=lustre
 export OMP_NUM_THREADS=1
 
-work_dir=/g/g90/wang116/sources/TangramFS
-cd $work_dir 
+export work_dir=/g/g90/wang116/sources/TangramFS
 export TANGRAM_PERSIST_DIR=$work_dir
 export TANGRAM_BUFFER_DIR=/l/ssd
 export TANGRAM_RPC_DEV=hsi0
@@ -24,6 +23,10 @@ export TANGRAM_RPC_TL=tcp
 export TANGRAM_RMA_DEV=hsi1
 export TANGRAM_RMA_TL=tcp
 export TANGRAM_SEMANTICS=1
+export TANGRAM_USE_LOCAL_SERVER=0
+export TANGRAM_DEBUG=0
+
+#enp6s0
 
 unset UCX_NET_DEVICES
 

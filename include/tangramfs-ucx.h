@@ -47,7 +47,8 @@ void tangram_ucx_revoke_lock(tangram_uct_addr_t* client, void* data, size_t leng
 void tangram_ucx_sendrecv_server(uint8_t id, void* data, size_t length, void** respond_ptr);
 void tangram_ucx_sendrecv_client(uint8_t id, tangram_uct_addr_t* dest, void* data, size_t length, void** respond_ptr);
 void tangram_ucx_send_ep_addr(uint8_t id, tangram_uct_addr_t* dest, void* data, size_t length);
-void tangram_ucx_stop_server();
+void tangram_ucx_stop_local_server();
+void tangram_ucx_stop_global_server();
 void tangram_ucx_rpc_service_start(tfs_info_t* tfs_info, void (*revoke_lock_cb)(void*));
 void tangram_ucx_rpc_service_stop();
 tangram_uct_addr_t* tangram_ucx_get_client_addr();

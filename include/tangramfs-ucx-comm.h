@@ -3,6 +3,14 @@
 #include <stdbool.h>
 #include <uct/api/uct.h>
 #include <pthread.h>
+#include "tangramfs-utils.h"
+
+#define TANGRAM_UCX_ROLE_RPC_CLIENT     0
+#define TANGRAM_UCX_ROLE_RMA_CLIENT     1
+#define TANGRAM_UCX_ROLE_LOCAL_SERVER   2
+#define TANGRAM_UCX_ROLE_GLOBAL_SERVER  3
+
+#define TANGRAM_UCT_ADDR_IGNORE         NULL
 
 typedef struct tangram_uct_addr {
     uct_device_addr_t* dev;
@@ -11,7 +19,6 @@ typedef struct tangram_uct_addr {
     size_t             iface_len;
 } tangram_uct_addr_t;
 
-#define TANGRAM_UCT_ADDR_IGNORE NULL
 
 typedef struct tangram_uct_context {
     uct_component_h    component;
@@ -22,7 +29,8 @@ typedef struct tangram_uct_context {
     uct_md_attr_t      md_attr;
 
     tangram_uct_addr_t self_addr;
-    tangram_uct_addr_t server_addr;
+    tangram_uct_addr_t local_server_addr;
+    tangram_uct_addr_t global_server_addr;
 
     // Make sure a context is only used by one thread at a time
     pthread_mutex_t    mutex;
@@ -34,7 +42,7 @@ typedef struct tangram_uct_context {
     volatile bool      respond_flag;
 } tangram_uct_context_t;
 
-void tangram_uct_context_init(ucs_async_context_t* async, char* dev_name, char* tl_name, bool server, tangram_uct_context_t* context);
+void tangram_uct_context_init(ucs_async_context_t* async, tfs_info_t* tfs_info, tangram_uct_context_t* context);
 void tangram_uct_context_destroy(tangram_uct_context_t* context);
 void exchange_dev_iface_addr(tangram_uct_context_t* context, tangram_uct_addr_t* peer_addrs);
 

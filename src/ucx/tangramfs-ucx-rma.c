@@ -344,14 +344,15 @@ void tangram_ucx_rma_request(tangram_uct_addr_t* dest, void* user_arg, size_t us
 
 void tangram_ucx_rma_service_start(tfs_info_t* tfs_info, void* (serve_rma_data_cb)(void*, size_t*)) {
     gg_tfs_info = tfs_info;
+    gg_tfs_info->role = TANGRAM_UCX_ROLE_RMA_CLIENT;
 
     g_serve_rma_data_cb = serve_rma_data_cb;
 
     ucs_status_t status;
     ucs_async_context_create(UCS_ASYNC_MODE_THREAD_SPINLOCK, &g_rma_async);
 
-    tangram_uct_context_init(g_rma_async, gg_tfs_info->rma_dev_name, gg_tfs_info->rma_tl_name, false, &g_request_context);
-    tangram_uct_context_init(g_rma_async, gg_tfs_info->rma_dev_name, gg_tfs_info->rma_tl_name, false, &g_respond_context);
+    tangram_uct_context_init(g_rma_async, gg_tfs_info, &g_request_context);
+    tangram_uct_context_init(g_rma_async, gg_tfs_info, &g_respond_context);
 
     status = uct_iface_set_am_handler(g_request_context.iface, AM_ID_RMA_RESPOND, am_rma_respond_listener, NULL, 0);
     assert(status == UCS_OK);
