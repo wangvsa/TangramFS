@@ -231,6 +231,17 @@ size_t TANGRAM_WRAP(fread)(void * ptr, size_t size, size_t count, FILE * stream)
     return TANGRAM_REAL_CALL(fread)(ptr, size, count, stream);
 }
 
+ int TANGRAM_WRAP(fflush)(FILE* stream)
+{
+    tfs_file_t* tf = stream2tf(stream);
+    if(tf)
+        return tangram_commit_impl(tf);
+
+    MAP_OR_FAIL(fflush);
+    return TANGRAM_REAL_CALL(fflush)(stream);
+}
+
+
 int TANGRAM_WRAP(fclose)(FILE * stream)
 {
     tfs_file_t *tf = stream2tf(stream);
