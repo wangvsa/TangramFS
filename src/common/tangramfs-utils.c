@@ -94,8 +94,38 @@ void tangram_write_uct_server_addr(bool global_server, void* dev_addr, size_t de
     TANGRAM_REAL_CALL(fwrite)(dev_addr, 1, dev_addr_len, f);
     TANGRAM_REAL_CALL(fwrite)(&iface_addr_len, sizeof(iface_addr_len), 1, f);
     TANGRAM_REAL_CALL(fwrite)(iface_addr, 1, iface_addr_len, f);
-
+    TANGRAM_REAL_CALL(fflush)(f);
     TANGRAM_REAL_CALL(fclose)(f);
+
+    if(!global_server) {
+        int mpi_size, mpi_rank;
+        MPI_Comm_size(MPI_COMM_WORLD, &mpi_size);
+        MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
+
+        char* nodelist = NULL;
+        if(mpi_rank == 0)
+            nodelist = tangram_malloc(128 * mpi_size);
+
+        char hostname[128];
+        gethostname(hostname, 128);
+        MPI_Gather(hostname, 128, MPI_BYTE, nodelist, 128, MPI_BYTE, 0, MPI_COMM_WORLD);
+
+        if(mpi_rank == 0) {
+            f = TANGRAM_REAL_CALL(fopen)("/p/lscratchh/wang116/applications/TangramFS/nodelist.txt", "w");
+            for(int i = 0; i < mpi_size; i++) {
+                char* nodename = &nodelist[i*128];
+                TANGRAM_REAL_CALL(fwrite)(nodename, 1, strlen(nodename), f);
+
+                if(i != mpi_size - 1)
+                    TANGRAM_REAL_CALL(fwrite)(",", 1, 1, f);
+            }
+
+            TANGRAM_REAL_CALL(fflush)(f);
+            TANGRAM_REAL_CALL(fclose)(f);
+            tangram_free(nodelist, 128 * mpi_size);
+        }
+        MPI_Barrier(MPI_COMM_WORLD);
+    }
 }
 
 void tangram_read_uct_server_addr(bool global_server, void** dev_addr, size_t* dev_addr_len,
@@ -106,7 +136,7 @@ void tangram_read_uct_server_addr(bool global_server, void** dev_addr, size_t* d
     fill_addr_config_filename(global_server, cfg_path);
 
     FILE* f = TANGRAM_REAL_CALL(fopen)(cfg_path, "r");
-    assert(f != NULL);
+    assert(f != NULL);  // this assert does not work on Quart/Catalyst
 
     TANGRAM_REAL_CALL(fread)(dev_addr_len, sizeof(size_t), 1, f);
     *dev_addr = malloc(*dev_addr_len);

@@ -11,7 +11,8 @@
 
 int main(int argc, char* argv[]) {
     assert(argc == 2);
-    PMPI_Init(&argc, &argv);
+
+    MPI_Init(&argc, &argv);
 
     tfs_info_t tfs_info;
     tangram_get_info(&tfs_info);
@@ -33,10 +34,11 @@ int main(int argc, char* argv[]) {
         tangram_info("[tangramfs] Server stoped\n");
     }
 
-
-    PMPI_Barrier(tfs_info.mpi_comm);
+    MPI_Barrier(tfs_info.mpi_comm);
     tangram_release_info(&tfs_info);
-    PMPI_Finalize();
+
+    MPI_Finalize();
+
     return 0;
 }
 
