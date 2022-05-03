@@ -185,7 +185,7 @@ void tfs_flush(tfs_file_t *tf) {
 ssize_t tfs_write(tfs_file_t* tf, const void* buf, size_t size) {
     size_t local_offset = TANGRAM_REAL_CALL(lseek)(tf->local_fd, 0, SEEK_END);
     ssize_t res = TANGRAM_REAL_CALL(pwrite)(tf->local_fd, buf, size, local_offset);
-    //TANGRAM_REAL_CALL(fsync)(tf->local_fd);
+    TANGRAM_REAL_CALL(fsync)(tf->local_fd);
 
     int rc = seg_tree_add(&tf->seg_tree, tf->offset, tf->offset+size-1, local_offset, tangram_rpc_get_client_addr(), false);
     assert(rc == 0);

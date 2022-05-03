@@ -3,11 +3,13 @@
 #include <mpi.h>
 #include <stdbool.h>
 
+
 #define PATH_MAX    4096
 
 #define tangram_info(f_, ...) printf((f_), ##__VA_ARGS__)
-#define tangram_debug(f_, ...)      \
-    if(getenv(TANGRAM_DEBUG_ENV))   \
+#define tangram_debug(f_, ...)                      \
+    if( getenv(TANGRAM_DEBUG_ENV) &&                \
+        atoi(getenv(TANGRAM_DEBUG_ENV)) )           \
         printf((f_), ##__VA_ARGS__)
 
 typedef struct tfs_info {
