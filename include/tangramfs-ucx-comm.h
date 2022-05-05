@@ -5,10 +5,8 @@
 #include <pthread.h>
 #include "tangramfs-utils.h"
 
-#define TANGRAM_UCX_ROLE_RPC_CLIENT     0
-#define TANGRAM_UCX_ROLE_RMA_CLIENT     1
-#define TANGRAM_UCX_ROLE_LOCAL_SERVER   2
-#define TANGRAM_UCX_ROLE_GLOBAL_SERVER  3
+#define TANGRAM_UCX_ROLE_CLIENT         0
+#define TANGRAM_UCX_ROLE_SERVER         1
 
 #define TANGRAM_UCT_ADDR_IGNORE         NULL
 

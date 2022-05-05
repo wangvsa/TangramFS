@@ -65,25 +65,16 @@ void* server_local_rpc_handler(int8_t id, tangram_uct_addr_t* client, void* data
 }
 
 void tangram_server_local_start(tfs_info_t* tfs_info) {
-
-    tfs_info->role = TANGRAM_UCX_ROLE_LOCAL_SERVER;
-
     tangram_lockmgr_init(g_lt);
     tangram_ucx_server_init(tfs_info);
     tangram_ucx_server_register_rpc(server_local_rpc_handler);
 
-    int rank, size;
-    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-    MPI_Comm_size(MPI_COMM_WORLD, &size);
-
-    MPI_Barrier(tfs_info->mpi_comm);
-    printf("Server initialized, %d/%d, %d/%d\n", tfs_info->mpi_rank, tfs_info->mpi_size, rank, size);
-    sleep(2);
-    MPI_Barrier(tfs_info->mpi_comm);
-
     // Enter the progress loop and exit when the
     // stop command is received
-    tangram_ucx_server_start();
+    tangram_ucx_server_start(true);
+}
 
+void tangram_server_local_stop() {
+    tangram_ucx_server_stop(true);
     tangram_lockmgr_finalize(g_lt);
 }

@@ -99,8 +99,6 @@ void* server_global_rpc_handler(int8_t id, tangram_uct_addr_t* client, void* dat
 
 
 void tangram_server_global_start(tfs_info_t* tfs_info) {
-    tfs_info->role = TANGRAM_UCX_ROLE_GLOBAL_SERVER;
-
     tangram_metamgr_init();
     tangram_lockmgr_init(g_lt);
     tangram_ucx_server_init(tfs_info);
@@ -109,7 +107,8 @@ void tangram_server_global_start(tfs_info_t* tfs_info) {
     // Main thread will enther the progress loop
     // here. It will exit when the stop command
     // is received
-    tangram_ucx_server_start();
+    tangram_ucx_server_start(false);
+    tangram_ucx_server_stop();
 
     tangram_metamgr_finalize();
     tangram_lockmgr_finalize(g_lt);

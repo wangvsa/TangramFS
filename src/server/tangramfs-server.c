@@ -5,9 +5,7 @@
 #include <string.h>
 #include <assert.h>
 #include <mpi.h>
-#include "tangramfs-server-local.h"
 #include "tangramfs-server-global.h"
-
 
 int main(int argc, char* argv[]) {
     assert(argc == 2);
@@ -17,21 +15,19 @@ int main(int argc, char* argv[]) {
     tfs_info_t tfs_info;
     tangram_get_info(&tfs_info);
 
-    if( strcmp(argv[1], "gstart") == 0 ) {
-        tangram_info("[tangramfs] Server global started\n");
+    if( strcmp(argv[1], "start") == 0 ) {
+        tfs_info.role = TANGRAM_UCX_ROLE_SERVER;
+        tangram_info("[tangramfs] Global server started\n");
         tangram_server_global_start(&tfs_info);
-    } else if( strcmp(argv[1], "lstart") == 0 ) {
-        tangram_info("[tangramfs] Server local %d/%d started\n", tfs_info.mpi_rank, tfs_info.mpi_size);
-        // Run one local server (one process) on each node
-        tangram_server_local_start(&tfs_info);
     } else if( strcmp(argv[1], "stop") == 0 ) {
+        tfs_info.role = TANGRAM_UCX_ROLE_CLIENT;
         tangram_rpc_service_start(&tfs_info, NULL);
-        //if(tfs_info.mpi_rank == 0)
-        //    tangram_ucx_stop_global_server();
-        if(tfs_info.use_local_server)
-            tangram_ucx_stop_local_server();
-        tangram_rpc_service_stop();
-        tangram_info("[tangramfs] Server stoped, %d, rank: %d\n",tfs_info.use_local_server, tfs_info.mpi_rank);
+
+        if(tfs_info.mpi_rank == 0)
+            tangram_ucx_stop_global_server();
+
+        tangram_rpc_service_stop(&tfs_info);
+        tangram_info("[tangramfs] Global server stoped\n");
     }
 
     tangram_release_info(&tfs_info);
@@ -39,4 +35,3 @@ int main(int argc, char* argv[]) {
 
     return 0;
 }
-

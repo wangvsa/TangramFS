@@ -49,7 +49,9 @@ set(TANGRAMFS_SRCS
         ${CMAKE_CURRENT_SOURCE_DIR}/ucx/tangramfs-ucx-comm.c
         ${CMAKE_CURRENT_SOURCE_DIR}/ucx/tangramfs-ucx-server.c
         ${CMAKE_CURRENT_SOURCE_DIR}/ucx/tangramfs-ucx-client.c
-        ${CMAKE_CURRENT_SOURCE_DIR}/ucx/tangramfs-ucx-rma.c)
+        ${CMAKE_CURRENT_SOURCE_DIR}/ucx/tangramfs-ucx-rma.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/server/tangramfs-lock-manager.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/server/tangramfs-server-local.c)
 add_library(tangramfs ${TANGRAMFS_SRCS})
 
 target_include_directories(tangramfs

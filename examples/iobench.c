@@ -38,7 +38,6 @@ void write_nonstrided() {
     MPI_Barrier(MPI_COMM_WORLD);
     tstart = MPI_Wtime();
     for(int i = 0; i < N; i++) {
-        printf("%s rank %d write\n", hostname, mpi_rank);
         fwrite(data, 1, DATA_SIZE, fp);
     }
     MPI_Barrier(MPI_COMM_WORLD);
@@ -134,7 +133,7 @@ int main(int argc, char* argv[]) {
 
     for(int i = 0; i < 1; i++) {
         MPI_Barrier(MPI_COMM_WORLD);
-        write_nonstrided();
+        //write_nonstrided();
         //write_strided();
     }
 

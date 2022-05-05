@@ -14,9 +14,13 @@
 
 typedef struct tfs_info {
 
-    int mpi_rank;
-    int mpi_size;
+    int      mpi_rank;
+    int      mpi_size;
     MPI_Comm mpi_comm;
+
+    int      mpi_intra_rank;
+    int      mpi_intra_size;
+    MPI_Comm mpi_intra_comm;
 
     char tfs_dir[PATH_MAX];
     char persist_dir[PATH_MAX];
@@ -31,7 +35,6 @@ typedef struct tfs_info {
     bool debug;
 
     int  role;                  // client, local server or global server
-    bool use_local_server;
 
 } tfs_info_t;
 
@@ -42,8 +45,8 @@ void  tangram_free(void*ptr, size_t size);
 void tangram_get_info(tfs_info_t *tfs_info);
 void tangram_release_info(tfs_info_t *tfs_info);
 
-void tangram_write_uct_server_addr(bool global_server, void* dev_addr, size_t dev_addr_len, void* iface_addr, size_t iface_addr_len);
-void tangram_read_uct_server_addr(bool global_server, void** dev_addr, size_t* dev_addr_len, void** iface_addr, size_t* iface_addr_len);
+void tangram_write_uct_server_addr(void* dev_addr, size_t dev_addr_len, void* iface_addr, size_t iface_addr_len);
+void tangram_read_uct_server_addr(void** dev_addr, size_t* dev_addr_len, void** iface_addr, size_t* iface_addr_len);
 
 double tangram_wtime();
 

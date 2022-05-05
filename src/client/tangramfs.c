@@ -34,6 +34,7 @@ void tfs_init() {
         MPI_Init(NULL, NULL);
 
     tangram_get_info(&tfs);
+    tfs.role = TANGRAM_UCX_ROLE_CLIENT;
 
     tangram_map_real_calls();
     tangram_rpc_service_start(&tfs, revoke_lock_cb);
@@ -65,17 +66,15 @@ void tfs_finalize() {
     HASH_ITER(hh, tfs_files, tf, tmp) {
         tfs_close(tf);
     }
-    //if(tfs.mpi_rank == 0)
-    //    tangram_ucx_stop_global_server();
-    //if(tfs.use_local_server)
-    //    tangram_ucx_stop_local_server();
 
     // Need to have a barrier here because we can not allow
     // server stoped before all other clients
     MPI_Barrier(tfs.mpi_comm);
 
     //tangram_rma_service_stop();
-    tangram_rpc_service_stop();
+    tangram_rpc_service_stop(&tfs);
+
+    MPI_Barrier(tfs.mpi_comm);
 
     tangram_release_info(&tfs);
 }

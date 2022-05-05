@@ -294,36 +294,27 @@ void tangram_ucx_server_register_rpc(void* (*user_handler)(int8_t, tangram_uct_a
     user_am_data_handler = user_handler;
 }
 
-
-void tangram_ucx_server_start() {
-    long int count = 0;
-    char hostname[128];
-    gethostname(hostname,  128);
-    int progress = 0;
-    printf("%s enter server start 1!\n", hostname);
-    MPI_Barrier(MPI_COMM_WORLD);
-    printf("%s enter server start 2!\n", hostname);
-    MPI_Barrier(MPI_COMM_WORLD);
-
-    progress = uct_worker_progress(g_server_context.worker);
-    progress = uct_worker_progress(g_server_context.worker);
-    progress = uct_worker_progress(g_server_context.worker);
-    progress = uct_worker_progress(g_server_context.worker);
-    progress = uct_worker_progress(g_server_context.worker);
-    progress = uct_worker_progress(g_server_context.worker);
-
+void* server_progress_loop(void* arg) {
     while(g_server_running) {
-        if(g_tfs_info->role == TANGRAM_UCX_ROLE_LOCAL_SERVER) {
-            printf("%s server progress: %d, count: %d\n", hostname, progress, count);
-            sleep(1);
-            //MPI_Barrier(MPI_COMM_WORLD);
-        }
-
         pthread_mutex_lock(&g_server_context.mutex);
-        progress = uct_worker_progress(g_server_context.worker);
+        uct_worker_progress(g_server_context.worker);
         pthread_mutex_unlock(&g_server_context.mutex);
-        count++;
     }
+
+    return NULL;
+}
+
+void tangram_ucx_server_start(bool progress_thread) {
+    if(progress_thread) {
+        pthread_t thread;
+        pthread_create(&thread, NULL, server_progress_loop, NULL);
+    } else {
+        server_progress_loop(NULL);
+    }
+}
+
+void tangram_ucx_server_stop() {
+    assert(g_server_running == false);
 
     // Server stopped, clean up now
     for(int i = 0; i < NUM_THREADS; i++) {
@@ -333,4 +324,8 @@ void tangram_ucx_server_start() {
 
     tangram_uct_context_destroy(&g_server_context);
     ucs_async_context_destroy(g_server_async);
+}
+
+tangram_uct_addr_t* tangram_ucx_get_server_addr() {
+    return &g_server_context.self_addr;
 }

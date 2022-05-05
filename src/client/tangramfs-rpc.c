@@ -8,6 +8,7 @@
 #include <string.h>
 #include <mpi.h>
 #include "tangramfs-rpc.h"
+#include "tangramfs-server-local.h"
 
 static double rma_time;
 
@@ -78,10 +79,17 @@ void tangram_issue_metadata_rpc(uint8_t id, const char* path, void** respond_ptr
 }
 
 void tangram_rpc_service_start(tfs_info_t *tfs_info, void (*revoke_lock_cb)(void*)){
+    // Must start local server first
+    // later the client will need to broadcast the local server address
+    // to all clients
+    if(tfs_info->mpi_intra_rank == 0)
+        tangram_server_local_start(tfs_info);
     tangram_ucx_rpc_service_start(tfs_info, revoke_lock_cb);
 }
 
-void tangram_rpc_service_stop() {
+void tangram_rpc_service_stop(tfs_info_t* tfs_info) {
+    if(tfs_info->mpi_intra_rank == 0)
+        tangram_ucx_stop_local_server();
     tangram_ucx_rpc_service_stop();
 }
 
