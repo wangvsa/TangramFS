@@ -14,8 +14,6 @@ tfs_info_t*                  g_tfs_info;
 
 static ucs_async_context_t*  g_client_async;
 
-static tangram_uct_addr_t*   g_peer_addrs;
-
 /*
  * Listen for incoming AMs from server or peers.
  *
@@ -148,7 +146,14 @@ void tangram_ucx_sendrecv_server(uint8_t id, void* data, size_t length, void** r
     uct_ep_h ep;
     uct_ep_create_connect(g_send_context.iface, get_server_addr(&g_send_context), &ep);
 
+    char hostname[128];
+    gethostname(hostname, 128);
+    printf("%s, here1, id: %d, data len: %ld, use local server: %d\n", hostname, id, length, g_tfs_info->use_local_server);
+    sleep(2);
+
     do_uct_am_short_progress(g_send_context.worker, ep, id, &g_recv_context.self_addr, data, length);
+
+    printf("%s, here2, id: %d, data len: %ld\n", hostname, id, length);
 
     if(respond_ptr != NULL) { // need to wait for respond
         pthread_mutex_lock(&g_send_context.cond_mutex);
@@ -157,8 +162,11 @@ void tangram_ucx_sendrecv_server(uint8_t id, void* data, size_t length, void** r
         pthread_mutex_unlock(&g_send_context.cond_mutex);
     }
 
+    printf("%s, here3, id: %d, data len: %ld\n", hostname, id, length);
+
     uct_ep_destroy(ep);
     pthread_mutex_unlock(&g_send_context.mutex);
+
 }
 
 /**
@@ -217,6 +225,8 @@ void tangram_ucx_stop_local_server() {
     uct_ep_destroy(ep);
 
     pthread_mutex_unlock(&g_send_context.mutex);
+    char hostname[128]; gethostname(hostname, 128);
+    printf("local server stopped, %s\n", hostname);
 }
 
 void tangram_ucx_stop_global_server() {
@@ -244,8 +254,6 @@ void tangram_ucx_rpc_service_start(tfs_info_t *tfs_info, void (revoke_lock_cb)(v
     tangram_uct_context_init(g_client_async, g_tfs_info, &g_recv_context);
     tangram_uct_context_init(g_client_async, g_tfs_info, &g_epaddr_context);
 
-    g_peer_addrs = malloc(g_tfs_info->mpi_size * sizeof(tangram_uct_addr_t));
-    exchange_dev_iface_addr(&g_recv_context, g_peer_addrs);
 
     status = uct_iface_set_am_handler(g_recv_context.iface, AM_ID_QUERY_RESPOND, am_server_respond_listener, NULL, 0);
     assert(status == UCS_OK);

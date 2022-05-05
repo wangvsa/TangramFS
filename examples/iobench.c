@@ -21,11 +21,14 @@ static int    N = 10;
 int mpi_size, mpi_rank;
 
 // Final output result
-double tstart, tend;
-int    write_iops, read_iops;
-double write_bandwidth, read_bandwidth;
+static double tstart, tend;
+static int    write_iops, read_iops;
+static double write_bandwidth, read_bandwidth;
 
 void write_nonstrided() {
+    char hostname[128];
+    gethostname(hostname, 128);
+
     FILE* fp = fopen(FILENAME, "wb");
 
     char* data = malloc(sizeof(char)*DATA_SIZE);
@@ -35,6 +38,7 @@ void write_nonstrided() {
     MPI_Barrier(MPI_COMM_WORLD);
     tstart = MPI_Wtime();
     for(int i = 0; i < N; i++) {
+        printf("%s rank %d write\n", hostname, mpi_rank);
         fwrite(data, 1, DATA_SIZE, fp);
     }
     MPI_Barrier(MPI_COMM_WORLD);
@@ -114,8 +118,8 @@ void read_random() {
 }
 
 int main(int argc, char* argv[]) {
-
-    MPI_Init(&argc, &argv);
+    int provided;
+    MPI_Init_thread(&argc, &argv, MPI_THREAD_MULTIPLE, &provided);
     MPI_Comm_size(MPI_COMM_WORLD, &mpi_size);
     MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
 
@@ -145,6 +149,7 @@ int main(int argc, char* argv[]) {
         write_iops = N / (tend-tstart);
         write_bandwidth = DATA_SIZE / MB * N * mpi_size / (tend-tstart);
         printf("Write IOPS: %d, Bandwidth: %.3f\t\tRead IOPS: %d, Bandwidth: %.3f\n", write_iops, write_bandwidth, read_iops, read_bandwidth);
+        fflush(stdout);
     }
 
     MPI_Finalize();

@@ -115,8 +115,7 @@ void tangram_write_uct_server_addr(bool global_server, void* dev_addr, size_t de
             for(int i = 0; i < mpi_size; i++) {
                 char* nodename = &nodelist[i*128];
                 TANGRAM_REAL_CALL(fwrite)(nodename, 1, strlen(nodename), f);
-
-                if(i != mpi_size - 1)
+                if(i != mpi_size-1)
                     TANGRAM_REAL_CALL(fwrite)(",", 1, 1, f);
             }
 

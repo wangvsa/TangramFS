@@ -9,11 +9,13 @@
 #include "tangramfs-ucx.h"
 #include "tangramfs-ucx-comm.h"
 
-#define NUM_THREADS 8
+#define NUM_THREADS 4
 
 volatile static bool         g_server_running = true;
 static ucs_async_context_t*  g_server_async;
 static tangram_uct_context_t g_server_context;
+
+tfs_info_t* g_tfs_info;
 
 /*
  * Use one global mutex to protect revoke rpcs
@@ -87,6 +89,7 @@ void append_task_to_worker(uint8_t id, void* buf, size_t buf_len, int tid) {
     task->respond_len = 0;
     task->data = NULL;
     unpack_rpc_buffer(buf, buf_len, &task->client, &task->data);
+
 
     pthread_mutex_lock(&g_workers[tid].lock);
     DL_APPEND(g_workers[tid].tasks, task);
@@ -168,9 +171,9 @@ static ucs_status_t am_stop_listener(void *arg, void *buf, size_t buf_len, unsig
 }
 
 void handle_task(rpc_task_t* task) {
+    printf("handle task %d!\n", task->id);
     pthread_mutex_lock(&g_server_context.mutex);
     uct_ep_h ep;
-
     uct_ep_create_connect(g_server_context.iface, &task->client, &ep);
     pthread_mutex_unlock(&g_server_context.mutex);
 
@@ -196,8 +199,10 @@ void* rpc_task_worker_func(void* arg) {
             pthread_cond_wait(&me->cond, &me->lock);
 
         // Possible get the signal because server stoped
-        if (!g_server_running)
+        if (!g_server_running) {
+            pthread_mutex_unlock(&me->lock);
             break;
+        }
 
         // FIFO manner
         rpc_task_t *task = me->tasks;
@@ -246,6 +251,8 @@ void tangram_ucx_revoke_lock(tangram_uct_addr_t* client, void* data, size_t leng
 
 
 void tangram_ucx_server_init(tfs_info_t *tfs_info) {
+    g_tfs_info = tfs_info;
+
     ucs_status_t status;
     ucs_async_context_create(UCS_ASYNC_MODE_THREAD_SPINLOCK, &g_server_async);
 
@@ -289,11 +296,33 @@ void tangram_ucx_server_register_rpc(void* (*user_handler)(int8_t, tangram_uct_a
 
 
 void tangram_ucx_server_start() {
+    long int count = 0;
+    char hostname[128];
+    gethostname(hostname,  128);
+    int progress = 0;
+    printf("%s enter server start 1!\n", hostname);
+    MPI_Barrier(MPI_COMM_WORLD);
+    printf("%s enter server start 2!\n", hostname);
+    MPI_Barrier(MPI_COMM_WORLD);
+
+    progress = uct_worker_progress(g_server_context.worker);
+    progress = uct_worker_progress(g_server_context.worker);
+    progress = uct_worker_progress(g_server_context.worker);
+    progress = uct_worker_progress(g_server_context.worker);
+    progress = uct_worker_progress(g_server_context.worker);
+    progress = uct_worker_progress(g_server_context.worker);
 
     while(g_server_running) {
+        if(g_tfs_info->role == TANGRAM_UCX_ROLE_LOCAL_SERVER) {
+            printf("%s server progress: %d, count: %d\n", hostname, progress, count);
+            sleep(1);
+            //MPI_Barrier(MPI_COMM_WORLD);
+        }
+
         pthread_mutex_lock(&g_server_context.mutex);
-        uct_worker_progress(g_server_context.worker);
+        progress = uct_worker_progress(g_server_context.worker);
         pthread_mutex_unlock(&g_server_context.mutex);
+        count++;
     }
 
     // Server stopped, clean up now

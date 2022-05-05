@@ -155,7 +155,7 @@ FILE* TANGRAM_WRAP(fopen)(const char *filename, const char *mode)
     if(intercept && stream!=NULL) {
         tfs_file_t* tf = tfs_open(filename);
         tf->stream     = stream;
-        tangram_debug("[tangramfs] fopen %s\n", filename);
+        tangram_debug("[tangramfs client] fopen %s\n", filename);
         add_to_map(tf);
     }
 
@@ -166,7 +166,7 @@ int TANGRAM_WRAP(fseek)(FILE *stream, long int offset, int origin)
 {
     tfs_file_t* tf = stream2tf(stream);
     if(tf) {
-        tangram_debug("[tangramfs] fseek %s (%lu, %d)\n", tf->filename, offset, origin);
+        tangram_debug("[tangramfs client] fseek %s (%lu, %d)\n", tf->filename, offset, origin);
         tfs_seek(tf, offset, origin);
         return 0;   // unlike lseek(), fseek on success, return 0
     }
@@ -179,7 +179,7 @@ void TANGRAM_WRAP(rewind)(FILE *stream)
 {
     tfs_file_t* tf = stream2tf(stream);
     if(tf) {
-        tangram_debug("[tangramfs] rewind %s\n", tf->filename);
+        tangram_debug("[tangramfs client] rewind %s\n", tf->filename);
         tfs_seek(tf, 0, SEEK_SET);
     }
 
@@ -193,7 +193,7 @@ long int TANGRAM_WRAP(ftell)(FILE *stream)
     tfs_file_t* tf = stream2tf(stream);
     if(tf) {
         size_t res = tfs_tell(tf);
-        tangram_debug("[tangramfs] ftell %s %lu\n", tf->filename, res);
+        tangram_debug("[tangramfs client] ftell %s %lu\n", tf->filename, res);
         return res;
     }
 
@@ -206,10 +206,11 @@ size_t TANGRAM_WRAP(fwrite)(const void *ptr, size_t size, size_t count, FILE * s
 {
     tfs_file_t *tf = stream2tf(stream);
     if(tf) {
+        tangram_debug("[tangramfs client] fwrite %s (%lld, %lu*%lu) start\n", tf->filename, tf->offset, size, count);
         ssize_t res = tangram_write_impl(tf, ptr, count*size);
         // Note that fwrite on success returns the count not total bytes.
         res = (res == size*count) ? count: res;
-        tangram_debug("[tangramfs] fwrite %s (%lu, %lu), return: %ld\n", tf->filename, size, count, res);
+        tangram_debug("[tangramfs client] fwrite %s (%ld, %lu*%lu), return: %ld\n", tf->filename, tf->offset-res, size, count, res);
         return res;
     }
 
@@ -223,7 +224,7 @@ size_t TANGRAM_WRAP(fread)(void * ptr, size_t size, size_t count, FILE * stream)
     if(tf) {
         ssize_t res = tangram_read_impl(tf, ptr, count*size);
         res = (res == size*count) ? count: res;
-        tangram_debug("[tangramfs] fread %s (%lu, %lu), return: %ld\n", tf->filename, size, count, res);
+        tangram_debug("[tangramfs client] fread %s (%lu, %lu), return: %ld\n", tf->filename, size, count, res);
         return res;
     }
 
@@ -247,7 +248,7 @@ int TANGRAM_WRAP(fclose)(FILE * stream)
     tfs_file_t *tf = stream2tf(stream);
     if(tf) {
         remove_from_map(tf);
-        tangram_debug("[tangramfs] fclose %s\n", tf->filename);
+        tangram_debug("[tangramfs client] fclose %s\n", tf->filename);
         return tangram_close_impl(tf);
     }
 
@@ -274,7 +275,7 @@ int TANGRAM_WRAP(open)(const char *pathname, int flags, ...)
     if(intercept && fd!=-1) {
         tfs_file_t* tf = tfs_open(pathname);
         tf->fd = fd;
-        tangram_debug("[tangramfs] open %s %d\n", pathname, tf->fd);
+        tangram_debug("[tangramfs client] open %s %d\n", pathname, tf->fd);
         add_to_map(tf);
     }
     return fd;
@@ -299,7 +300,7 @@ int TANGRAM_WRAP(open64)(const char *pathname, int flags, ...)
     if(intercept && fd!=-1) {
         tfs_file_t* tf = tfs_open(pathname);
         tf->fd = fd;
-        tangram_debug("[tangramfs] open64 %s %d\n", pathname, tf->fd);
+        tangram_debug("[tangramfs client] open64 %s %d\n", pathname, tf->fd);
         add_to_map(tf);
     }
 
@@ -310,7 +311,7 @@ off_t TANGRAM_WRAP(lseek)(int fd, off_t offset, int whence)
 {
     tfs_file_t* tf = fd2tf(fd);
     if(tf) {
-        tangram_debug("[tangramfs] lseek %s, offset: %lu, whence: %d\n", tf->filename, offset, whence);
+        tangram_debug("[tangramfs client] lseek %s, offset: %lu, whence: %d\n", tf->filename, offset, whence);
         return tfs_seek(tf, offset, whence);
     }
 
@@ -322,7 +323,7 @@ off64_t TANGRAM_WRAP(lseek64)(int fd, off64_t offset, int whence)
 {
     tfs_file_t* tf = fd2tf(fd);
     if(tf) {
-        tangram_debug("[tangramfs] lseek64 %s, offset: %lu, whence: %d\n", tf->filename, offset, whence);
+        tangram_debug("[tangramfs client] lseek64 %s, offset: %lu, whence: %d\n", tf->filename, offset, whence);
         return tfs_seek(tf, offset, whence);
     }
 
@@ -335,9 +336,9 @@ ssize_t TANGRAM_WRAP(write)(int fd, const void *buf, size_t count)
 {
     tfs_file_t* tf = fd2tf(fd);
     if(tf) {
-        tangram_debug("[tangramfs] write start %s (%lu, %lu)\n", tf->filename, tf->offset, count);
+        tangram_debug("[tangramfs client] write start %s (%lu, %lu)\n", tf->filename, tf->offset, count);
         ssize_t res = tangram_write_impl(tf, buf, count);
-        tangram_debug("[tangramfs] write done %s (%lu), return: %ld\n", tf->filename, count, res);
+        tangram_debug("[tangramfs client] write done %s (%lu), return: %ld\n", tf->filename, count, res);
         return res;
     }
 
@@ -350,7 +351,7 @@ ssize_t TANGRAM_WRAP(read)(int fd, void *buf, size_t count)
     tfs_file_t* tf = fd2tf(fd);
     if(tf) {
         ssize_t res = tangram_read_impl(tf, buf, count);
-        tangram_debug("[tangramfs] read %s (%lu), return: %ld\n", tf->filename, count, res);
+        tangram_debug("[tangramfs client] read %s (%lu), return: %ld\n", tf->filename, count, res);
         return res;
     }
 
@@ -362,7 +363,7 @@ int TANGRAM_WRAP(close)(int fd) {
     tfs_file_t* tf = fd2tf(fd);
     if(tf) {
         remove_from_map(tf);
-        tangram_debug("[tangramfs] close %s\n", tf->filename);
+        tangram_debug("[tangramfs client] close %s\n", tf->filename);
         return tangram_close_impl(tf);
     }
 
@@ -377,7 +378,7 @@ ssize_t TANGRAM_WRAP(pwrite)(int fd, const void *buf, size_t count, off_t offset
         tfs_seek(tf, offset, SEEK_SET);
         ssize_t res = tangram_write_impl(tf, buf, count);
         // Note that fwrite on success returns the count not total bytes.
-        tangram_debug("[tangramfs] pwrite %s (%lu, %lu), return: %ld\n", tf->filename, offset, count, res);
+        tangram_debug("[tangramfs client] pwrite %s (%lu, %lu), return: %ld\n", tf->filename, offset, count, res);
         return res;
     }
 
@@ -391,7 +392,7 @@ ssize_t TANGRAM_WRAP(pread)(int fd, void *buf, size_t count, off_t offset)
     if(tf) {
         tfs_seek(tf, offset, SEEK_SET);
         ssize_t res = tangram_read_impl(tf, buf, count);
-        tangram_debug("[tangramfs] pread %s (%lu, %lu), return: %ld\n", tf->filename, offset, count, res);
+        tangram_debug("[tangramfs client] pread %s (%lu, %lu), return: %ld\n", tf->filename, offset, count, res);
         return res;
     }
 
@@ -418,7 +419,7 @@ int TANGRAM_WRAP(__xstat)(int vers, const char *path, struct stat *buf)
     // TODO: stat() call not implemented yet.
     tfs_file_t* tf = path2tf(path);
     if(tf) {
-        tangram_debug("[tangramfs] stat %s\n", tf->filename);
+        tangram_debug("[tangramfs client] stat %s\n", tf->filename);
         fill_local_stat(tf, buf, vers);
         tfs_stat(tf, buf);
         return 0;
@@ -432,7 +433,7 @@ int TANGRAM_WRAP(__fxstat)(int vers, int fd, struct stat *buf)
 {
     tfs_file_t* tf = fd2tf(fd);
     if(tf) {
-        tangram_debug("[tangramfs] fstat %s\n", tf->filename);
+        tangram_debug("[tangramfs client] fstat %s\n", tf->filename);
         fill_local_stat(tf, buf, vers);
         tfs_stat(tf, buf);
         return 0;
@@ -447,7 +448,7 @@ int TANGRAM_WRAP(__lxstat)(int vers, const char *path, struct stat *buf)
     // TODO: stat() call not implemented yet.
     tfs_file_t* tf = path2tf(path);
     if(tf) {
-        tangram_debug("[tangramfs] lstat %s\n", tf->filename);
+        tangram_debug("[tangramfs client] lstat %s\n", tf->filename);
         fill_local_stat(tf, buf, vers);
         tfs_stat(tf, buf);
         return 0;
