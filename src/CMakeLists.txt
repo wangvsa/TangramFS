@@ -51,7 +51,7 @@ set(TANGRAMFS_SRCS
         ${CMAKE_CURRENT_SOURCE_DIR}/ucx/tangramfs-ucx-client.c
         ${CMAKE_CURRENT_SOURCE_DIR}/ucx/tangramfs-ucx-rma.c
         ${CMAKE_CURRENT_SOURCE_DIR}/server/tangramfs-lock-manager.c
-        ${CMAKE_CURRENT_SOURCE_DIR}/server/tangramfs-server-local.c)
+        ${CMAKE_CURRENT_SOURCE_DIR}/server/tangramfs-delegator.c)
 add_library(tangramfs ${TANGRAMFS_SRCS})
 
 target_include_directories(tangramfs
@@ -76,8 +76,7 @@ set(TFS_SERVER_SRCS
         ${CMAKE_CURRENT_SOURCE_DIR}/server/tangramfs-metadata-manager.c
         ${CMAKE_CURRENT_SOURCE_DIR}/server/tangramfs-lock-manager.c
         ${CMAKE_CURRENT_SOURCE_DIR}/server/tangramfs-server.c
-        ${CMAKE_CURRENT_SOURCE_DIR}/server/tangramfs-server-local.c
-        ${CMAKE_CURRENT_SOURCE_DIR}/server/tangramfs-server-global.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/server/tangramfs-delegator.c
         ${CMAKE_CURRENT_SOURCE_DIR}/client/tangramfs-rpc.c
         ${CMAKE_CURRENT_SOURCE_DIR}/common/tangramfs-utils.c
         ${CMAKE_CURRENT_SOURCE_DIR}/common/lock-token.c

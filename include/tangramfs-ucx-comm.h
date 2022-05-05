@@ -27,8 +27,8 @@ typedef struct tangram_uct_context {
     uct_md_attr_t      md_attr;
 
     tangram_uct_addr_t self_addr;
-    tangram_uct_addr_t local_server_addr;
-    tangram_uct_addr_t global_server_addr;
+    tangram_uct_addr_t delegator_addr;
+    tangram_uct_addr_t server_addr;
 
     // Make sure a context is only used by one thread at a time
     pthread_mutex_t    mutex;

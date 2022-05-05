@@ -144,16 +144,16 @@ void tangram_uct_context_init(ucs_async_context_t* async, tfs_info_t* tfs_info, 
     uct_iface_get_device_address(context->iface, context->self_addr.dev);
     uct_iface_get_address(context->iface, context->self_addr.iface);
 
-    // context->local_server will be filled by the calling client
-    // context->global_server will be filled by read_uct_server_addr()
-    context->local_server_addr.dev    = NULL;
-    context->local_server_addr.iface  = NULL;
-    context->global_server_addr.dev   = NULL;
-    context->global_server_addr.iface = NULL;
+    // context->delegator will be filled by the calling client
+    // context->server will be filled by read_uct_server_addr()
+    context->delegator_addr.dev    = NULL;
+    context->delegator_addr.iface  = NULL;
+    context->server_addr.dev   = NULL;
+    context->server_addr.iface = NULL;
 
     if (tfs_info->role == TANGRAM_UCX_ROLE_CLIENT) {
-        tangram_read_uct_server_addr((void**)&context->global_server_addr.dev, &context->global_server_addr.dev_len,
-                                           (void**)&context->global_server_addr.iface, &context->global_server_addr.iface_len);
+        tangram_read_uct_server_addr((void**)&context->server_addr.dev, &context->server_addr.dev_len,
+                                           (void**)&context->server_addr.iface, &context->server_addr.iface_len);
     }
 
     if(tfs_info->role == TANGRAM_UCX_ROLE_SERVER) {
@@ -172,8 +172,8 @@ void tangram_uct_context_destroy(tangram_uct_context_t *context) {
     uct_md_close(context->md);
 
     tangram_uct_addr_free(&context->self_addr);
-    tangram_uct_addr_free(&context->local_server_addr);
-    tangram_uct_addr_free(&context->global_server_addr);
+    tangram_uct_addr_free(&context->delegator_addr);
+    tangram_uct_addr_free(&context->server_addr);
 
     uct_worker_destroy(context->worker);
 

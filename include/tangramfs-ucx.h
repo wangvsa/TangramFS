@@ -37,23 +37,23 @@
 #define AM_ID_REVOKE_LOCK_RESPOND           29
 
 
-// Server
+// Server and Delegator
 void tangram_ucx_server_init(tfs_info_t* tfs_info);
 void tangram_ucx_server_register_rpc(void* (*user_handler)(int8_t, tangram_uct_addr_t*, void*, uint8_t*, size_t*));
 void tangram_ucx_server_start(bool progress_thread);
 void tangram_ucx_server_stop();
 void tangram_ucx_revoke_lock(tangram_uct_addr_t* client, void* data, size_t length);
-tangram_uct_addr_t* tangram_ucx_get_server_addr();
+tangram_uct_addr_t* tangram_ucx_server_addr();
 
 // Client
 void tangram_ucx_sendrecv_server(uint8_t id, void* data, size_t length, void** respond_ptr);
 void tangram_ucx_sendrecv_client(uint8_t id, tangram_uct_addr_t* dest, void* data, size_t length, void** respond_ptr);
 void tangram_ucx_send_ep_addr(uint8_t id, tangram_uct_addr_t* dest, void* data, size_t length);
-void tangram_ucx_stop_local_server();
-void tangram_ucx_stop_global_server();
-void tangram_ucx_rpc_service_start(tfs_info_t* tfs_info, void (*revoke_lock_cb)(void*));
-void tangram_ucx_rpc_service_stop();
-tangram_uct_addr_t* tangram_ucx_get_client_addr();
+void tangram_ucx_client_start(tfs_info_t* tfs_info, void (*revoke_lock_cb)(void*));
+void tangram_ucx_client_stop();
+void tangram_ucx_stop_delegator();
+void tangram_ucx_stop_server();
+tangram_uct_addr_t* tangram_ucx_client_addr();
 size_t tangram_uct_am_short_max_size();
 
 // RMA

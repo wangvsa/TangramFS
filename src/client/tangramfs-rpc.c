@@ -8,7 +8,7 @@
 #include <string.h>
 #include <mpi.h>
 #include "tangramfs-rpc.h"
-#include "tangramfs-server-local.h"
+#include "tangramfs-delegator.h"
 
 static double rma_time;
 
@@ -79,22 +79,24 @@ void tangram_issue_metadata_rpc(uint8_t id, const char* path, void** respond_ptr
 }
 
 void tangram_rpc_service_start(tfs_info_t *tfs_info, void (*revoke_lock_cb)(void*)){
-    // Must start local server first
-    // later the client will need to broadcast the local server address
+    // Must start delegator first
+    // later the client will need to broadcast delegator's address
     // to all clients
     if(tfs_info->mpi_intra_rank == 0)
-        tangram_server_local_start(tfs_info);
-    tangram_ucx_rpc_service_start(tfs_info, revoke_lock_cb);
+        tangram_delegator_start(tfs_info);
+    tangram_ucx_client_start(tfs_info, revoke_lock_cb);
 }
 
 void tangram_rpc_service_stop(tfs_info_t* tfs_info) {
-    if(tfs_info->mpi_intra_rank == 0)
-        tangram_ucx_stop_local_server();
-    tangram_ucx_rpc_service_stop();
+    if(tfs_info->mpi_intra_rank == 0) {
+        tangram_ucx_stop_delegator();
+        tangram_delegator_stop();
+    }
+    tangram_ucx_client_stop();
 }
 
-tangram_uct_addr_t* tangram_rpc_get_client_addr() {
-    return tangram_ucx_get_client_addr();
+tangram_uct_addr_t* tangram_rpc_client_addr() {
+    return tangram_ucx_client_addr();
 }
 
 void tangram_rma_service_start(tfs_info_t *tfs_info, void* (*serve_rma_data_cb)(void*, size_t*)) {

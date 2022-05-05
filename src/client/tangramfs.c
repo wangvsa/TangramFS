@@ -57,7 +57,7 @@ void tfs_finalize() {
         tfs_release_lock_client();
 
     // TODO
-    // need to free lock tokens
+    // need to free local lock tokens
 
     // We should have no files in the table now.
     // Just in case users did not close all files
@@ -188,7 +188,7 @@ ssize_t tfs_write(tfs_file_t* tf, const void* buf, size_t size) {
     ssize_t res = TANGRAM_REAL_CALL(pwrite)(tf->local_fd, buf, size, local_offset);
     TANGRAM_REAL_CALL(fsync)(tf->local_fd);
 
-    int rc = seg_tree_add(&tf->seg_tree, tf->offset, tf->offset+size-1, local_offset, tangram_rpc_get_client_addr(), false);
+    int rc = seg_tree_add(&tf->seg_tree, tf->offset, tf->offset+size-1, local_offset, tangram_rpc_client_addr(), false);
     assert(rc == 0);
 
     tf->offset += size;
@@ -196,7 +196,7 @@ ssize_t tfs_write(tfs_file_t* tf, const void* buf, size_t size) {
 }
 
 ssize_t tfs_read(tfs_file_t* tf, void* buf, size_t size) {
-    tangram_uct_addr_t *self  = tangram_rpc_get_client_addr();
+    tangram_uct_addr_t *self  = tangram_rpc_client_addr();
     tangram_uct_addr_t *owner = NULL;
     int res = tfs_query(tf, tf->offset, size, &owner);
     //printf("[tangramfs %d] read %s (%d, [%lu,%lu])\n", tfs.mpi_rank, tf->filename, out.rank, tf->offset, size);
@@ -581,7 +581,7 @@ size_t tfs_fetch_pfs(const char* filename, void* buf, size_t size) {
 size_t tfs_fetch(const char* filename, void* buf, size_t size) {
     tfs_file_t* tf = tfs_open(filename);
 
-    tangram_uct_addr_t *self  = tangram_rpc_get_client_addr();
+    tangram_uct_addr_t *self  = tangram_rpc_client_addr();
     tangram_uct_addr_t *owner = NULL;
 
     //int res = tfs_query(tf, 0, size, &owner);

@@ -325,6 +325,6 @@ void tangram_ucx_server_stop() {
     ucs_async_context_destroy(g_server_async);
 }
 
-tangram_uct_addr_t* tangram_ucx_get_server_addr() {
+tangram_uct_addr_t* tangram_ucx_server_addr() {
     return &g_server_context.self_addr;
 }

@@ -38,13 +38,6 @@ static tangram_uct_context_t g_epaddr_context;
 void (*g_revoke_lock_cb)(void*);
 
 
-tangram_uct_addr_t* get_server_addr(tangram_uct_context_t* context) {
-    //if(g_tfs_info->use_local_server)
-    return &context->local_server_addr;
-    //else
-    //    return &context->global_server_addr;
-}
-
 
 /**
  * Handles both query and post respond from server
@@ -65,7 +58,7 @@ void* handle_revoke_lock_request(void* arg) {
     // only, and it allows only one outgoing RPC at a time:
     //   -- Using it can cause deadlock when acquiring and revoking at the same time
     uct_ep_h ep;
-    uct_ep_create_connect(g_client_context.iface, get_server_addr(&g_client_context), &ep);
+    uct_ep_create_connect(g_client_context.iface, &g_client_context.delegator_addr, &ep);
     do_uct_am_short_progress(g_client_context.worker, ep, AM_ID_REVOKE_LOCK_RESPOND, &g_client_context.self_addr, NULL, 0);
     uct_ep_destroy(ep);
     return NULL;
@@ -123,7 +116,11 @@ void sendrecv(uint8_t id, tangram_uct_addr_t* dest, void* data, size_t length, v
 }
 
 void tangram_ucx_sendrecv_server(uint8_t id, void* data, size_t length, void** respond_ptr) {
-    sendrecv(id, get_server_addr(&g_client_context), data, length, respond_ptr);
+    sendrecv(id, &g_client_context.server_addr, data, length, respond_ptr);
+}
+
+void tangram_ucx_sendrecv_delegator(uint8_t id, void* data, size_t length, void** respond_ptr) {
+    sendrecv(id, &g_client_context.delegator_addr, data, length, respond_ptr);
 }
 
 void tangram_ucx_sendrecv_client(uint8_t id, tangram_uct_addr_t* dest, void* data, size_t length, void** respond_ptr) {
@@ -141,28 +138,28 @@ void tangram_ucx_send_ep_addr(uint8_t id, tangram_uct_addr_t* dest, void* data, 
  *
  * Used to send the stop server signal
  */
-void tangram_ucx_stop_local_server() {
-    sendrecv(AM_ID_STOP_REQUEST, &g_client_context.local_server_addr, NULL, 0, NULL);
+void tangram_ucx_stop_delegator() {
+    sendrecv(AM_ID_STOP_REQUEST, &g_client_context.delegator_addr, NULL, 0, NULL);
 }
 
-void tangram_ucx_stop_global_server() {
-    sendrecv(AM_ID_STOP_REQUEST, &g_client_context.global_server_addr, NULL, 0, NULL);
+void tangram_ucx_stop_server() {
+    sendrecv(AM_ID_STOP_REQUEST, &g_client_context.server_addr, NULL, 0, NULL);
 }
 
-void set_local_server_addr(tangram_uct_context_t* context) {
+void set_delegator_addr(tangram_uct_context_t* context) {
     // Broadcast local server address
     void* buf;
     size_t len;
     if(g_tfs_info->mpi_intra_rank == 0)
-        buf = tangram_uct_addr_serialize(tangram_ucx_get_server_addr(), &len);
+        buf = tangram_uct_addr_serialize(tangram_ucx_server_addr(), &len);
     else
         buf = tangram_uct_addr_serialize(&context->self_addr, &len);
     MPI_Bcast(buf, len, MPI_BYTE, 0, g_tfs_info->mpi_intra_comm);
-    tangram_uct_addr_deserialize(buf, &context->local_server_addr);
+    tangram_uct_addr_deserialize(buf, &context->delegator_addr);
     free(buf);
 }
 
-void tangram_ucx_rpc_service_start(tfs_info_t *tfs_info, void (revoke_lock_cb)(void*)) {
+void tangram_ucx_client_start(tfs_info_t *tfs_info, void (revoke_lock_cb)(void*)) {
     g_tfs_info = tfs_info;
 
     g_revoke_lock_cb = revoke_lock_cb;
@@ -172,8 +169,8 @@ void tangram_ucx_rpc_service_start(tfs_info_t *tfs_info, void (revoke_lock_cb)(v
 
     tangram_uct_context_init(g_client_async, g_tfs_info, &g_client_context);
     tangram_uct_context_init(g_client_async, g_tfs_info, &g_epaddr_context);
-    set_local_server_addr(&g_client_context);
-    set_local_server_addr(&g_epaddr_context);
+    set_delegator_addr(&g_client_context);
+    set_delegator_addr(&g_epaddr_context);
 
     status = uct_iface_set_am_handler(g_client_context.iface, AM_ID_QUERY_RESPOND, am_server_respond_listener, NULL, 0);
     assert(status == UCS_OK);
@@ -201,7 +198,7 @@ void tangram_ucx_rpc_service_start(tfs_info_t *tfs_info, void (revoke_lock_cb)(v
     assert(status == UCS_OK);
 }
 
-void tangram_ucx_rpc_service_stop() {
+void tangram_ucx_client_stop() {
     ucs_status_t status = uct_iface_flush(g_client_context.iface, UCT_FLUSH_FLAG_LOCAL, NULL);
     assert(status == UCS_OK);
 
@@ -212,7 +209,7 @@ void tangram_ucx_rpc_service_stop() {
     ucs_async_context_destroy(g_client_async);
 }
 
-tangram_uct_addr_t* tangram_ucx_get_client_addr() {
+tangram_uct_addr_t* tangram_ucx_client_addr() {
     return &g_client_context.self_addr;
 }
 
