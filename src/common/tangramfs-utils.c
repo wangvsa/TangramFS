@@ -61,6 +61,11 @@ void tangram_info_init(tfs_info_t* tfs_info) {
     const char* debug = getenv(TANGRAM_DEBUG_ENV);
     if(debug)
         tfs_info->debug = atoi(debug);
+
+    tfs_info->use_delegator = false;
+    const char* use_delegator = getenv(TANGRAM_USE_DELEGATOR_ENV);
+    if(use_delegator)
+        tfs_info->use_delegator = atoi(use_delegator);
 }
 
 void tangram_info_finalize(tfs_info_t *tfs_info) {

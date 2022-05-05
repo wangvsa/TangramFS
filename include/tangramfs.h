@@ -25,7 +25,7 @@
 #define TANGRAM_UCX_RMA_TL_ENV          "TANGRAM_RMA_TL"
 // optional
 #define TANGRAM_DEBUG_ENV               "TANGRAM_DEBUG"
-#define TANGRAM_USE_LOCAL_SERVER_ENV    "TANGRAM_USE_LOCAL_SERVER"
+#define TANGRAM_USE_DELEGATOR_ENV       "TANGRAM_USE_DELEGATOR"
 
 
 typedef struct tfs_file {

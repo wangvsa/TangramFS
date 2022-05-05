@@ -160,7 +160,7 @@ void read_server_uct_addr(tfs_info_t* tfs_info, tangram_uct_addr_t* server_addr)
     fill_addr_config_filename(tfs_info, cfg_path);
 
     FILE* f = TANGRAM_REAL_CALL(fopen)(cfg_path, "r");
-    assert(f != NULL);  // this assert does not work on Quart/Catalyst
+    assert(f != NULL);  // this assert does not work on Quartz/Catalyst
 
     size_t len;
     void* buf;
@@ -203,7 +203,7 @@ void tangram_uct_context_init(ucs_async_context_t* async, tfs_info_t* tfs_info, 
         read_server_uct_addr(tfs_info, &context->server_addr);
 
     if(tfs_info->role == TANGRAM_UCX_ROLE_SERVER)
-        write_server_uct_addr(tfs_info, &context->server_addr);
+        write_server_uct_addr(tfs_info, &context->self_addr);
 
     pthread_mutex_init(&context->mutex, NULL);
     pthread_mutex_init(&context->cond_mutex, NULL);

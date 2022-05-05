@@ -33,7 +33,8 @@ typedef struct tfs_info {
     bool initialized;
     bool debug;
 
-    int  role;                  // client, local server or global server
+    int  role;                  // client (delegator) or server
+    bool use_delegator;
 
 } tfs_info_t;
 

@@ -10,7 +10,8 @@
 #include "tangramfs-rpc.h"
 #include "tangramfs-delegator.h"
 
-static double rma_time;
+static double      rma_time;
+static tfs_info_t* g_tfs_info;
 
 
 /*
@@ -23,7 +24,12 @@ void tangram_issue_rpc(uint8_t id, char* filename, size_t *offsets, size_t *coun
     if(num_intervals == 0) {
         size_t data_size;
         void* user_data = rpc_in_pack(filename, num_intervals, offsets, counts, types, &data_size);
-        tangram_ucx_sendrecv_server(id, user_data, data_size, respond_ptr);
+
+        if(g_tfs_info->use_delegator)
+            tangram_ucx_sendrecv_delegator(id, user_data, data_size, respond_ptr);
+        else
+            tangram_ucx_sendrecv_server(id, user_data, data_size, respond_ptr);
+
         free(user_data);
         return;
     }
@@ -41,7 +47,11 @@ void tangram_issue_rpc(uint8_t id, char* filename, size_t *offsets, size_t *coun
         size_t data_size;
         void* user_data = rpc_in_pack(filename, num < remain ? num : remain,
                                       &offsets[i*num], &counts[i*num], types?&types[i*num]:NULL, &data_size);
-        tangram_ucx_sendrecv_server(id, user_data, data_size, respond_ptr);
+        if(g_tfs_info->use_delegator)
+            tangram_ucx_sendrecv_delegator(id, user_data, data_size, respond_ptr);
+        else
+            tangram_ucx_sendrecv_server(id, user_data, data_size, respond_ptr);
+
         free(user_data);
 
         remain -= num;
@@ -79,16 +89,20 @@ void tangram_issue_metadata_rpc(uint8_t id, const char* path, void** respond_ptr
 }
 
 void tangram_rpc_service_start(tfs_info_t *tfs_info, void (*revoke_lock_cb)(void*)){
+
+    g_tfs_info = tfs_info;
+
     // Must start delegator first
     // later the client will need to broadcast delegator's address
     // to all clients
-    if(tfs_info->mpi_intra_rank == 0)
+    if(tfs_info->use_delegator && tfs_info->mpi_intra_rank == 0) {
         tangram_delegator_start(tfs_info);
+    }
     tangram_ucx_client_start(tfs_info, revoke_lock_cb);
 }
 
 void tangram_rpc_service_stop(tfs_info_t* tfs_info) {
-    if(tfs_info->mpi_intra_rank == 0) {
+    if(tfs_info->use_delegator && tfs_info->mpi_intra_rank == 0) {
         tangram_ucx_stop_delegator();
         tangram_delegator_stop();
     }
