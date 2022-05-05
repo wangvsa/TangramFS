@@ -1,3 +1,4 @@
+#define _GNU_SOURCE
 #define _POSIX_C_SOURCE 200112L
 #define NI_MAXHOST      1025
 #include <stdio.h>
@@ -7,10 +8,10 @@
 #include <unistd.h>
 #include <alloca.h>
 #include <mpi.h>
-#include "tangramfs-utils.h"
+#include "tangramfs.h"
 #include "tangramfs-ucx.h"
 #include "tangramfs-ucx-comm.h"
-
+#include "tangramfs-posix-wrapper.h"
 
 void init_iface(char* dev_name, char* tl_name, tangram_uct_context_t *context) {
     ucs_status_t        status;
@@ -126,6 +127,53 @@ void exchange_dev_iface_addr(tangram_uct_context_t* context, tangram_uct_addr_t*
     free(all_addrs);
 }
 
+void fill_addr_config_filename(tfs_info_t* tfs_info, char* cfg_path) {
+    sprintf(cfg_path, "%s/tfs.cfg", tfs_info->persist_dir);
+}
+
+void write_server_uct_addr(tfs_info_t* tfs_info, tangram_uct_addr_t* server_addr) {
+
+    tangram_map_real_calls();
+
+    char cfg_path[PATH_MAX+10] = {0};
+    fill_addr_config_filename(tfs_info, cfg_path);
+
+    FILE* f = TANGRAM_REAL_CALL(fopen)(cfg_path, "wb");
+    assert(f != NULL);
+
+    size_t len;
+    void* buf = tangram_uct_addr_serialize(server_addr, &len);
+
+    TANGRAM_REAL_CALL(fwrite)(&len, sizeof(len), 1, f);
+    TANGRAM_REAL_CALL(fwrite)(buf, len, 1, f);
+    TANGRAM_REAL_CALL(fflush)(f);
+    TANGRAM_REAL_CALL(fclose)(f);
+
+    free(buf);
+}
+
+void read_server_uct_addr(tfs_info_t* tfs_info, tangram_uct_addr_t* server_addr) {
+
+    tangram_map_real_calls();
+
+    char cfg_path[PATH_MAX+10] = {0};
+    fill_addr_config_filename(tfs_info, cfg_path);
+
+    FILE* f = TANGRAM_REAL_CALL(fopen)(cfg_path, "r");
+    assert(f != NULL);  // this assert does not work on Quart/Catalyst
+
+    size_t len;
+    void* buf;
+
+    TANGRAM_REAL_CALL(fread)(&len, sizeof(size_t), 1, f);
+    buf = malloc(len);
+    TANGRAM_REAL_CALL(fread)(buf, len, 1, f);
+    tangram_uct_addr_deserialize(buf, server_addr);
+    TANGRAM_REAL_CALL(fclose)(f);
+
+    free(buf);
+}
+
 void tangram_uct_context_init(ucs_async_context_t* async, tfs_info_t* tfs_info, tangram_uct_context_t *context) {
     uct_worker_create(async, UCS_THREAD_MODE_SERIALIZED, &context->worker);
 
@@ -151,16 +199,11 @@ void tangram_uct_context_init(ucs_async_context_t* async, tfs_info_t* tfs_info, 
     context->server_addr.dev   = NULL;
     context->server_addr.iface = NULL;
 
-    if (tfs_info->role == TANGRAM_UCX_ROLE_CLIENT) {
-        tangram_read_uct_server_addr((void**)&context->server_addr.dev, &context->server_addr.dev_len,
-                                           (void**)&context->server_addr.iface, &context->server_addr.iface_len);
-    }
+    if (tfs_info->role == TANGRAM_UCX_ROLE_CLIENT)
+        read_server_uct_addr(tfs_info, &context->server_addr);
 
-    if(tfs_info->role == TANGRAM_UCX_ROLE_SERVER) {
-        // write out my address
-        tangram_write_uct_server_addr(context->self_addr.dev, context->self_addr.dev_len,
-                                            context->self_addr.iface, context->self_addr.iface_len);
-    }
+    if(tfs_info->role == TANGRAM_UCX_ROLE_SERVER)
+        write_server_uct_addr(tfs_info, &context->server_addr);
 
     pthread_mutex_init(&context->mutex, NULL);
     pthread_mutex_init(&context->cond_mutex, NULL);

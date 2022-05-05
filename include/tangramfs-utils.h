@@ -3,7 +3,6 @@
 #include <mpi.h>
 #include <stdbool.h>
 
-
 #define PATH_MAX    4096
 
 #define tangram_info(f_, ...) printf((f_), ##__VA_ARGS__)
@@ -44,9 +43,6 @@ void  tangram_free(void*ptr, size_t size);
 
 void tangram_info_init(tfs_info_t *tfs_info);
 void tangram_info_finalize(tfs_info_t *tfs_info);
-
-void tangram_write_uct_server_addr(void* dev_addr, size_t dev_addr_len, void* iface_addr, size_t iface_addr_len);
-void tangram_read_uct_server_addr(void** dev_addr, size_t* dev_addr_len, void** iface_addr, size_t* iface_addr_len);
 
 double tangram_wtime();
 
