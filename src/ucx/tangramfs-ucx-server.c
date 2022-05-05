@@ -171,7 +171,6 @@ static ucs_status_t am_stop_listener(void *arg, void *buf, size_t buf_len, unsig
 }
 
 void handle_task(rpc_task_t* task) {
-    printf("handle task %d!\n", task->id);
     pthread_mutex_lock(&g_server_context.mutex);
     uct_ep_h ep;
     uct_ep_create_connect(g_server_context.iface, &task->client, &ep);

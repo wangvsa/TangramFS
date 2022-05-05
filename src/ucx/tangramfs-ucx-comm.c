@@ -278,15 +278,10 @@ void do_uct_am_short_progress(uct_worker_h worker, uct_ep_h ep, uint8_t id, tang
     size_t buf_len;
     void* buf = pack_rpc_buffer(my_addr, data, data_len, &buf_len);
 
-    char hostname[128];
-    gethostname(hostname, 128);
-
     ucs_status_t status = UCS_OK;
     do {
         status = uct_ep_am_short(ep, id, 0, buf, buf_len);
-        int prog = uct_worker_progress(worker);
-        //sleep(1);
-        //printf("%s, ucs_status_string: %s, id:%d, len:%ld, progress: %d\n", hostname, ucs_status_string(status), id, buf_len, prog);
+        uct_worker_progress(worker);
     } while (status == UCS_ERR_NO_RESOURCE);
 
     free(buf);

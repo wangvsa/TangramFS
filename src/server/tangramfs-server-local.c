@@ -23,7 +23,6 @@ void* server_local_rpc_handler(int8_t id, tangram_uct_addr_t* client, void* data
 
     char hostname[128];
     gethostname(hostname, 128);
-    printf("%s hello %d\n", hostname, id);
 
     if(id == AM_ID_ACQUIRE_LOCK_REQUEST) {
         rpc_in_t* in = rpc_in_unpack(data);
