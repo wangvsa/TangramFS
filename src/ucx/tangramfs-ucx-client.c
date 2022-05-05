@@ -100,34 +100,10 @@ static ucs_status_t am_ep_addr_listener(void *arg, void *buf, size_t buf_len, un
 
 
 /**
- * Send server a RPC request and wait for the respond
- *
- * Used to send post/query request
+ * Send a RPC request and wait for the respond
+ * This is the core function for ucx communications
  */
-void tangram_ucx_sendrecv_server(uint8_t id, void* data, size_t length, void** respond_ptr) {
-    g_client_context.respond_ptr  = respond_ptr;
-    g_client_context.respond_flag = false;
-
-    uct_ep_h ep;
-    uct_ep_create_connect(g_client_context.iface, get_server_addr(&g_client_context), &ep);
-
-    do_uct_am_short_progress(g_client_context.worker, ep, id, &g_client_context.self_addr, data, length);
-
-    if(respond_ptr != NULL) {
-        while(!g_client_context.respond_flag) {
-            uct_worker_progress(g_client_context.worker);
-        }
-    }
-
-    uct_ep_destroy(ep);
-}
-
-/**
- * Send to a client an AM and wait for the respond
- *
- * Used to send RMA request
- */
-void tangram_ucx_sendrecv_client(uint8_t id, tangram_uct_addr_t* dest, void* data, size_t length, void** respond_ptr) {
+void sendrecv(uint8_t id, tangram_uct_addr_t* dest, void* data, size_t length, void** respond_ptr) {
     g_client_context.respond_ptr  = respond_ptr;
     g_client_context.respond_flag = false;
 
@@ -146,11 +122,16 @@ void tangram_ucx_sendrecv_client(uint8_t id, tangram_uct_addr_t* dest, void* dat
     uct_ep_destroy(ep);
 }
 
+void tangram_ucx_sendrecv_server(uint8_t id, void* data, size_t length, void** respond_ptr) {
+    sendrecv(id, get_server_addr(&g_client_context), data, length, respond_ptr);
+}
+
+void tangram_ucx_sendrecv_client(uint8_t id, tangram_uct_addr_t* dest, void* data, size_t length, void** respond_ptr) {
+    sendrecv(id, dest, data, length, respond_ptr);
+}
+
 void tangram_ucx_send_ep_addr(uint8_t id, tangram_uct_addr_t* dest, void* data, size_t length) {
-    uct_ep_h ep;
-    uct_ep_create_connect(g_epaddr_context.iface, dest, &ep);
-    do_uct_am_short_progress(g_epaddr_context.worker, ep, id, &g_client_context.self_addr, data, length);
-    uct_ep_destroy(ep);
+    sendrecv(id, dest, data, length, NULL);
 }
 
 
@@ -161,19 +142,11 @@ void tangram_ucx_send_ep_addr(uint8_t id, tangram_uct_addr_t* dest, void* data, 
  * Used to send the stop server signal
  */
 void tangram_ucx_stop_local_server() {
-    uct_ep_h ep;
-    uct_ep_create_connect(g_client_context.iface, &g_client_context.local_server_addr, &ep);
-
-    do_uct_am_short_progress(g_client_context.worker, ep, AM_ID_STOP_REQUEST, &g_client_context.self_addr, NULL, 0);
-    uct_ep_destroy(ep);
+    sendrecv(AM_ID_STOP_REQUEST, &g_client_context.local_server_addr, NULL, 0, NULL);
 }
 
 void tangram_ucx_stop_global_server() {
-    uct_ep_h ep;
-    uct_ep_create_connect(g_client_context.iface, &g_client_context.global_server_addr, &ep);
-
-    do_uct_am_short_progress(g_client_context.worker, ep, AM_ID_STOP_REQUEST, &g_client_context.self_addr, NULL, 0);
-    uct_ep_destroy(ep);
+    sendrecv(AM_ID_STOP_REQUEST, &g_client_context.global_server_addr, NULL, 0, NULL);
 }
 
 void set_local_server_addr(tangram_uct_context_t* context) {

@@ -20,7 +20,7 @@ void tangram_free(void* ptr, size_t size) {
     free(ptr);
 }
 
-void tangram_get_info(tfs_info_t* tfs_info) {
+void tangram_info_init(tfs_info_t* tfs_info) {
     MPI_Comm_dup(MPI_COMM_WORLD, &tfs_info->mpi_comm);
     MPI_Comm_rank(tfs_info->mpi_comm, &tfs_info->mpi_rank);
     MPI_Comm_size(tfs_info->mpi_comm, &tfs_info->mpi_size);
@@ -64,7 +64,7 @@ void tangram_get_info(tfs_info_t* tfs_info) {
         tfs_info->debug = atoi(debug);
 }
 
-void tangram_release_info(tfs_info_t *tfs_info) {
+void tangram_info_finalize(tfs_info_t *tfs_info) {
     MPI_Comm_free(&tfs_info->mpi_comm);
     MPI_Comm_free(&tfs_info->mpi_intra_comm);
 }

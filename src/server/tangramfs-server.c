@@ -13,7 +13,7 @@ int main(int argc, char* argv[]) {
     MPI_Init(&argc, &argv);
 
     tfs_info_t tfs_info;
-    tangram_get_info(&tfs_info);
+    tangram_info_init(&tfs_info);
 
     if( strcmp(argv[1], "start") == 0 ) {
         tfs_info.role = TANGRAM_UCX_ROLE_SERVER;
@@ -30,7 +30,7 @@ int main(int argc, char* argv[]) {
         tangram_info("[tangramfs] Global server stoped\n");
     }
 
-    tangram_release_info(&tfs_info);
+    tangram_info_finalize(&tfs_info);
     MPI_Finalize();
 
     return 0;

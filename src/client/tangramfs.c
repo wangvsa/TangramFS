@@ -13,8 +13,8 @@
 #include "tangramfs-utils.h"
 #include "tangramfs-posix-wrapper.h"
 
-tfs_info_t tfs;
-tfs_file_t* tfs_files;
+tfs_info_t  g_tfs_info;
+tfs_file_t* g_tfs_files;
 
 // Below callbacks will be invoked by tangram-ucx-client/rma
 void* serve_rma_data_cb(void* in_arg, size_t* size);
@@ -23,7 +23,7 @@ void  revoke_lock_cb(void* in_arg);
 
 void tfs_init() {
 
-    if(tfs.initialized) {
+    if(g_tfs_info.initialized) {
         printf("double init!\n");
         return;
     }
@@ -33,25 +33,25 @@ void tfs_init() {
     if(!flag)
         MPI_Init(NULL, NULL);
 
-    tangram_get_info(&tfs);
-    tfs.role = TANGRAM_UCX_ROLE_CLIENT;
+    tangram_info_init(&g_tfs_info);
+    g_tfs_info.role = TANGRAM_UCX_ROLE_CLIENT;
 
     tangram_map_real_calls();
-    tangram_rpc_service_start(&tfs, revoke_lock_cb);
-    //tangram_rma_service_start(&tfs, serve_rma_data_cb);
+    tangram_rpc_service_start(&g_tfs_info, revoke_lock_cb);
+    //tangram_rma_service_start(&g_tfs_info, serve_rma_data_cb);
 
-    MPI_Barrier(tfs.mpi_comm);
-    tfs.initialized = true;
+    MPI_Barrier(g_tfs_info.mpi_comm);
+    g_tfs_info.initialized = true;
 }
 
 void tfs_finalize() {
-    if(!tfs.initialized)
+    if(!g_tfs_info.initialized)
         return;
 
-    tfs.initialized = false;
+    g_tfs_info.initialized = false;
 
     // Notify the server to unpost all and release all locks
-    if(tfs.semantics != TANGRAM_STRONG_SEMANTICS)
+    if(g_tfs_info.semantics != TANGRAM_STRONG_SEMANTICS)
         tfs_unpost_client();
     else
         tfs_release_lock_client();
@@ -63,20 +63,20 @@ void tfs_finalize() {
     // Just in case users did not close all files
     // before calling finalize()
     tfs_file_t *tf, *tmp;
-    HASH_ITER(hh, tfs_files, tf, tmp) {
+    HASH_ITER(hh, g_tfs_files, tf, tmp) {
         tfs_close(tf);
     }
 
     // Need to have a barrier here because we can not allow
     // server stoped before all other clients
-    MPI_Barrier(tfs.mpi_comm);
+    MPI_Barrier(g_tfs_info.mpi_comm);
 
     //tangram_rma_service_stop();
-    tangram_rpc_service_stop(&tfs);
+    tangram_rpc_service_stop(&g_tfs_info);
 
-    MPI_Barrier(tfs.mpi_comm);
+    MPI_Barrier(g_tfs_info.mpi_comm);
 
-    tangram_release_info(&tfs);
+    tangram_info_finalize(&g_tfs_info);
 }
 
 
@@ -90,11 +90,11 @@ tfs_file_t* tfs_open(const char* pathname) {
             tmp[i] = '_';
     }
 
-    sprintf(abs_filename, "%s/tfs_tmp.%s.%d", tfs.tfs_dir, tmp, tfs.mpi_rank);
+    sprintf(abs_filename, "%s/tfs_tmp.%s.%d", g_tfs_info.tfs_dir, tmp, g_tfs_info.mpi_rank);
     free(tmp);
 
     tfs_file_t *tf = NULL;
-    HASH_FIND_STR(tfs_files, pathname, tf);
+    HASH_FIND_STR(g_tfs_files, pathname, tf);
 
     if(tf) {
         tf->offset = 0;
@@ -116,7 +116,7 @@ tfs_file_t* tfs_open(const char* pathname) {
 
                                 // TODO remove() call is not intercepted
         remove(abs_filename);   // delete the local file first
-        HASH_ADD_STR(tfs_files, filename, tf);
+        HASH_ADD_STR(g_tfs_files, filename, tf);
     }
 
     // open node-local buffer file
@@ -462,7 +462,7 @@ int tfs_close(tfs_file_t* tf) {
     int res = 0;
 
     // Notify server to unpost and release lock
-    if(tfs.semantics != TANGRAM_STRONG_SEMANTICS)
+    if(g_tfs_info.semantics != TANGRAM_STRONG_SEMANTICS)
         tfs_unpost_file(tf);
     else
         tfs_release_lock_file(tf);
@@ -489,7 +489,7 @@ int tfs_close(tfs_file_t* tf) {
     }
 
     // Delete from hash table
-    HASH_DEL(tfs_files, tf);
+    HASH_DEL(g_tfs_files, tf);
     tangram_free(tf, sizeof(tfs_file_t));
     tf = NULL;
 
@@ -628,7 +628,7 @@ size_t tfs_fetch(const char* filename, void* buf, size_t size) {
 
 bool tangram_should_intercept(const char* filename) {
     // Not initialized yet
-    if(!tfs.initialized) {
+    if(!g_tfs_info.initialized) {
         return false;
     }
 
@@ -643,7 +643,7 @@ bool tangram_should_intercept(const char* filename) {
     */
 
     // file in persist directory and not exist in the backend file system.
-    if ( strncmp(tfs.persist_dir, abs_path, strlen(tfs.persist_dir)) == 0 ) {
+    if ( strncmp(g_tfs_info.persist_dir, abs_path, strlen(g_tfs_info.persist_dir)) == 0 ) {
         //if(TANGRAM_REAL_CALL(access)(filename, F_OK) != 0)
         //    return true;
         return true;
@@ -653,7 +653,7 @@ bool tangram_should_intercept(const char* filename) {
 }
 
 int tangram_get_semantics() {
-    return tfs.semantics;
+    return g_tfs_info.semantics;
 }
 
 
@@ -664,7 +664,7 @@ void* serve_rma_data_cb(void* in_arg, size_t* size) {
     rpc_in_t* in = rpc_in_unpack(in_arg);
 
     tfs_file_t* tf = NULL;
-    HASH_FIND_STR(tfs_files, in->filename, tf);
+    HASH_FIND_STR(g_tfs_files, in->filename, tf);
 
     assert(tf != NULL);
 
@@ -687,7 +687,7 @@ void revoke_lock_cb(void* in_arg) {
     rpc_in_t* in = rpc_in_unpack(in_arg);
 
     tfs_file_t* tf = NULL;
-    HASH_FIND_STR(tfs_files, in->filename, tf);
+    HASH_FIND_STR(g_tfs_files, in->filename, tf);
     if(tf == NULL) return;
 
 
