@@ -1,14 +1,46 @@
 #ifndef _TANGRAMFS_UCX_COMM_H_
 #define _TANGRAMFS_UCX_COMM_H_
 #include <stdbool.h>
-#include <uct/api/uct.h>
 #include <pthread.h>
+#include <ucp/api/ucp.h>
+#include <uct/api/uct.h>
 #include "tangramfs-utils.h"
 
-#define TANGRAM_UCX_ROLE_CLIENT         0
-#define TANGRAM_UCX_ROLE_SERVER         1
+#define UCX_SERVER_PORT                     13432
 
-#define TANGRAM_UCT_ADDR_IGNORE         NULL
+#define AM_ID_QUERY_REQUEST                 1
+#define AM_ID_QUERY_RESPOND                 2
+#define AM_ID_POST_REQUEST                  3
+#define AM_ID_POST_RESPOND                  4
+#define AM_ID_RMA_REQUEST                   5
+#define AM_ID_RMA_RESPOND                   6
+#define AM_ID_RMA_EP_ADDR                   7
+#define AM_ID_STOP_REQUEST                  8
+#define AM_ID_STOP_RESPOND                  9
+#define AM_ID_STAT_REQUEST                  12
+#define AM_ID_STAT_RESPOND                  13
+#define AM_ID_UNPOST_FILE_REQUEST           14
+#define AM_ID_UNPOST_FILE_RESPOND           15
+#define AM_ID_UNPOST_CLIENT_REQUEST         16
+#define AM_ID_UNPOST_CLIENT_RESPOND         17
+
+
+#define AM_ID_ACQUIRE_LOCK_REQUEST          20
+#define AM_ID_ACQUIRE_LOCK_RESPOND          21
+#define AM_ID_RELEASE_LOCK_REQUEST          22
+#define AM_ID_RELEASE_LOCK_RESPOND          23
+#define AM_ID_RELEASE_LOCK_FILE_REQUEST     24
+#define AM_ID_RELEASE_LOCK_FILE_RESPOND     25
+#define AM_ID_RELEASE_LOCK_CLIENT_REQUEST   26
+#define AM_ID_RELEASE_LOCK_CLIENT_RESPOND   27
+#define AM_ID_REVOKE_LOCK_REQUEST           28
+#define AM_ID_REVOKE_LOCK_RESPOND           29
+
+#define TANGRAM_UCX_ROLE_CLIENT             0
+#define TANGRAM_UCX_ROLE_SERVER             1
+
+#define TANGRAM_UCT_ADDR_IGNORE             NULL
+
 
 typedef struct tangram_uct_addr {
     uct_device_addr_t* dev;

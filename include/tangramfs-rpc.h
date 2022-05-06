@@ -2,7 +2,7 @@
 #define _TANGRAMFS_RPC_H_
 #include <stdlib.h>
 #include <string.h>
-#include "tangramfs-ucx.h"
+#include "tangramfs-ucx-comm.h"
 
 typedef struct rpc_interval {
     size_t offset;

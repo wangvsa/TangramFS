@@ -4,9 +4,9 @@
 #include <string.h>
 #include <assert.h>
 #include <sys/time.h>
-#include <pthread.h>
-#include "tangramfs-ucx.h"
-#include "tangramfs-ucx-comm.h"
+#include "tangramfs-ucx-rma.h"
+#include "tangramfs-ucx-client.h"
+#include "tangramfs-ucx-delegator.h"
 
 static tfs_info_t*           g_tfs_info;
 static ucs_async_context_t*  g_client_async;
@@ -149,7 +149,7 @@ void set_delegator_addr(tangram_uct_context_t* context) {
     void* buf;
     size_t len;
     if(g_tfs_info->mpi_intra_rank == 0)
-        buf = tangram_uct_addr_serialize(tangram_ucx_server_addr(), &len);
+        buf = tangram_uct_addr_serialize(tangram_ucx_delegator_addr(), &len);
     else
         buf = tangram_uct_addr_serialize(&context->self_addr, &len);
     MPI_Bcast(buf, len, MPI_BYTE, 0, g_tfs_info->mpi_intra_comm);

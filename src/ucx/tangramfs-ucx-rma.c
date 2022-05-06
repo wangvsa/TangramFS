@@ -5,10 +5,8 @@
 #include <unistd.h>
 #include <stdbool.h>
 #include <alloca.h>
-#include <uct/api/uct.h>
-#include "tangramfs-ucx.h"
-#include "tangramfs-ucx-comm.h"
-
+#include "tangramfs-ucx-rma.h"
+#include "tangramfs-ucx-client.h"
 
 static ucs_async_context_t* g_rma_async;
 tfs_info_t*                 gg_tfs_info;

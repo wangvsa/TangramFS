@@ -7,7 +7,7 @@
 #include <unistd.h>
 #include <mpi.h>
 #include "tangramfs-delegator.h"
-#include "tangramfs-ucx.h"
+#include "tangramfs-ucx-delegator.h"
 #include "tangramfs-metadata-manager.h"
 #include "tangramfs-lock-manager.h"
 
@@ -65,15 +65,15 @@ void* delegator_rpc_handler(int8_t id, tangram_uct_addr_t* client, void* data, u
 
 void tangram_delegator_start(tfs_info_t* tfs_info) {
     tangram_lockmgr_init(&g_lt);
-    tangram_ucx_server_init(tfs_info);
-    tangram_ucx_server_register_rpc(delegator_rpc_handler);
+    tangram_ucx_delegator_init(tfs_info);
+    tangram_ucx_delegator_register_rpc(delegator_rpc_handler);
 
     // Enter the progress loop and exit when the
     // stop command is received
-    tangram_ucx_server_start(true);
+    tangram_ucx_delegator_start();
 }
 
 void tangram_delegator_stop() {
-    tangram_ucx_server_stop();
+    tangram_ucx_delegator_stop();
     tangram_lockmgr_finalize(&g_lt);
 }

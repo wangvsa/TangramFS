@@ -6,7 +6,8 @@
 #include <assert.h>
 #include <mpi.h>
 #include "tangramfs-server.h"
-#include "tangramfs-ucx.h"
+#include "tangramfs-ucx-server.h"
+#include "tangramfs-ucx-client.h"
 #include "tangramfs-metadata-manager.h"
 #include "tangramfs-lock-manager.h"
 

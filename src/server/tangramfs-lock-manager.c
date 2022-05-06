@@ -5,6 +5,7 @@
 #include "lock-token.h"
 #include "tangramfs-utils.h"
 #include "tangramfs-lock-manager.h"
+#include "tangramfs-ucx-server.h"
 
 
 lock_token_t* tangram_lockmgr_acquire_lock(lock_table_t** lt, tangram_uct_addr_t* client, char* filename, size_t offset, size_t count, int type) {

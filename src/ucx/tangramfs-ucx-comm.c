@@ -9,7 +9,6 @@
 #include <alloca.h>
 #include <mpi.h>
 #include "tangramfs.h"
-#include "tangramfs-ucx.h"
 #include "tangramfs-ucx-comm.h"
 #include "tangramfs-posix-wrapper.h"
 

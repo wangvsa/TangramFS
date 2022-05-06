@@ -9,6 +9,9 @@
 #include <mpi.h>
 #include "tangramfs-rpc.h"
 #include "tangramfs-delegator.h"
+#include "tangramfs-ucx-rma.h"
+#include "tangramfs-ucx-client.h"
+#include "tangramfs-ucx-delegator.h"
 
 static double      rma_time;
 static tfs_info_t* g_tfs_info;
