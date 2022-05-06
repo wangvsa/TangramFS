@@ -7,16 +7,16 @@
 #include "tangramfs-lock-manager.h"
 
 
-lock_token_t* tangram_lockmgr_acquire_lock(lock_table_t* lt, tangram_uct_addr_t* client, char* filename, size_t offset, size_t count, int type) {
+lock_token_t* tangram_lockmgr_acquire_lock(lock_table_t** lt, tangram_uct_addr_t* client, char* filename, size_t offset, size_t count, int type) {
 
     lock_table_t* entry = NULL;
-    HASH_FIND_STR(lt, filename, entry);
+    HASH_FIND_STR(*lt, filename, entry);
 
     if(!entry) {
         entry = tangram_malloc(sizeof(lock_table_t));
         lock_token_list_init(&entry->token_list);
         strcpy(entry->filename, filename);
-        HASH_ADD_STR(lt, filename, entry);
+        HASH_ADD_STR(*lt, filename, entry);
     }
 
     lock_token_t* token = NULL;
@@ -29,7 +29,6 @@ lock_token_t* tangram_lockmgr_acquire_lock(lock_table_t* lt, tangram_uct_addr_t*
             lock_token_update_type(token, type);
         return token;
     }
-
 
     token = lock_token_find_conflict(&entry->token_list, offset, count);
 
@@ -100,16 +99,17 @@ void tangram_lockmgr_release_lock_client(lock_table_t* lt, tangram_uct_addr_t* c
     }
 }
 
-void tangram_lockmgr_init(lock_table_t* lt) {
-    lt = NULL;
+void tangram_lockmgr_init(lock_table_t** lt) {
+    *lt = NULL;
 }
 
-void tangram_lockmgr_finalize(lock_table_t* lt) {
+void tangram_lockmgr_finalize(lock_table_t** lt) {
     lock_table_t *entry, *tmp;
-    HASH_ITER(hh, lt, entry, tmp) {
+    HASH_ITER(hh, *lt, entry, tmp) {
         lock_token_list_destroy(&entry->token_list);
-        HASH_DEL(lt, entry);
+        HASH_DEL(*lt, entry);
         tangram_free(entry, sizeof(lock_table_t*));
     }
+    *lt = NULL;
 }
 

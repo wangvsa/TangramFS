@@ -167,8 +167,10 @@ void tangram_ucx_client_start(tfs_info_t *tfs_info, void (revoke_lock_cb)(void*)
 
     tangram_uct_context_init(g_client_async, g_tfs_info, &g_client_context);
     tangram_uct_context_init(g_client_async, g_tfs_info, &g_epaddr_context);
-    set_delegator_addr(&g_client_context);
-    set_delegator_addr(&g_epaddr_context);
+    if(tfs_info->use_delegator) {
+        set_delegator_addr(&g_client_context);
+        set_delegator_addr(&g_epaddr_context);
+    }
 
     status = uct_iface_set_am_handler(g_client_context.iface, AM_ID_QUERY_RESPOND, am_server_respond_listener, NULL, 0);
     assert(status == UCS_OK);
