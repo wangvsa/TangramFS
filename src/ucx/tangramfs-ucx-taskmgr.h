@@ -4,7 +4,7 @@
 
 /* Represents one RPC request */
 typedef struct _task {
-    uint8_t id;
+    uint8_t id;                     // UCX AM id
     void*   respond;
     size_t  respond_len;
     void*   data;
@@ -18,7 +18,7 @@ typedef struct _task {
  * round-robin manner.
  */
 typedef struct _worker {
-    int             tid;
+    int             tid;            // thread id
     int             running;
     pthread_t       thread;
     pthread_mutex_t lock;

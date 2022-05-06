@@ -102,6 +102,9 @@ void tangram_rpc_service_start(tfs_info_t *tfs_info, void (*revoke_lock_cb)(void
     if(tfs_info->use_delegator && tfs_info->mpi_intra_rank == 0) {
         tangram_delegator_start(tfs_info);
     }
+
+    sleep(2);
+    MPI_Barrier(tfs_info->mpi_comm);
     tangram_ucx_client_start(tfs_info, revoke_lock_cb);
 }
 

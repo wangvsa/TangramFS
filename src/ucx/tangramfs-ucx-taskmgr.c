@@ -15,7 +15,7 @@ void (*task_handle_cb)(task_t* task);
  * uint64_t is the header in am_short();
  * We do not use it for now.
  */
-task_t* create_task(uint8_t id, void* buf, size_t buf_len, int tid) {
+task_t* create_task(uint8_t id, void* buf, size_t buf_len) {
     task_t *task      = malloc(sizeof(task_t));
     task->id          = id;
     task->respond     = NULL;
@@ -41,7 +41,10 @@ task_t* create_task(uint8_t id, void* buf, size_t buf_len, int tid) {
  * at the same time. This is necessary for correctness.
  */
 void taskmgr_append_task_to_worker(taskmgr_t* mgr, uint8_t id, void* buf, size_t buf_len, int tid) {
-    task_t* task = create_task(id, buf, buf_len, tid);
+
+    task_t* task = create_task(id, buf, buf_len);
+    worker_t* worker = &(mgr->workers[tid]);
+
     pthread_mutex_lock(&mgr->workers[tid].lock);
     DL_APPEND(mgr->workers[tid].tasks, task);
     pthread_cond_signal(&mgr->workers[tid].cond);
@@ -75,8 +78,9 @@ void* worker_func(void* arg) {
 
         // If no task available, go to sleep
         // Delegator will insert a task and wake us up later.
-        if (me->tasks == NULL)
+        if (me->tasks == NULL) {
             pthread_cond_wait(&me->cond, &me->lock);
+        }
 
         // Possible get the signal because delegator stoped
         if (!me->running) {
@@ -107,15 +111,15 @@ void taskmgr_init(taskmgr_t* mgr, int num_workers,
 
     task_handle_cb = _task_handle_cb;
 
-    mgr->num_workers;
+    mgr->num_workers = num_workers;
     mgr->workers = tangram_malloc(num_workers * sizeof(worker_t));
 
     for(int i = 0; i < num_workers; i++) {
         mgr->workers[i].tid = i;
         mgr->workers[i].tasks = NULL;
         mgr->workers[i].running = 1;
-        int err = pthread_mutex_init(&mgr->workers[i].lock, NULL);
-        assert(err == 0);
+        pthread_mutex_init(&mgr->workers[i].lock, NULL);
+        pthread_cond_init(&mgr->workers[i].cond, NULL);
         pthread_create(&(mgr->workers[i].thread), NULL, worker_func, &mgr->workers[i]);
     }
 }
@@ -128,6 +132,9 @@ void taskmgr_finalize(taskmgr_t* mgr) {
         pthread_cond_signal(&mgr->workers[i].cond);
         pthread_mutex_unlock(&mgr->workers[i].lock);
         pthread_join(mgr->workers[i].thread, NULL);
+
+        pthread_cond_destroy(&mgr->workers[i].cond);
+        pthread_mutex_destroy(&mgr->workers[i].lock);
     }
 
     tangram_free(mgr->workers, mgr->num_workers * sizeof(worker_t));
