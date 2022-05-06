@@ -8,9 +8,7 @@
 #include "tangramfs-ucx.h"
 #include "tangramfs-ucx-comm.h"
 
-tfs_info_t*                  g_tfs_info;
-
-
+static tfs_info_t*           g_tfs_info;
 static ucs_async_context_t*  g_client_async;
 
 

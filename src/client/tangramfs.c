@@ -13,8 +13,8 @@
 #include "tangramfs-utils.h"
 #include "tangramfs-posix-wrapper.h"
 
-tfs_info_t  g_tfs_info;
-tfs_file_t* g_tfs_files;
+static tfs_info_t  g_tfs_info;
+static tfs_file_t* g_tfs_files;
 
 // Below callbacks will be invoked by tangram-ucx-client/rma
 void* serve_rma_data_cb(void* in_arg, size_t* size);
@@ -42,6 +42,7 @@ void tfs_init() {
 
     MPI_Barrier(g_tfs_info.mpi_comm);
     g_tfs_info.initialized = true;
+
 }
 
 void tfs_finalize() {

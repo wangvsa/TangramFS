@@ -95,6 +95,7 @@ void tangram_rpc_service_start(tfs_info_t *tfs_info, void (*revoke_lock_cb)(void
     // Must start delegator first
     // later the client will need to broadcast delegator's address
     // to all clients
+
     if(tfs_info->use_delegator && tfs_info->mpi_intra_rank == 0) {
         tangram_delegator_start(tfs_info);
     }

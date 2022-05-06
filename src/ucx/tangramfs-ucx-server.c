@@ -11,11 +11,12 @@
 
 #define NUM_THREADS 4
 
+static tfs_info_t*           g_tfs_info;
+
 volatile static bool         g_server_running = true;
 static ucs_async_context_t*  g_server_async;
 static tangram_uct_context_t g_server_context;
 
-tfs_info_t* g_tfs_info;
 
 /*
  * Use one global mutex to protect revoke rpcs
@@ -185,6 +186,7 @@ void handle_task(rpc_task_t* task) {
 }
 
 void* rpc_task_worker_func(void* arg) {
+
     int tid = *((int*)arg);
     rpc_task_worker_t *me = &g_workers[tid];
 
@@ -313,7 +315,11 @@ void tangram_ucx_server_start(bool progress_thread) {
 }
 
 void tangram_ucx_server_stop() {
-    assert(g_server_running == false);
+
+    while(g_server_running) {
+        printf("Server still running?%d\n", g_server_running);
+        sleep(1);
+    }
 
     // Server stopped, clean up now
     for(int i = 0; i < NUM_THREADS; i++) {
