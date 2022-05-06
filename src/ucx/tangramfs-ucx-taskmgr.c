@@ -16,11 +16,11 @@ void (*task_handle_cb)(task_t* task);
  * We do not use it for now.
  */
 task_t* create_task(uint8_t id, void* buf, size_t buf_len, int tid) {
-    task_t *task = malloc(sizeof(task_t));
-    task->id = id;
-    task->respond = NULL;
+    task_t *task      = malloc(sizeof(task_t));
+    task->id          = id;
+    task->respond     = NULL;
     task->respond_len = 0;
-    task->data = NULL;
+    task->data        = NULL;
     unpack_rpc_buffer(buf, buf_len, &task->client, &task->data);
     return task;
 }
@@ -113,6 +113,7 @@ void taskmgr_init(taskmgr_t* mgr, int num_workers,
     for(int i = 0; i < num_workers; i++) {
         mgr->workers[i].tid = i;
         mgr->workers[i].tasks = NULL;
+        mgr->workers[i].running = 1;
         int err = pthread_mutex_init(&mgr->workers[i].lock, NULL);
         assert(err == 0);
         pthread_create(&(mgr->workers[i].thread), NULL, worker_func, &mgr->workers[i]);
@@ -122,8 +123,10 @@ void taskmgr_init(taskmgr_t* mgr, int num_workers,
 void taskmgr_finalize(taskmgr_t* mgr) {
 
     for(int i = 0; i < mgr->num_workers; i++) {
+        pthread_mutex_lock(&mgr->workers[i].lock);
         mgr->workers[i].running = 0;
         pthread_cond_signal(&mgr->workers[i].cond);
+        pthread_mutex_unlock(&mgr->workers[i].lock);
         pthread_join(mgr->workers[i].thread, NULL);
     }
 
