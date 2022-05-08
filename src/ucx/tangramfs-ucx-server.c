@@ -98,7 +98,7 @@ void server_handle_task(task_t* task) {
     pthread_mutex_unlock(&g_server_context.mutex);
 }
 
-void tangram_ucx_revoke_lock(tangram_uct_addr_t* client, void* data, size_t length) {
+void tangram_ucx_server_revoke_delegator_lock(tangram_uct_addr_t* client, void* data, size_t length) {
     pthread_mutex_lock(&g_revoke_lock_mutex);
 
     g_server_context.respond_flag = false;

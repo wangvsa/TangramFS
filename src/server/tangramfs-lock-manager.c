@@ -6,9 +6,65 @@
 #include "tangramfs-utils.h"
 #include "tangramfs-lock-manager.h"
 #include "tangramfs-ucx-server.h"
+#include "tangramfs-ucx-delegator.h"
 
+lock_token_t* tangram_lockmgr_delegator_acquire_lock(lock_table_t** lt, tangram_uct_addr_t* client, char* filename, size_t offset, size_t count, int type) {
 
-lock_token_t* tangram_lockmgr_acquire_lock(lock_table_t** lt, tangram_uct_addr_t* client, char* filename, size_t offset, size_t count, int type) {
+    lock_table_t* entry = NULL;
+    HASH_FIND_STR(*lt, filename, entry);
+
+    if(!entry) {
+        entry = tangram_malloc(sizeof(lock_table_t));
+        lock_token_list_init(&entry->token_list);
+        strcpy(entry->filename, filename);
+        HASH_ADD_STR(*lt, filename, entry);
+    }
+
+    lock_token_t* token;
+
+    // already hold the lock - 2 cases
+    token = lock_token_find_cover(&entry->token_list, offset, count);
+    if(token) {
+        // Case 1:
+        // Had the read lock but ask for a write lock
+        // Delete my lock token locally and
+        // ask the server to upgrade my lock
+        // use the same AM_ID_ACQUIRE_LOCK_REQUEST RPC
+        if(token->type != type && type == LOCK_TYPE_WR) {
+            lock_token_delete(&entry->token_list, token);
+        } else {
+        // Case 2:
+        // Had the write lock alraedy, nothing to do.
+            return 0;
+        }
+    }
+
+    // Do not have the lock, ask lock server for it
+    void* out;
+    size_t in_size;
+    void* in = rpc_in_pack(filename, 1, &offset, &count, &type, &in_size);
+    tangram_ucx_delegator_sendrecv_server(AM_ID_ACQUIRE_LOCK_REQUEST, in, in_size, &out);
+    token = lock_token_add_from_buf(&entry->token_list, out);
+    free(out);
+}
+
+void tangram_lockmgr_delegator_revoke_lock(lock_table_t* lt, char* filename, size_t offset, size_t count, int type) {
+
+    lock_table_t* entry = NULL;
+    HASH_FIND_STR(lt, filename, entry);
+
+    if(!entry) return;
+
+    lock_token_t* token;
+    token = lock_token_find_cover(&entry->token_list, offset, count);
+
+    // the if(token) should be uncessary, we should be certain
+    // that we hold the lock that server wants to revoke
+    if(token)
+        lock_token_delete(&entry->token_list, token);
+}
+
+lock_token_t* tangram_lockmgr_server_acquire_lock(lock_table_t** lt, tangram_uct_addr_t* client, char* filename, size_t offset, size_t count, int type) {
 
     lock_table_t* entry = NULL;
     HASH_FIND_STR(*lt, filename, entry);
@@ -60,7 +116,7 @@ lock_token_t* tangram_lockmgr_acquire_lock(lock_table_t** lt, tangram_uct_addr_t
         size_t data_len;
         void* data = rpc_in_pack(filename, 1, &offset, &count, NULL, &data_len);
 
-        tangram_ucx_revoke_lock(token->owner, data, data_len);
+        tangram_ucx_server_revoke_delegator_lock(token->owner, data, data_len);
         free(data);
 
         lock_token_delete(&entry->token_list, token);
@@ -70,7 +126,7 @@ lock_token_t* tangram_lockmgr_acquire_lock(lock_table_t** lt, tangram_uct_addr_t
     return token;
 }
 
-void tangram_lockmgr_release_lock(lock_table_t* lt, tangram_uct_addr_t* client, char* filename, size_t offset, size_t count) {
+void tangram_lockmgr_server_release_lock(lock_table_t* lt, tangram_uct_addr_t* client, char* filename, size_t offset, size_t count) {
 
     lock_table_t* entry = NULL;
     HASH_FIND_STR(lt, filename, entry);
@@ -84,7 +140,7 @@ void tangram_lockmgr_release_lock(lock_table_t* lt, tangram_uct_addr_t* client, 
         lock_token_delete(&entry->token_list, token);
 }
 
-void tangram_lockmgr_release_lock_file(lock_table_t* lt, tangram_uct_addr_t* client, char* filename) {
+void tangram_lockmgr_server_release_lock_file(lock_table_t* lt, tangram_uct_addr_t* client, char* filename) {
     lock_table_t* entry = NULL;
     HASH_FIND_STR(lt, filename, entry);
 
@@ -93,12 +149,13 @@ void tangram_lockmgr_release_lock_file(lock_table_t* lt, tangram_uct_addr_t* cli
     }
 }
 
-void tangram_lockmgr_release_lock_client(lock_table_t* lt, tangram_uct_addr_t* client) {
+void tangram_lockmgr_server_release_lock_client(lock_table_t* lt, tangram_uct_addr_t* client) {
     lock_table_t *entry, *tmp;
     HASH_ITER(hh, lt, entry, tmp) {
         lock_token_delete_client(&entry->token_list, client);
     }
 }
+
 
 void tangram_lockmgr_init(lock_table_t** lt) {
     *lt = NULL;

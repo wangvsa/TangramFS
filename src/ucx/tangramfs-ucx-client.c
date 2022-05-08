@@ -33,9 +33,6 @@ static tangram_uct_context_t g_client_context;
 static tangram_uct_context_t g_epaddr_context;
 
 
-void (*g_revoke_lock_cb)(void*);
-
-
 
 /**
  * Handles both query and post respond from server
@@ -43,30 +40,6 @@ void (*g_revoke_lock_cb)(void*);
 static ucs_status_t am_server_respond_listener(void *arg, void *buf, size_t buf_len, unsigned flags) {
     unpack_rpc_buffer(buf, buf_len, TANGRAM_UCT_ADDR_IGNORE, g_client_context.respond_ptr);
     g_client_context.respond_flag = true;
-    return UCS_OK;
-}
-
-void* handle_revoke_lock_request(void* arg) {
-    g_revoke_lock_cb(arg);
-    free(arg);
-
-    // Note here we use g_client_context to send out the respond
-    //
-    // We can not use g_client_context, as it is used by the main thread
-    // only, and it allows only one outgoing RPC at a time:
-    //   -- Using it can cause deadlock when acquiring and revoking at the same time
-    uct_ep_h ep;
-    uct_ep_create_connect(g_client_context.iface, &g_client_context.delegator_addr, &ep);
-    do_uct_am_short_progress(g_client_context.worker, ep, AM_ID_REVOKE_LOCK_RESPOND, &g_client_context.self_addr, NULL, 0);
-    uct_ep_destroy(ep);
-    return NULL;
-}
-
-static ucs_status_t am_revoke_lock_request_listener(void *arg, void *buf, size_t buf_len, unsigned flags) {
-    void* data;
-    unpack_rpc_buffer(buf, buf_len, TANGRAM_UCT_ADDR_IGNORE, &data);
-    pthread_t thread;
-    pthread_create(&thread, NULL, handle_revoke_lock_request, data);
     return UCS_OK;
 }
 
@@ -157,10 +130,8 @@ void set_delegator_addr(tangram_uct_context_t* context) {
     free(buf);
 }
 
-void tangram_ucx_client_start(tfs_info_t *tfs_info, void (revoke_lock_cb)(void*)) {
+void tangram_ucx_client_start(tfs_info_t *tfs_info) {
     g_tfs_info = tfs_info;
-
-    g_revoke_lock_cb = revoke_lock_cb;
 
     ucs_status_t status;
     ucs_async_context_create(UCS_ASYNC_MODE_THREAD_SPINLOCK, &g_client_async);
@@ -189,8 +160,6 @@ void tangram_ucx_client_start(tfs_info_t *tfs_info, void (revoke_lock_cb)(void*)
     status = uct_iface_set_am_handler(g_client_context.iface, AM_ID_RELEASE_LOCK_FILE_RESPOND, am_server_respond_listener, NULL, 0);
     assert(status == UCS_OK);
     status = uct_iface_set_am_handler(g_client_context.iface, AM_ID_RELEASE_LOCK_CLIENT_RESPOND, am_server_respond_listener, NULL, 0);
-    assert(status == UCS_OK);
-    status = uct_iface_set_am_handler(g_client_context.iface, AM_ID_REVOKE_LOCK_REQUEST, am_revoke_lock_request_listener, NULL, 0);
     assert(status == UCS_OK);
     status = uct_iface_set_am_handler(g_client_context.iface, AM_ID_RMA_REQUEST, am_rma_request_listener, NULL, 0);
     assert(status == UCS_OK);

@@ -91,7 +91,7 @@ void tangram_issue_metadata_rpc(uint8_t id, const char* path, void** respond_ptr
     }
 }
 
-void tangram_rpc_service_start(tfs_info_t *tfs_info, void (*revoke_lock_cb)(void*)){
+void tangram_rpc_service_start(tfs_info_t *tfs_info){
 
     g_tfs_info = tfs_info;
 
@@ -105,7 +105,7 @@ void tangram_rpc_service_start(tfs_info_t *tfs_info, void (*revoke_lock_cb)(void
 
     sleep(2);
     MPI_Barrier(tfs_info->mpi_comm);
-    tangram_ucx_client_start(tfs_info, revoke_lock_cb);
+    tangram_ucx_client_start(tfs_info);
 }
 
 void tangram_rpc_service_stop(tfs_info_t* tfs_info) {

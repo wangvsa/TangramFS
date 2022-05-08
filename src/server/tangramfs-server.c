@@ -64,7 +64,7 @@ void* server_rpc_handler(int8_t id, tangram_uct_addr_t* client, void* data, uint
         rpc_in_t* in = rpc_in_unpack(data);
         assert(in->num_intervals == 1);
         tangram_debug("[tangramfs server1] acquire lock, filename: %s, offset:%lu, count: %lu, g_lt: %p\n", in->filename, in->intervals[0].offset, in->intervals[0].count, g_lt);
-        lock_token_t* token = tangram_lockmgr_acquire_lock(&g_lt, client, in->filename, in->intervals[0].offset, in->intervals[0].count, in->intervals[0].type);
+        lock_token_t* token = tangram_lockmgr_server_acquire_lock(&g_lt, client, in->filename, in->intervals[0].offset, in->intervals[0].count, in->intervals[0].type);
         assert(tangram_uct_addr_comp(token->owner, client) == 0);
         tangram_debug("[tangramfs server2] acquire lock, filename: %s, offset:%lu, count: %lu, g_lt: %p\n", in->filename, in->intervals[0].offset, in->intervals[0].count, g_lt);
         rpc_in_free(in);
@@ -74,7 +74,7 @@ void* server_rpc_handler(int8_t id, tangram_uct_addr_t* client, void* data, uint
         rpc_in_t* in = rpc_in_unpack(data);
         assert(in->num_intervals == 1);
         tangram_debug("[tangramfs server] release lock, filename: %s, offset:%lu, count: %lu\n", in->filename, in->intervals[0].offset, in->intervals[0].count);
-        tangram_lockmgr_release_lock(g_lt, client, in->filename, in->intervals[0].offset, in->intervals[0].count);
+        tangram_lockmgr_server_release_lock(g_lt, client, in->filename, in->intervals[0].offset, in->intervals[0].count);
         //tangram_debug("[tangramfs server] release lock success, filename: %s, offset:%lu, count: %lu\n", in->filename, in->intervals[0].offset, in->intervals[0].count);
         rpc_in_free(in);
         respond = malloc(sizeof(int));
@@ -82,14 +82,14 @@ void* server_rpc_handler(int8_t id, tangram_uct_addr_t* client, void* data, uint
         *respond_id = AM_ID_RELEASE_LOCK_RESPOND;
     } else if(id == AM_ID_RELEASE_LOCK_FILE_REQUEST) {
         rpc_in_t* in = rpc_in_unpack(data);
-        tangram_lockmgr_release_lock_file(g_lt, client, in->filename);
+        tangram_lockmgr_server_release_lock_file(g_lt, client, in->filename);
         tangram_debug("[tangramfs server] release lock file: %s\n", in->filename);
         rpc_in_free(in);
         respond = malloc(sizeof(int));
         *respond_len = sizeof(int);
         *respond_id = AM_ID_RELEASE_LOCK_FILE_RESPOND;
     } else if(id == AM_ID_RELEASE_LOCK_CLIENT_REQUEST) {
-        tangram_lockmgr_release_lock_client(g_lt, client);
+        tangram_lockmgr_server_release_lock_client(g_lt, client);
         tangram_debug("[tangramfs server] release lock client.\n");
         respond = malloc(sizeof(int));
         *respond_len = sizeof(int);
@@ -129,7 +129,7 @@ int main(int argc, char* argv[]) {
         tangram_server_start(&tfs_info);
     } else if( strcmp(argv[1], "stop") == 0 ) {
         tfs_info.role = TANGRAM_UCX_ROLE_CLIENT;
-        tangram_rpc_service_start(&tfs_info, NULL);
+        tangram_rpc_service_start(&tfs_info);
 
         if(tfs_info.mpi_rank == 0)
             tangram_ucx_stop_server();

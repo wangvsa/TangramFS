@@ -109,7 +109,7 @@ void tangram_issue_rma(uint8_t id, char* filename, tangram_uct_addr_t* dest, siz
 void tangram_issue_metadata_rpc(uint8_t id, const char* filename, void** respond_ptr);
 void tangram_rma_service_start(tfs_info_t *tfs_info, void* (*serve_rma_data_cb)(void*, size_t*));
 void tangram_rma_service_stop();
-void tangram_rpc_service_start(tfs_info_t* tfs_info, void (*revoke_lock_cb)(void*));
+void tangram_rpc_service_start(tfs_info_t* tfs_info);
 void tangram_rpc_service_stop(tfs_info_t* tfs_info);
 tangram_uct_addr_t* tangram_rpc_client_addr();
 

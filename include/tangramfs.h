@@ -3,7 +3,6 @@
 #include <stdbool.h>
 #include <sys/stat.h>
 #include "seg_tree.h"
-#include "lock-token.h"
 #include "uthash.h"
 #include "tangramfs-rpc.h"
 
@@ -39,8 +38,6 @@ typedef struct tfs_file {
     int    local_fd;                // File descriptor of the local buffer file
 
     struct seg_tree seg_tree;
-
-    lock_token_list_t token_list;   // lock tokens, used only for implmenting POSIX consistency
 
     UT_hash_handle hh;              // filename as key
 

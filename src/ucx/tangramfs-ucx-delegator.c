@@ -48,6 +48,10 @@ static ucs_status_t am_release_lock_client_listener(void *arg, void *buf, size_t
     taskmgr_append_task_to_worker(&g_taskmgr, AM_ID_RELEASE_LOCK_CLIENT_REQUEST, buf, buf_len, 0);
     return UCS_OK;
 }
+static ucs_status_t am_revoke_lock_request_listener(void *arg, void *buf, size_t buf_len, unsigned flags) {
+    taskmgr_append_task_to_worker(&g_taskmgr, AM_ID_REVOKE_LOCK_REQUEST, buf, buf_len, 0);
+    return UCS_OK;
+}
 static ucs_status_t am_revoke_lock_respond_listener(void *arg, void *buf, size_t buf_len, unsigned flags) {
     pthread_mutex_lock(&g_delegator_context.cond_mutex);
     g_delegator_context.respond_flag = true;
@@ -100,6 +104,27 @@ void tangram_ucx_revoke_lock2(tangram_uct_addr_t* client, void* data, size_t len
     pthread_mutex_unlock(&g_revoke_lock_mutex);
 }
 
+void tangram_ucx_delegator_sendrecv_server(uint8_t id, void* data, size_t length, void** respond_ptr) {
+    pthread_mutex_lock(&g_delegator_context.mutex);
+    g_delegator_context.respond_flag = false;
+    uct_ep_h ep;
+    uct_ep_create_connect(g_delegator_context.iface, &g_delegator_context.server_addr, &ep);
+    pthread_mutex_unlock(&g_delegator_context.mutex);
+
+    // this call will lock the mutext itself
+    do_uct_am_short(&g_delegator_context.mutex, ep, id, &g_delegator_context.self_addr, data, length);
+
+    // wait for server respond
+    pthread_mutex_lock(&g_delegator_context.cond_mutex);
+    while(!g_delegator_context.respond_flag)
+        pthread_cond_wait(&g_delegator_context.cond, &g_delegator_context.cond_mutex);
+    pthread_mutex_unlock(&g_delegator_context.cond_mutex);
+
+    pthread_mutex_lock(&g_delegator_context.mutex);
+    uct_ep_destroy(ep);
+    pthread_mutex_unlock(&g_delegator_context.mutex);
+}
+
 void tangram_ucx_delegator_init(tfs_info_t *tfs_info) {
     g_tfs_info = tfs_info;
 
@@ -117,6 +142,8 @@ void tangram_ucx_delegator_init(tfs_info_t *tfs_info) {
     status = uct_iface_set_am_handler(g_delegator_context.iface, AM_ID_RELEASE_LOCK_CLIENT_REQUEST, am_release_lock_client_listener, NULL, 0);
     assert(status == UCS_OK);
     status = uct_iface_set_am_handler(g_delegator_context.iface, AM_ID_REVOKE_LOCK_RESPOND, am_revoke_lock_respond_listener, NULL, 0);
+    assert(status == UCS_OK);
+    status = uct_iface_set_am_handler(g_delegator_context.iface, AM_ID_REVOKE_LOCK_REQUEST, am_revoke_lock_request_listener, NULL, 0);
     assert(status == UCS_OK);
     status = uct_iface_set_am_handler(g_delegator_context.iface, AM_ID_STOP_REQUEST, am_stop_listener, NULL, 0);
     assert(status == UCS_OK);

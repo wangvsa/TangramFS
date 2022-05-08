@@ -37,7 +37,7 @@ void tfs_init() {
     g_tfs_info.role = TANGRAM_UCX_ROLE_CLIENT;
 
     tangram_map_real_calls();
-    tangram_rpc_service_start(&g_tfs_info, revoke_lock_cb);
+    tangram_rpc_service_start(&g_tfs_info);
     //tangram_rma_service_start(&g_tfs_info, serve_rma_data_cb);
 
     MPI_Barrier(g_tfs_info.mpi_comm);
@@ -113,7 +113,6 @@ tfs_file_t* tfs_open(const char* pathname) {
         #endif
 
         seg_tree_init(&tf->seg_tree);
-        lock_token_list_init(&tf->token_list);
 
                                 // TODO remove() call is not intercepted
         remove(abs_filename);   // delete the local file first
@@ -473,7 +472,6 @@ int tfs_close(tfs_file_t* tf) {
 
     // Clean up seg-tree and lock tokens
     seg_tree_destroy(&tf->seg_tree);
-    lock_token_list_destroy(&tf->token_list);
 
     // Close all file descriptors
     if(tf->stream != NULL) {
@@ -503,56 +501,32 @@ int tfs_close(tfs_file_t* tf) {
 }
 
 int tfs_acquire_lock(tfs_file_t* tf, size_t offset, size_t count, int type) {
-
-    lock_token_t* token;
-
-    // already hold the lock - 2 cases
-    token = lock_token_find_cover(&tf->token_list, offset, count);
-    if(token) {
-        // Case 1:
-        // Had the read lock but ask for a write lock
-        // Delete my lock token locally and
-        // ask the server to upgrade my lock
-        // use the same AM_ID_ACQUIRE_LOCK_REQUEST RPC
-        if(token->type != type && type == LOCK_TYPE_WR) {
-            lock_token_delete(&tf->token_list, token);
-        } else {
-        // Case 2:
-        // Had the write lock alraedy, nothing to do.
-            return 0;
-        }
-    }
-
     // Do not have the lock, ask lock manager for it
     void* buf;
     tangram_issue_rpc(AM_ID_ACQUIRE_LOCK_REQUEST, tf->filename, &offset, &count, &type, 1, &buf);
-    token = lock_token_add_from_buf(&tf->token_list, buf);
     free(buf);
+    return 0;
 }
 
 int tfs_release_lock_client() {
     int* ack;
     tangram_issue_rpc(AM_ID_RELEASE_LOCK_CLIENT_REQUEST, NULL, NULL, NULL, NULL, 0, (void**)&ack);
     free(ack);
+    return 0;
 }
 
 int tfs_release_lock_file(tfs_file_t* tf) {
     int* ack;
     tangram_issue_rpc(AM_ID_RELEASE_LOCK_FILE_REQUEST, tf->filename, NULL, NULL, NULL, 0, (void**)&ack);
     free(ack);
+    return 0;
 }
 
 int tfs_release_lock(tfs_file_t* tf, size_t offset, size_t count) {
-
-    lock_token_t* token;
-    token = lock_token_find_cover(&tf->token_list, offset, count);
-    assert(token);
-
     int* ack;
     tangram_issue_rpc(AM_ID_RELEASE_LOCK_REQUEST, tf->filename, &offset, &count, NULL, 1, (void**)&ack);
     free(ack);
-
-    lock_token_delete(&tf->token_list, token);
+    return 0;
 }
 
 
@@ -683,6 +657,7 @@ void* serve_rma_data_cb(void* in_arg, size_t* size) {
 }
 
 // Asked by lock server to revoke my lock
+/*
 void revoke_lock_cb(void* in_arg) {
 
     rpc_in_t* in = rpc_in_unpack(in_arg);
@@ -702,3 +677,4 @@ void revoke_lock_cb(void* in_arg) {
 
     rpc_in_free(in);
 }
+*/
