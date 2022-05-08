@@ -126,12 +126,12 @@ lock_token_t* lock_token_add_extend(lock_token_list_t* token_list, size_t offset
     return token;
 }
 
-lock_token_t* lock_token_add_from_buf(lock_token_list_t* token_list, void* buf) {
+lock_token_t* lock_token_add_from_buf(lock_token_list_t* token_list, void* buf, tangram_uct_addr_t* owner) {
     lock_token_t* token = tangram_malloc(sizeof(lock_token_t));
     memcpy(&token->block_start, buf, sizeof(int));
     memcpy(&token->block_end, buf+sizeof(int), sizeof(int));
     memcpy(&token->type, buf+sizeof(int)+sizeof(int), sizeof(int));
-    token->owner = TANGRAM_UCT_ADDR_IGNORE;
+    token->owner = tangram_uct_addr_duplicate(owner);;
     pthread_rwlock_wrlock(&token_list->rwlock);
     LL_APPEND(token_list->head, token);
     pthread_rwlock_unlock(&token_list->rwlock);

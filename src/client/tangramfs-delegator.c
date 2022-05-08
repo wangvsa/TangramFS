@@ -27,7 +27,7 @@ void* delegator_rpc_handler(int8_t id, tangram_uct_addr_t* client, void* data, u
         assert(in->num_intervals == 1);
         tangram_debug("[tangramfs delegator %s] acquire lock start, filename: %s, offset:%lu, count: %lu\n", hostname, in->filename, in->intervals[0].offset, in->intervals[0].count);
         lock_token_t* token = tangram_lockmgr_delegator_acquire_lock(&g_lt, client, in->filename, in->intervals[0].offset, in->intervals[0].count, in->intervals[0].type);
-        assert(tangram_uct_addr_comp(token->owner, client) == 0);
+        //assert(tangram_uct_addr_comp(token->owner, client) == 0);
         tangram_debug("[tangramfs delegator %s] acquire lock, filename: %s, offset:%lu, count: %lu\n", hostname, in->filename, in->intervals[0].offset, in->intervals[0].count);
         rpc_in_free(in);
         *respond_id = AM_ID_ACQUIRE_LOCK_RESPOND;

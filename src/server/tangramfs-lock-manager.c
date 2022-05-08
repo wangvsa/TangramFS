@@ -35,7 +35,7 @@ lock_token_t* tangram_lockmgr_delegator_acquire_lock(lock_table_t** lt, tangram_
         } else {
         // Case 2:
         // Had the write lock alraedy, nothing to do.
-            return 0;
+            return token;
         }
     }
 
@@ -44,8 +44,10 @@ lock_token_t* tangram_lockmgr_delegator_acquire_lock(lock_table_t** lt, tangram_
     size_t in_size;
     void* in = rpc_in_pack(filename, 1, &offset, &count, &type, &in_size);
     tangram_ucx_delegator_sendrecv_server(AM_ID_ACQUIRE_LOCK_REQUEST, in, in_size, &out);
-    token = lock_token_add_from_buf(&entry->token_list, out);
+    token = lock_token_add_from_buf(&entry->token_list, out, client);
+    free(in);
     free(out);
+    return token;
 }
 
 void tangram_lockmgr_delegator_revoke_lock(lock_table_t* lt, char* filename, size_t offset, size_t count, int type) {
@@ -64,7 +66,7 @@ void tangram_lockmgr_delegator_revoke_lock(lock_table_t* lt, char* filename, siz
         lock_token_delete(&entry->token_list, token);
 }
 
-lock_token_t* tangram_lockmgr_server_acquire_lock(lock_table_t** lt, tangram_uct_addr_t* client, char* filename, size_t offset, size_t count, int type) {
+lock_token_t* tangram_lockmgr_server_acquire_lock(lock_table_t** lt, tangram_uct_addr_t* delegator, char* filename, size_t offset, size_t count, int type) {
 
     lock_table_t* entry = NULL;
     HASH_FIND_STR(*lt, filename, entry);
@@ -81,7 +83,7 @@ lock_token_t* tangram_lockmgr_server_acquire_lock(lock_table_t** lt, tangram_uct
     // First see if the requestor already hold the lock
     // but simply ask to upgrade it, i.e., RD->WR
     token = lock_token_find_cover(&entry->token_list, offset, count);
-    if( token && (tangram_uct_addr_compare(token->owner , client) == 0) ) {
+    if( token && (tangram_uct_addr_compare(token->owner, delegator) == 0) ) {
         if(type == LOCK_TYPE_WR)
             lock_token_update_type(token, type);
         return token;
@@ -97,8 +99,8 @@ lock_token_t* tangram_lockmgr_server_acquire_lock(lock_table_t** lt, tangram_uct
     // 2. We can try to extend the lock range
     //    e.g., user asks for [0, 100], we can give [0, infinity]
     if(!token) {
-        token = lock_token_add(&entry->token_list, offset, count, type, client);
-        //token = lock_token_add_extend(&entry->token_list, offset, count, type, client);
+        token = lock_token_add(&entry->token_list, offset, count, type, delegator);
+        //token = lock_token_add_extend(&entry->token_list, offset, count, type, delegator);
         return token;
     }
 
@@ -122,7 +124,7 @@ lock_token_t* tangram_lockmgr_server_acquire_lock(lock_table_t** lt, tangram_uct
         lock_token_delete(&entry->token_list, token);
     }
 
-    token = lock_token_add(&entry->token_list, offset, count, type, client);
+    token = lock_token_add(&entry->token_list, offset, count, type, delegator);
     return token;
 }
 
