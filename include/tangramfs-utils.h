@@ -39,8 +39,8 @@ typedef struct tfs_info {
 } tfs_info_t;
 
 
-void* tangram_malloc(size_t size);
-void  tangram_free(void*ptr, size_t size);
+//void* tangram_malloc(size_t size);
+//void  tangram_free(void*ptr, size_t size);
 
 void tangram_info_init(tfs_info_t *tfs_info);
 void tangram_info_finalize(tfs_info_t *tfs_info);

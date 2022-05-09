@@ -112,7 +112,7 @@ void taskmgr_init(taskmgr_t* mgr, int num_workers,
     task_handle_cb = _task_handle_cb;
 
     mgr->num_workers = num_workers;
-    mgr->workers = tangram_malloc(num_workers * sizeof(worker_t));
+    mgr->workers = malloc(num_workers * sizeof(worker_t));
 
     for(int i = 0; i < num_workers; i++) {
         mgr->workers[i].tid = i;
@@ -137,6 +137,6 @@ void taskmgr_finalize(taskmgr_t* mgr) {
         pthread_mutex_destroy(&mgr->workers[i].lock);
     }
 
-    tangram_free(mgr->workers, mgr->num_workers * sizeof(worker_t));
+    free(mgr->workers);
     mgr->workers = NULL;
 }

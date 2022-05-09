@@ -8,7 +8,7 @@
 
 void lock_token_free(lock_token_t* token) {
     tangram_uct_addr_free(token->owner);
-    tangram_free(token, sizeof(lock_token_t));
+    free(token);
     token = NULL;
 }
 
@@ -76,15 +76,18 @@ lock_token_t* lock_token_find_exact(lock_token_list_t* token_list, size_t offset
 
 void* lock_token_serialize(lock_token_t* token, size_t *size) {
     *size = sizeof(int) * 3;
-    void* buf = tangram_malloc(*size);
+
+    void* buf = malloc(*size);
+
     memcpy(buf, &token->block_start, sizeof(int));
     memcpy(buf+sizeof(int), &token->block_end, sizeof(int));
     memcpy(buf+2*sizeof(int), &token->type, sizeof(int));
+
     return buf;
 }
 
 lock_token_t* lock_token_add(lock_token_list_t* token_list, size_t offset, size_t count, int type, tangram_uct_addr_t* owner) {
-    lock_token_t* token = tangram_malloc(sizeof(lock_token_t));
+    lock_token_t* token = malloc(sizeof(lock_token_t));
     token->block_start  = offset / LOCK_BLOCK_SIZE;
     token->block_end    = (offset+count-1) / LOCK_BLOCK_SIZE;
     token->type         = type;
@@ -97,7 +100,7 @@ lock_token_t* lock_token_add(lock_token_list_t* token_list, size_t offset, size_
 
 lock_token_t* lock_token_add_extend(lock_token_list_t* token_list, size_t offset, size_t count, int type, tangram_uct_addr_t* owner) {
 
-    lock_token_t* token = tangram_malloc(sizeof(lock_token_t));
+    lock_token_t* token = malloc(sizeof(lock_token_t));
     token->block_start  = offset / LOCK_BLOCK_SIZE;
     token->block_end    = (offset+count-1) / LOCK_BLOCK_SIZE;
     token->type         = type;
@@ -124,7 +127,7 @@ lock_token_t* lock_token_add_extend(lock_token_list_t* token_list, size_t offset
 }
 
 lock_token_t* lock_token_add_from_buf(lock_token_list_t* token_list, void* buf, tangram_uct_addr_t* owner) {
-    lock_token_t* token = tangram_malloc(sizeof(lock_token_t));
+    lock_token_t* token = malloc(sizeof(lock_token_t));
     memcpy(&token->block_start, buf, sizeof(int));
     memcpy(&token->block_end, buf+sizeof(int), sizeof(int));
     memcpy(&token->type, buf+sizeof(int)+sizeof(int), sizeof(int));

@@ -100,7 +100,7 @@ tfs_file_t* tfs_open(const char* pathname) {
     if(tf) {
         tf->offset = 0;
     } else {
-        tf         = tangram_malloc(sizeof(tfs_file_t));
+        tf         = malloc(sizeof(tfs_file_t));
         tf->stream = NULL;
         tf->fd     = -1;
         tf->offset = 0;
@@ -144,7 +144,7 @@ void tfs_stat(tfs_file_t* tf, struct stat* buf) {
 void tfs_flush(tfs_file_t *tf) {
 
     size_t chunk_size = 4*1024*1024;
-    char* buf = tangram_malloc(chunk_size);
+    char* buf = malloc(chunk_size);
 
     seg_tree_rdlock(&tf->seg_tree);
     struct seg_tree_node *node = NULL;
@@ -179,7 +179,7 @@ void tfs_flush(tfs_file_t *tf) {
 
     seg_tree_unlock(&tf->seg_tree);
 
-    tangram_free(buf, chunk_size);
+    free(buf);
 }
 
 
@@ -406,8 +406,8 @@ void tfs_post_file(tfs_file_t* tf) {
         return;
     }
 
-    offsets = tangram_malloc(sizeof(size_t) * num);
-    counts  = tangram_malloc(sizeof(size_t) * num);
+    offsets = malloc(sizeof(size_t) * num);
+    counts  = malloc(sizeof(size_t) * num);
 
     node = NULL;
     while ((node = seg_tree_iter(&tf->seg_tree, node))) {
@@ -425,8 +425,8 @@ void tfs_post_file(tfs_file_t* tf) {
     tangram_issue_rpc(AM_ID_POST_REQUEST, tf->filename, offsets, counts, NULL, num, (void**)&ack);
     free(ack);
 
-    tangram_free(offsets, sizeof(size_t)*num);
-    tangram_free(counts, sizeof(size_t)*num);
+    free(offsets);
+    free(counts);
 
     seg_tree_unlock(&tf->seg_tree);
 }
@@ -489,7 +489,7 @@ int tfs_close(tfs_file_t* tf) {
 
     // Delete from hash table
     HASH_DEL(g_tfs_files, tf);
-    tangram_free(tf, sizeof(tfs_file_t));
+    free(tf);
     tf = NULL;
 
     // TODO: consider the below behaviour?

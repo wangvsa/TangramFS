@@ -9,6 +9,7 @@
 
 static size_t memory_usage = 0;
 
+/*
 void* tangram_malloc(size_t size) {
     memory_usage += size;
     return malloc(size);
@@ -18,6 +19,7 @@ void tangram_free(void* ptr, size_t size) {
     memory_usage -= size;
     free(ptr);
 }
+*/
 
 void tangram_info_init(tfs_info_t* tfs_info) {
     MPI_Comm_dup(MPI_COMM_WORLD, &tfs_info->mpi_comm);

@@ -8,13 +8,17 @@
 #include "tangramfs-ucx-server.h"
 #include "tangramfs-ucx-delegator.h"
 
+void split_lock() {
+}
+
+
 lock_token_t* tangram_lockmgr_delegator_acquire_lock(lock_table_t** lt, tangram_uct_addr_t* client, char* filename, size_t offset, size_t count, int type) {
 
     lock_table_t* entry = NULL;
     HASH_FIND_STR(*lt, filename, entry);
 
     if(!entry) {
-        entry = tangram_malloc(sizeof(lock_table_t));
+        entry = malloc(sizeof(lock_table_t));
         lock_token_list_init(&entry->token_list);
         strcpy(entry->filename, filename);
         HASH_ADD_STR(*lt, filename, entry);
@@ -72,7 +76,7 @@ lock_token_t* tangram_lockmgr_server_acquire_lock(lock_table_t** lt, tangram_uct
     HASH_FIND_STR(*lt, filename, entry);
 
     if(!entry) {
-        entry = tangram_malloc(sizeof(lock_table_t));
+        entry = malloc(sizeof(lock_table_t));
         lock_token_list_init(&entry->token_list);
         strcpy(entry->filename, filename);
         HASH_ADD_STR(*lt, filename, entry);
@@ -109,18 +113,19 @@ lock_token_t* tangram_lockmgr_server_acquire_lock(lock_table_t** lt, tangram_uct
     // Case 1. Both are read locks
     if(type == token->type && type == LOCK_TYPE_RD) {
 
-    // Case 2. Different lock type, revoke the current owner's lock
-    // Then delete the old token and add a new one
+    // Case 2. Different lock type, split the current owner's lock
+    // the requestor is responsible for contatcing the onwer
     //
     // TODO we don't consider the case where we have multiple conflicting owners.
     // e.g. P1:[0-10], P2:[10-20], Accquire[0-20]
     } else {
+        /*
         size_t data_len;
         void* data = rpc_in_pack(filename, 1, &offset, &count, NULL, &data_len);
         tangram_ucx_server_revoke_delegator_lock(token->owner, data, data_len);
         free(data);
-
         lock_token_delete(&entry->token_list, token);
+        */
     }
 
     token = lock_token_add(&entry->token_list, offset, count, type, delegator);
@@ -167,7 +172,7 @@ void tangram_lockmgr_finalize(lock_table_t** lt) {
     HASH_ITER(hh, *lt, entry, tmp) {
         lock_token_list_destroy(&entry->token_list);
         HASH_DEL(*lt, entry);
-        tangram_free(entry, sizeof(lock_table_t*));
+        free(entry);
     }
     *lt = NULL;
 }
