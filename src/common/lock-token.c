@@ -75,15 +75,39 @@ lock_token_t* lock_token_find_exact(lock_token_list_t* token_list, size_t offset
 }
 
 void* lock_token_serialize(lock_token_t* token, size_t *size) {
-    *size = sizeof(int) * 3;
+    size_t addr_size;
+    void* addr_buf = tangram_uct_addr_serialize(token->owner, &addr_size);
 
+    *size = sizeof(int) * 3 + sizeof(size_t) + addr_size ;
     void* buf = malloc(*size);
-
     memcpy(buf, &token->block_start, sizeof(int));
     memcpy(buf+sizeof(int), &token->block_end, sizeof(int));
     memcpy(buf+2*sizeof(int), &token->type, sizeof(int));
+    memcpy(buf+3*sizeof(int), &addr_size, sizeof(size_t));
+
+    // It is possible token->owner is TANGRAM_UCT_ADDR_IGNORE (which is just null)
+    if(addr_size > 0)
+        memcpy(buf+3*sizeof(int)+sizeof(size_t), addr_buf, addr_size);
 
     return buf;
+}
+
+lock_token_t* lock_token_deserialize(void* buf, size_t* size) {
+    lock_token_t* token = malloc(sizeof(lock_token_t));
+
+    memcpy(&token->block_start, buf, sizeof(int));
+    memcpy(&token->block_end, buf+sizeof(int), sizeof(int));
+    memcpy(&token->type, buf+sizeof(int)*2, sizeof(int));
+
+    size_t addr_size;
+    memcpy(&addr_size, buf+sizeof(int)*3, sizeof(size_t));
+    if(addr_size > 0) {
+        token->owner = malloc(sizeof(tangram_uct_addr_t));
+        tangram_uct_addr_deserialize(buf+sizeof(int)*3+sizeof(size_t), token->owner);
+    }
+
+    *size = sizeof(int)*3 + sizeof(size_t) + addr_size;
+    return token;
 }
 
 lock_token_t* lock_token_add(lock_token_list_t* token_list, size_t offset, size_t count, int type, tangram_uct_addr_t* owner) {
@@ -124,6 +148,12 @@ lock_token_t* lock_token_add_extend(lock_token_list_t* token_list, size_t offset
     pthread_rwlock_unlock(&token_list->rwlock);
 
     return token;
+}
+
+void lock_token_add_direct(lock_token_list_t* token_list, lock_token_t* token) {
+    pthread_rwlock_wrlock(&token_list->rwlock);
+    LL_APPEND(token_list->head, token);
+    pthread_rwlock_unlock(&token_list->rwlock);
 }
 
 lock_token_t* lock_token_add_from_buf(lock_token_list_t* token_list, void* buf, tangram_uct_addr_t* owner) {

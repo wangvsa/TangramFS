@@ -65,14 +65,14 @@ void* server_rpc_handler(int8_t id, tangram_uct_addr_t* client, void* data, uint
         assert(in->num_intervals == 1);
         tangram_debug("[tangramfs server] acquire lock, filename: %s, ask [%ld-%ld] start\n",
                 in->filename, in->intervals[0].offset/LOCK_BLOCK_SIZE, (in->intervals[0].offset+in->intervals[0].count-1)/LOCK_BLOCK_SIZE);
-        lock_token_t* token = tangram_lockmgr_server_acquire_lock(&g_lt, client, in->filename, in->intervals[0].offset, in->intervals[0].count, in->intervals[0].type);
+        lock_acquire_result_t* res = tangram_lockmgr_server_acquire_lock(&g_lt, client, in->filename, in->intervals[0].offset, in->intervals[0].count, in->intervals[0].type);
         assert(tangram_uct_addr_comp(token->owner, client) == 0);
         tangram_debug("[tangramfs server] acquire lock, filename: %s, ask [%ld-%ld], grant [%d-%d]\n",
                 in->filename, in->intervals[0].offset/LOCK_BLOCK_SIZE, (in->intervals[0].offset+in->intervals[0].count-1)/LOCK_BLOCK_SIZE,
-                token->block_start, token->block_end);
+                res->token->block_start, res->token->block_end);
         rpc_in_free(in);
         *respond_id = AM_ID_ACQUIRE_LOCK_RESPOND;
-        respond = lock_token_serialize(token, respond_len);
+        respond = lock_acquire_result_serialize(res, respond_len);
     } else if(id == AM_ID_RELEASE_LOCK_REQUEST) {
         rpc_in_t* in = rpc_in_unpack(data);
         assert(in->num_intervals == 1);

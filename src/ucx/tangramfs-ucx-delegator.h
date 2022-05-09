@@ -10,6 +10,7 @@ void tangram_ucx_delegator_start();
 void tangram_ucx_delegator_stop();
 
 void tangram_ucx_delegator_sendrecv_server(uint8_t id, void* data, size_t length, void** respond_ptr);
+void tangram_ucx_delegator_sendrecv_delegator(uint8_t id, tangram_uct_addr_t* dest, void* data, size_t length, void** respond_ptr);
 
 tangram_uct_addr_t* tangram_ucx_delegator_addr();
 

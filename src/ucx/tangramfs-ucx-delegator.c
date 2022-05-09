@@ -20,18 +20,6 @@ static tangram_uct_context_t g_delegator_context;
 
 void* (*user_am_data_handler)(int8_t, tangram_uct_addr_t* client, void* data, uint8_t* respond_id, size_t *respond_len);
 
-/*
- * Use one global mutex to protect revoke rpcs
- *
- * We wait on g_delegator_context.cond, so it is
- * necessary that we have at most one outgoing revoke
- * request at a time.
- * Wait on multiple clients at the same time may cause deadlock
- *
- * TODO we can implement it in a way without this global lock.
- */
-static pthread_mutex_t       g_revoke_lock_mutex = PTHREAD_MUTEX_INITIALIZER;
-
 static ucs_status_t am_acquire_lock_listener(void *arg, void *buf, size_t buf_len, unsigned flags) {
     taskmgr_append_task_to_worker(&g_taskmgr, AM_ID_ACQUIRE_LOCK_REQUEST, buf, buf_len, 0);
     return UCS_OK;
@@ -48,14 +36,11 @@ static ucs_status_t am_release_lock_client_listener(void *arg, void *buf, size_t
     taskmgr_append_task_to_worker(&g_taskmgr, AM_ID_RELEASE_LOCK_CLIENT_REQUEST, buf, buf_len, 0);
     return UCS_OK;
 }
-static ucs_status_t am_revoke_lock_request_listener(void *arg, void *buf, size_t buf_len, unsigned flags) {
-    taskmgr_append_task_to_worker(&g_taskmgr, AM_ID_REVOKE_LOCK_REQUEST, buf, buf_len, 0);
-    char hostname[128];
-    gethostname(hostname, 128);
-    printf("CHEN delegator %s received revoke lock request\n", hostname);
+static ucs_status_t am_split_lock_request_listener(void *arg, void *buf, size_t buf_len, unsigned flags) {
+    taskmgr_append_task_to_worker(&g_taskmgr, AM_ID_SPLIT_LOCK_REQUEST, buf, buf_len, 0);
     return UCS_OK;
 }
-static ucs_status_t am_server_respond_listener(void *arg, void *buf, size_t buf_len, unsigned flags) {
+static ucs_status_t am_respond_listener(void *arg, void *buf, size_t buf_len, unsigned flags) {
     pthread_mutex_lock(&g_delegator_context.cond_mutex);
     unpack_rpc_buffer(buf, buf_len, TANGRAM_UCT_ADDR_IGNORE, g_delegator_context.respond_ptr);
     g_delegator_context.respond_flag = true;
@@ -83,43 +68,18 @@ void delegator_handle_task(task_t* task) {
     pthread_mutex_unlock(&g_delegator_context.mutex);
 }
 
-void tangram_ucx_revoke_lock2(tangram_uct_addr_t* client, void* data, size_t length) {
-    pthread_mutex_lock(&g_revoke_lock_mutex);
-
-    g_delegator_context.respond_flag = false;
-
-    pthread_mutex_lock(&g_delegator_context.mutex);
-    uct_ep_h ep;
-    uct_ep_create_connect(g_delegator_context.iface, client, &ep);
-    pthread_mutex_unlock(&g_delegator_context.mutex);
-
-    // this call will lock the mutext itself
-    do_uct_am_short(&g_delegator_context.mutex, ep, AM_ID_REVOKE_LOCK_REQUEST, &g_delegator_context.self_addr, data, length);
-
-    pthread_mutex_lock(&g_delegator_context.cond_mutex);
-    while(!g_delegator_context.respond_flag)
-        pthread_cond_wait(&g_delegator_context.cond, &g_delegator_context.cond_mutex);
-    pthread_mutex_unlock(&g_delegator_context.cond_mutex);
-
-    pthread_mutex_lock(&g_delegator_context.mutex);
-    uct_ep_destroy(ep);
-    pthread_mutex_unlock(&g_delegator_context.mutex);
-
-    pthread_mutex_unlock(&g_revoke_lock_mutex);
-}
-
-void tangram_ucx_delegator_sendrecv_server(uint8_t id, void* data, size_t length, void** respond_ptr) {
+void delegator_sendrecv(uint8_t id, tangram_uct_addr_t* dest, void* data, size_t length, void** respond_ptr) {
     pthread_mutex_lock(&g_delegator_context.mutex);
     g_delegator_context.respond_flag = false;
     g_delegator_context.respond_ptr  = respond_ptr;
     uct_ep_h ep;
-    uct_ep_create_connect(g_delegator_context.iface, &g_delegator_context.server_addr, &ep);
+    uct_ep_create_connect(g_delegator_context.iface, dest, &ep);
     pthread_mutex_unlock(&g_delegator_context.mutex);
 
     // this call will lock the mutext itself
     do_uct_am_short(&g_delegator_context.mutex, ep, id, &g_delegator_context.self_addr, data, length);
 
-    // wait for server respond
+    // wait for respond
     if(respond_ptr != NULL) {
         pthread_mutex_lock(&g_delegator_context.cond_mutex);
         while(!g_delegator_context.respond_flag)
@@ -130,6 +90,14 @@ void tangram_ucx_delegator_sendrecv_server(uint8_t id, void* data, size_t length
     pthread_mutex_lock(&g_delegator_context.mutex);
     uct_ep_destroy(ep);
     pthread_mutex_unlock(&g_delegator_context.mutex);
+}
+
+void tangram_ucx_delegator_sendrecv_server(uint8_t id, void* data, size_t length, void** respond_ptr) {
+    delegator_sendrecv(id, &g_delegator_context.server_addr, data, length, respond_ptr);
+}
+
+void tangram_ucx_delegator_sendrecv_delegator(uint8_t id, tangram_uct_addr_t* dest, void* data, size_t length, void** respond_ptr) {
+    delegator_sendrecv(id, dest, data, length, respond_ptr);
 }
 
 void tangram_ucx_delegator_init(tfs_info_t *tfs_info) {
@@ -144,15 +112,10 @@ void tangram_ucx_delegator_init(tfs_info_t *tfs_info) {
     uct_iface_set_am_handler(g_delegator_context.iface, AM_ID_RELEASE_LOCK_REQUEST, am_release_lock_listener, NULL, 0);
     uct_iface_set_am_handler(g_delegator_context.iface, AM_ID_RELEASE_LOCK_FILE_REQUEST, am_release_lock_file_listener, NULL, 0);
     uct_iface_set_am_handler(g_delegator_context.iface, AM_ID_RELEASE_LOCK_CLIENT_REQUEST, am_release_lock_client_listener, NULL, 0);
-    uct_iface_set_am_handler(g_delegator_context.iface, AM_ID_REVOKE_LOCK_REQUEST, am_revoke_lock_request_listener, NULL, 0);
+    uct_iface_set_am_handler(g_delegator_context.iface, AM_ID_SPLIT_LOCK_REQUEST, am_split_lock_request_listener, NULL, 0);
 
-    uct_iface_set_am_handler(g_delegator_context.iface, AM_ID_ACQUIRE_LOCK_RESPOND, am_server_respond_listener, NULL, 0);
-    /*
-     * Not used for now. delegator does not send those requests to server for now.
-    uct_iface_set_am_handler(g_delegator_context.iface, AM_ID_RELEASE_LOCK_RESPOND, am_server_respond_listener, NULL, 0);
-    uct_iface_set_am_handler(g_delegator_context.iface, AM_ID_RELEASE_LOCK_FILE_RESPOND, am_server_respond_listener, NULL, 0);
-    uct_iface_set_am_handler(g_delegator_context.iface, AM_ID_RELEASE_LOCK_CLIENT_RESPOND, am_server_respond_listener, NULL, 0);
-    */
+    uct_iface_set_am_handler(g_delegator_context.iface, AM_ID_SPLIT_LOCK_RESPOND, am_respond_listener, NULL, 0);
+    uct_iface_set_am_handler(g_delegator_context.iface, AM_ID_ACQUIRE_LOCK_RESPOND, am_respond_listener, NULL, 0);
 
     uct_iface_set_am_handler(g_delegator_context.iface, AM_ID_STOP_REQUEST, am_stop_listener, NULL, 0);
 

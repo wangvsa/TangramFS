@@ -17,18 +17,6 @@ static ucs_async_context_t*  g_server_async;
 static tangram_uct_context_t g_server_context;
 
 
-/*
- * Use one global mutex to protect revoke rpcs
- *
- * We wait on g_server_context.cond, so it is
- * necessary that we have at most one outgoing revoke
- * request at a time.
- * Wait on multiple clients at the same time may cause deadlock
- *
- * TODO we can implement it in a way without this global lock.
- */
-static pthread_mutex_t       g_revoke_lock_mutex = PTHREAD_MUTEX_INITIALIZER;
-
 void* (*user_am_data_handler)(int8_t, tangram_uct_addr_t* client, void* data, uint8_t* respond_id, size_t *respond_len);
 
 static ucs_status_t am_query_listener(void *arg, void *buf, size_t buf_len, unsigned flags) {
@@ -69,13 +57,6 @@ static ucs_status_t am_release_lock_client_listener(void *arg, void *buf, size_t
     taskmgr_append_task_to_worker(&g_taskmgr, AM_ID_RELEASE_LOCK_CLIENT_REQUEST, buf, buf_len, 0);
     return UCS_OK;
 }
-static ucs_status_t am_revoke_lock_respond_listener(void *arg, void *buf, size_t buf_len, unsigned flags) {
-    pthread_mutex_lock(&g_server_context.cond_mutex);
-    g_server_context.respond_flag = true;
-    pthread_cond_signal(&g_server_context.cond);
-    pthread_mutex_unlock(&g_server_context.cond_mutex);
-    return UCS_OK;
-}
 
 static ucs_status_t am_stop_listener(void *arg, void *buf, size_t buf_len, unsigned flags) {
     // TODO server.c need to be notified
@@ -98,18 +79,16 @@ void server_handle_task(task_t* task) {
     pthread_mutex_unlock(&g_server_context.mutex);
 }
 
-void tangram_ucx_server_revoke_delegator_lock(tangram_uct_addr_t* client, void* data, size_t length) {
-    pthread_mutex_lock(&g_revoke_lock_mutex);
-
+void tangram_ucx_server_sendrecv_delegator(uint8_t id, tangram_uct_addr_t* delegator, void* data, size_t length) {
     g_server_context.respond_flag = false;
 
     pthread_mutex_lock(&g_server_context.mutex);
     uct_ep_h ep;
-    uct_ep_create_connect(g_server_context.iface, client, &ep);
+    uct_ep_create_connect(g_server_context.iface, delegator, &ep);
     pthread_mutex_unlock(&g_server_context.mutex);
 
     // this call will lock the mutext itself
-    do_uct_am_short(&g_server_context.mutex, ep, AM_ID_REVOKE_LOCK_REQUEST, &g_server_context.self_addr, data, length);
+    do_uct_am_short(&g_server_context.mutex, ep, id, &g_server_context.self_addr, data, length);
 
     pthread_mutex_lock(&g_server_context.cond_mutex);
     while(!g_server_context.respond_flag)
@@ -119,8 +98,6 @@ void tangram_ucx_server_revoke_delegator_lock(tangram_uct_addr_t* client, void* 
     pthread_mutex_lock(&g_server_context.mutex);
     uct_ep_destroy(ep);
     pthread_mutex_unlock(&g_server_context.mutex);
-
-    pthread_mutex_unlock(&g_revoke_lock_mutex);
 }
 
 
@@ -132,28 +109,16 @@ void tangram_ucx_server_init(tfs_info_t *tfs_info) {
 
     tangram_uct_context_init(g_server_async, tfs_info, &g_server_context);
 
-    status = uct_iface_set_am_handler(g_server_context.iface, AM_ID_QUERY_REQUEST, am_query_listener, NULL, 0);
-    assert(status == UCS_OK);
-    status = uct_iface_set_am_handler(g_server_context.iface, AM_ID_POST_REQUEST, am_post_listener, NULL, 0);
-    assert(status == UCS_OK);
-    status = uct_iface_set_am_handler(g_server_context.iface, AM_ID_UNPOST_FILE_REQUEST, am_unpost_file_listener, NULL, 0);
-    assert(status == UCS_OK);
-    status = uct_iface_set_am_handler(g_server_context.iface, AM_ID_UNPOST_CLIENT_REQUEST, am_unpost_client_listener, NULL, 0);
-    assert(status == UCS_OK);
-    status = uct_iface_set_am_handler(g_server_context.iface, AM_ID_STAT_REQUEST, am_stat_listener, NULL, 0);
-    assert(status == UCS_OK);
-    status = uct_iface_set_am_handler(g_server_context.iface, AM_ID_ACQUIRE_LOCK_REQUEST, am_acquire_lock_listener, NULL, 0);
-    assert(status == UCS_OK);
-    status = uct_iface_set_am_handler(g_server_context.iface, AM_ID_RELEASE_LOCK_REQUEST, am_release_lock_listener, NULL, 0);
-    assert(status == UCS_OK);
-    status = uct_iface_set_am_handler(g_server_context.iface, AM_ID_RELEASE_LOCK_FILE_REQUEST, am_release_lock_file_listener, NULL, 0);
-    assert(status == UCS_OK);
-    status = uct_iface_set_am_handler(g_server_context.iface, AM_ID_RELEASE_LOCK_CLIENT_REQUEST, am_release_lock_client_listener, NULL, 0);
-    assert(status == UCS_OK);
-    status = uct_iface_set_am_handler(g_server_context.iface, AM_ID_REVOKE_LOCK_RESPOND, am_revoke_lock_respond_listener, NULL, 0);
-    assert(status == UCS_OK);
-    status = uct_iface_set_am_handler(g_server_context.iface, AM_ID_STOP_REQUEST, am_stop_listener, NULL, 0);
-    assert(status == UCS_OK);
+    uct_iface_set_am_handler(g_server_context.iface, AM_ID_QUERY_REQUEST, am_query_listener, NULL, 0);
+    uct_iface_set_am_handler(g_server_context.iface, AM_ID_POST_REQUEST, am_post_listener, NULL, 0);
+    uct_iface_set_am_handler(g_server_context.iface, AM_ID_UNPOST_FILE_REQUEST, am_unpost_file_listener, NULL, 0);
+    uct_iface_set_am_handler(g_server_context.iface, AM_ID_UNPOST_CLIENT_REQUEST, am_unpost_client_listener, NULL, 0);
+    uct_iface_set_am_handler(g_server_context.iface, AM_ID_STAT_REQUEST, am_stat_listener, NULL, 0);
+    uct_iface_set_am_handler(g_server_context.iface, AM_ID_ACQUIRE_LOCK_REQUEST, am_acquire_lock_listener, NULL, 0);
+    uct_iface_set_am_handler(g_server_context.iface, AM_ID_RELEASE_LOCK_REQUEST, am_release_lock_listener, NULL, 0);
+    uct_iface_set_am_handler(g_server_context.iface, AM_ID_RELEASE_LOCK_FILE_REQUEST, am_release_lock_file_listener, NULL, 0);
+    uct_iface_set_am_handler(g_server_context.iface, AM_ID_RELEASE_LOCK_CLIENT_REQUEST, am_release_lock_client_listener, NULL, 0);
+    uct_iface_set_am_handler(g_server_context.iface, AM_ID_STOP_REQUEST, am_stop_listener, NULL, 0);
 
     taskmgr_init(&g_taskmgr, 4, server_handle_task);
 }

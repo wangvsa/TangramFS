@@ -18,7 +18,6 @@ static tfs_file_t* g_tfs_files;
 
 // Below callbacks will be invoked by tangram-ucx-client/rma
 void* serve_rma_data_cb(void* in_arg, size_t* size);
-void  revoke_lock_cb(void* in_arg);
 
 
 void tfs_init() {
@@ -502,9 +501,9 @@ int tfs_close(tfs_file_t* tf) {
 
 int tfs_acquire_lock(tfs_file_t* tf, size_t offset, size_t count, int type) {
     // Do not have the lock, ask lock manager for it
-    void* buf;
-    tangram_issue_rpc(AM_ID_ACQUIRE_LOCK_REQUEST, tf->filename, &offset, &count, &type, 1, &buf);
-    free(buf);
+    void* ack;
+    tangram_issue_rpc(AM_ID_ACQUIRE_LOCK_REQUEST, tf->filename, &offset, &count, &type, 1, &ack);
+    free(ack);
     return 0;
 }
 
@@ -655,26 +654,3 @@ void* serve_rma_data_cb(void* in_arg, size_t* size) {
     rpc_in_free(in);
     return data;
 }
-
-// Asked by lock server to revoke my lock
-/*
-void revoke_lock_cb(void* in_arg) {
-
-    rpc_in_t* in = rpc_in_unpack(in_arg);
-
-    tfs_file_t* tf = NULL;
-    HASH_FIND_STR(g_tfs_files, in->filename, tf);
-    if(tf == NULL) return;
-
-
-    lock_token_t* token;
-    token = lock_token_find_cover(&tf->token_list, in->intervals[0].offset, in->intervals[0].count);
-
-    // the if(token) should be uncessary, we should be certain
-    // that we hold the lock that server wants to revoke
-    if(token)
-        lock_token_delete(&tf->token_list, token);
-
-    rpc_in_free(in);
-}
-*/
