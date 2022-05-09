@@ -50,6 +50,9 @@ static ucs_status_t am_release_lock_client_listener(void *arg, void *buf, size_t
 }
 static ucs_status_t am_revoke_lock_request_listener(void *arg, void *buf, size_t buf_len, unsigned flags) {
     taskmgr_append_task_to_worker(&g_taskmgr, AM_ID_REVOKE_LOCK_REQUEST, buf, buf_len, 0);
+    char hostname[128];
+    gethostname(hostname, 128);
+    printf("CHEN delegator %s received revoke lock request\n", hostname);
     return UCS_OK;
 }
 static ucs_status_t am_server_respond_listener(void *arg, void *buf, size_t buf_len, unsigned flags) {

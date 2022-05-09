@@ -6,9 +6,6 @@
 #include "lock-token.h"
 #include "tangramfs-utils.h"
 
-#define BLOCK_SIZE 4096
-
-
 void lock_token_free(lock_token_t* token) {
     tangram_uct_addr_free(token->owner);
     tangram_free(token, sizeof(lock_token_t));
@@ -16,8 +13,8 @@ void lock_token_free(lock_token_t* token) {
 }
 
 lock_token_t* lock_token_find_conflict(lock_token_list_t* token_list, size_t offset, size_t count) {
-    int start = offset / BLOCK_SIZE;
-    int end   = (offset + count - 1) / BLOCK_SIZE;
+    int start = offset / LOCK_BLOCK_SIZE;
+    int end   = (offset + count - 1) / LOCK_BLOCK_SIZE;
 
     pthread_rwlock_rdlock(&token_list->rwlock);
 
@@ -37,8 +34,8 @@ lock_token_t* lock_token_find_conflict(lock_token_list_t* token_list, size_t off
 }
 
 lock_token_t* lock_token_find_cover(lock_token_list_t* token_list, size_t offset, size_t count) {
-    int start = offset / BLOCK_SIZE;
-    int end   = (offset + count - 1) / BLOCK_SIZE;
+    int start = offset / LOCK_BLOCK_SIZE;
+    int end   = (offset + count - 1) / LOCK_BLOCK_SIZE;
 
     lock_token_t* found = NULL;
     lock_token_t* token = NULL;
@@ -58,8 +55,8 @@ lock_token_t* lock_token_find_cover(lock_token_list_t* token_list, size_t offset
 }
 
 lock_token_t* lock_token_find_exact(lock_token_list_t* token_list, size_t offset, size_t count) {
-    int start = offset / BLOCK_SIZE;
-    int end   = (offset + count - 1) / BLOCK_SIZE;
+    int start = offset / LOCK_BLOCK_SIZE;
+    int end   = (offset + count - 1) / LOCK_BLOCK_SIZE;
 
     pthread_rwlock_rdlock(&token_list->rwlock);
 
@@ -88,8 +85,8 @@ void* lock_token_serialize(lock_token_t* token, size_t *size) {
 
 lock_token_t* lock_token_add(lock_token_list_t* token_list, size_t offset, size_t count, int type, tangram_uct_addr_t* owner) {
     lock_token_t* token = tangram_malloc(sizeof(lock_token_t));
-    token->block_start  = offset / BLOCK_SIZE;
-    token->block_end    = (offset+count-1) / BLOCK_SIZE;
+    token->block_start  = offset / LOCK_BLOCK_SIZE;
+    token->block_end    = (offset+count-1) / LOCK_BLOCK_SIZE;
     token->type         = type;
     token->owner        = tangram_uct_addr_duplicate(owner);
     pthread_rwlock_wrlock(&token_list->rwlock);
@@ -101,8 +98,8 @@ lock_token_t* lock_token_add(lock_token_list_t* token_list, size_t offset, size_
 lock_token_t* lock_token_add_extend(lock_token_list_t* token_list, size_t offset, size_t count, int type, tangram_uct_addr_t* owner) {
 
     lock_token_t* token = tangram_malloc(sizeof(lock_token_t));
-    token->block_start  = offset / BLOCK_SIZE;
-    token->block_end    = (offset+count-1) / BLOCK_SIZE;
+    token->block_start  = offset / LOCK_BLOCK_SIZE;
+    token->block_end    = (offset+count-1) / LOCK_BLOCK_SIZE;
     token->type         = type;
     token->owner        = tangram_uct_addr_duplicate(owner);
 
@@ -113,8 +110,8 @@ lock_token_t* lock_token_add_extend(lock_token_list_t* token_list, size_t offset
     // Try to extend the the lock range
     lock_token_t* tmp;
     LL_FOREACH(token_list->head, tmp) {
-        if( (tmp->block_end-1 > token->block_end) && (tmp->block_end-1 < extend_end ) ) {
-            extend_end = tmp->block_end-1;
+        if( (tmp->block_start > token->block_end) && (tmp->block_start-1 < extend_end ) ) {
+            extend_end = tmp->block_start - 1;
         }
     }
 

@@ -99,8 +99,8 @@ lock_token_t* tangram_lockmgr_server_acquire_lock(lock_table_t** lt, tangram_uct
     // 2. We can try to extend the lock range
     //    e.g., user asks for [0, 100], we can give [0, infinity]
     if(!token) {
-        token = lock_token_add(&entry->token_list, offset, count, type, delegator);
-        //token = lock_token_add_extend(&entry->token_list, offset, count, type, delegator);
+        //token = lock_token_add(&entry->token_list, offset, count, type, delegator);
+        token = lock_token_add_extend(&entry->token_list, offset, count, type, delegator);
         return token;
     }
 
@@ -117,7 +117,6 @@ lock_token_t* tangram_lockmgr_server_acquire_lock(lock_table_t** lt, tangram_uct
     } else {
         size_t data_len;
         void* data = rpc_in_pack(filename, 1, &offset, &count, NULL, &data_len);
-
         tangram_ucx_server_revoke_delegator_lock(token->owner, data, data_len);
         free(data);
 

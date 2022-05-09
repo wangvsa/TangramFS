@@ -5,6 +5,7 @@
 
 #define LOCK_TYPE_RD        0
 #define LOCK_TYPE_WR        1
+#define LOCK_BLOCK_SIZE     4096
 
 typedef struct lock_token {
     int block_start;
