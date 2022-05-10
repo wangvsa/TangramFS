@@ -18,7 +18,7 @@ volatile static bool         g_delegator_running = true;
 static ucs_async_context_t*  g_delegator_async;
 static tangram_uct_context_t g_delegator_context;
 
-void* (*user_am_data_handler)(int8_t, tangram_uct_addr_t* client, void* data, uint8_t* respond_id, size_t *respond_len);
+void* (*delegator_am_handler)(int8_t, tangram_uct_addr_t* client, void* data, uint8_t* respond_id, size_t *respond_len);
 
 static ucs_status_t am_acquire_lock_listener(void *arg, void *buf, size_t buf_len, unsigned flags) {
     taskmgr_append_task_to_worker(&g_taskmgr, AM_ID_ACQUIRE_LOCK_REQUEST, buf, buf_len, 0);
@@ -60,7 +60,7 @@ void delegator_handle_task(task_t* task) {
     uct_ep_create_connect(g_delegator_context.iface, &task->client, &ep);
     pthread_mutex_unlock(&g_delegator_context.mutex);
 
-    task->respond = (*user_am_data_handler)(task->id, &task->client, task->data, &task->id, &task->respond_len);
+    task->respond = (*delegator_am_handler)(task->id, &task->client, task->data, &task->id, &task->respond_len);
     do_uct_am_short(&g_delegator_context.mutex, ep, task->id, &g_delegator_context.self_addr, task->respond, task->respond_len);
 
     pthread_mutex_lock(&g_delegator_context.mutex);
@@ -123,7 +123,7 @@ void tangram_ucx_delegator_init(tfs_info_t *tfs_info) {
 }
 
 void tangram_ucx_delegator_register_rpc(void* (*user_handler)(int8_t, tangram_uct_addr_t*, void*, uint8_t*, size_t*)) {
-    user_am_data_handler = user_handler;
+    delegator_am_handler = user_handler;
 }
 
 void* delegator_progress_loop(void* arg) {

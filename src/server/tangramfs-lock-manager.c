@@ -90,6 +90,7 @@ lock_token_t* split_lock(lock_token_list_t* token_list, lock_token_t* conflict_t
         if(server)
             return lock_token_add(token_list, offset, count, type, owner);
     }
+    // Case 4, split the original lock into two
     else if(conflict_token->block_start <= start && conflict_token->block_end >= end) {
         int new_start, new_end;
         new_start = conflict_token->block_start;

@@ -17,7 +17,7 @@ static ucs_async_context_t*  g_server_async;
 static tangram_uct_context_t g_server_context;
 
 
-void* (*user_am_data_handler)(int8_t, tangram_uct_addr_t* client, void* data, uint8_t* respond_id, size_t *respond_len);
+void* (*server_am_handler)(int8_t, tangram_uct_addr_t* client, void* data, uint8_t* respond_id, size_t *respond_len);
 
 static ucs_status_t am_query_listener(void *arg, void *buf, size_t buf_len, unsigned flags) {
     // TODO can directly use the data and return UCS_INPROGRESS
@@ -71,7 +71,7 @@ void server_handle_task(task_t* task) {
     uct_ep_create_connect(g_server_context.iface, &task->client, &ep);
     pthread_mutex_unlock(&g_server_context.mutex);
 
-    task->respond = (*user_am_data_handler)(task->id, &task->client, task->data, &task->id, &task->respond_len);
+    task->respond = (*server_am_handler)(task->id, &task->client, task->data, &task->id, &task->respond_len);
     do_uct_am_short(&g_server_context.mutex, ep, task->id, &g_server_context.self_addr, task->respond, task->respond_len);
 
     pthread_mutex_lock(&g_server_context.mutex);
@@ -124,7 +124,7 @@ void tangram_ucx_server_init(tfs_info_t *tfs_info) {
 }
 
 void tangram_ucx_server_register_rpc(void* (*user_handler)(int8_t, tangram_uct_addr_t*, void*, uint8_t*, size_t*)) {
-    user_am_data_handler = user_handler;
+    server_am_handler = user_handler;
 }
 
 
