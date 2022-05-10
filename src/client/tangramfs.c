@@ -467,7 +467,7 @@ int tfs_close(tfs_file_t* tf) {
         tfs_release_lock_file(tf);
 
     // Flush from BB to PFS
-    tfs_flush(tf);
+    // tfs_flush(tf);
 
     // Clean up seg-tree and lock tokens
     seg_tree_destroy(&tf->seg_tree);

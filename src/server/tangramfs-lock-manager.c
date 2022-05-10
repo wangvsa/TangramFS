@@ -238,6 +238,7 @@ lock_acquire_result_t* tangram_lockmgr_server_acquire_lock(lock_table_t** lt, ta
     // e.g. P1:[0-10], P2:[10-20], Accquire[0-20]
     } else {
         result->result = LOCK_ACQUIRE_CONFLICT;
+        result->owner  = tangram_uct_addr_duplicate(conflict_token->owner);
         result->token  = split_lock(&entry->token_list, conflict_token, offset, count, type, delegator, true);
     }
 
