@@ -143,7 +143,7 @@ int main(int argc, char* argv[]) {
 
     MPI_Barrier(MPI_COMM_WORLD);
     if(mpi_rank == 0) {
-        write_iops = N / (tend-tstart);
+        write_iops = N * mpi_size / (tend-tstart);
         write_bandwidth = DATA_SIZE / MB * N * mpi_size / (tend-tstart);
         printf("Write IOPS: %d, Bandwidth: %.3f\t\tRead IOPS: %d, Bandwidth: %.3f\n", write_iops, write_bandwidth, read_iops, read_bandwidth);
         fflush(stdout);
