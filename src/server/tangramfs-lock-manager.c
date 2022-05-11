@@ -187,7 +187,10 @@ void tangram_lockmgr_delegator_split_lock(lock_table_t* lt, char* filename, size
     lock_token_t* token;
     token = lock_token_find_conflict(&entry->token_list, offset, count);
 
-    split_lock(&entry->token_list, token, offset, count, type, TANGRAM_UCT_ADDR_IGNORE, false);
+    if(token != NULL)
+        split_lock(&entry->token_list, token, offset, count, type, TANGRAM_UCT_ADDR_IGNORE, false);
+    else
+        printf("Ask me to split lock, but no conflict found!\n");
 }
 
 lock_acquire_result_t* tangram_lockmgr_server_acquire_lock(lock_table_t** lt, tangram_uct_addr_t* delegator, char* filename, size_t offset, size_t count, int type) {

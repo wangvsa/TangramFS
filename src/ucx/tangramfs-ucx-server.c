@@ -120,7 +120,7 @@ void tangram_ucx_server_init(tfs_info_t *tfs_info) {
     uct_iface_set_am_handler(g_server_context.iface, AM_ID_RELEASE_LOCK_CLIENT_REQUEST, am_release_lock_client_listener, NULL, 0);
     uct_iface_set_am_handler(g_server_context.iface, AM_ID_STOP_REQUEST, am_stop_listener, NULL, 0);
 
-    taskmgr_init(&g_taskmgr, 4, server_handle_task);
+    taskmgr_init(&g_taskmgr, 8, server_handle_task);
 }
 
 void tangram_ucx_server_register_rpc(void* (*user_handler)(int8_t, tangram_uct_addr_t*, void*, uint8_t*, size_t*)) {
