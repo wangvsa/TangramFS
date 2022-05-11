@@ -106,8 +106,6 @@ void read_random() {
         offset = (rand() % num_blocks) * DATA_SIZE;
         fseek(fp, offset, SEEK_SET);
         fread(data, 1, DATA_SIZE, fp);
-        //if(i%50 == 0)
-        //    printf("%d/%d\n", i, N);
     }
     MPI_Barrier(MPI_COMM_WORLD);
     tend = MPI_Wtime();
