@@ -125,7 +125,7 @@ int main(int argc, char* argv[]) {
     if(mpi_rank == 0) {
         if(argc == 3) {
             N = atoi(argv[1]);
-            DATA_SIZE = atoi(argv[2]) * MB;
+            DATA_SIZE = atoi(argv[2]) * KB;
         }
     }
     MPI_Bcast(&N, 1, MPI_INT, 0, MPI_COMM_WORLD);
