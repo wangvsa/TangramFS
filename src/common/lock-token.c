@@ -9,7 +9,6 @@
 void lock_token_free(lock_token_t* token) {
     tangram_uct_addr_free(token->owner);
     free(token);
-    token = NULL;
 }
 
 lock_token_t* lock_token_find_conflict(lock_token_list_t* token_list, size_t offset, size_t count) {
@@ -109,52 +108,63 @@ lock_token_t* lock_token_deserialize(void* buf, size_t* size) {
     *size = sizeof(int)*3 + sizeof(size_t) + addr_size;
     return token;
 }
-
-lock_token_t* lock_token_add(lock_token_list_t* token_list, size_t offset, size_t count, int type, tangram_uct_addr_t* owner) {
+lock_token_t* lock_token_create(int start, int end, int type, tangram_uct_addr_t* owner) {
     lock_token_t* token = malloc(sizeof(lock_token_t));
-    token->block_start  = offset / LOCK_BLOCK_SIZE;
-    token->block_end    = (offset+count-1) / LOCK_BLOCK_SIZE;
-    token->type         = type;
-    token->owner        = tangram_uct_addr_duplicate(owner);
+    token->block_start = start;
+    token->block_end   = end;
+    token->type        = type;
+    token->owner       = tangram_uct_addr_duplicate(owner);
+    return token;
+}
+
+lock_token_t* lock_token_add_direct(lock_token_list_t* token_list, lock_token_t* token) {
     pthread_rwlock_wrlock(&token_list->rwlock);
     LL_APPEND(token_list->head, token);
     pthread_rwlock_unlock(&token_list->rwlock);
     return token;
 }
 
+lock_token_t* lock_token_add(lock_token_list_t* token_list, size_t offset, size_t count, int type, tangram_uct_addr_t* owner) {
+    lock_token_t* token = lock_token_create(offset/LOCK_BLOCK_SIZE, (offset+count-1)/LOCK_BLOCK_SIZE, type, owner);
+    lock_token_add_direct(token_list, token);
+    return token;
+}
+
 lock_token_t* lock_token_add_extend(lock_token_list_t* token_list, size_t offset, size_t count, int type, tangram_uct_addr_t* owner) {
-
-    lock_token_t* token = malloc(sizeof(lock_token_t));
-    token->block_start  = offset / LOCK_BLOCK_SIZE;
-    token->block_end    = (offset+count-1) / LOCK_BLOCK_SIZE;
-    token->type         = type;
-    token->owner        = tangram_uct_addr_duplicate(owner);
-
-    int extend_end      = INT_MAX;
+    lock_token_t* token = lock_token_create(offset/LOCK_BLOCK_SIZE, (offset+count-1)/LOCK_BLOCK_SIZE, type, owner);
+    int extend_end = INT_MAX;
 
     pthread_rwlock_wrlock(&token_list->rwlock);
-
-    // Try to extend the the lock range
     lock_token_t* tmp;
-    LL_FOREACH(token_list->head, tmp) {
-        if( (tmp->block_start > token->block_end) && (tmp->block_start-1 < extend_end ) ) {
-            extend_end = tmp->block_start - 1;
+
+    int algo = 2;
+
+    // Algorithm 1: Extend to the largest possible end block
+    if(algo == 1) {
+        LL_FOREACH(token_list->head, tmp) {
+            if( (tmp->block_start > token->block_end) && (tmp->block_start-1 < extend_end ) ) {
+                extend_end = tmp->block_start - 1;
+            }
+        }
+    }
+
+    // Algorithm 2: Extend to infinity or do not extend at all
+    if(algo == 2) {
+        LL_FOREACH(token_list->head, tmp) {
+            if( tmp->block_start > token->block_end) {
+                extend_end = token->block_end;
+                break;
+            }
         }
     }
 
     token->block_end = extend_end;
     LL_APPEND(token_list->head, token);
-
     pthread_rwlock_unlock(&token_list->rwlock);
 
     return token;
 }
 
-void lock_token_add_direct(lock_token_list_t* token_list, lock_token_t* token) {
-    pthread_rwlock_wrlock(&token_list->rwlock);
-    LL_APPEND(token_list->head, token);
-    pthread_rwlock_unlock(&token_list->rwlock);
-}
 
 lock_token_t* lock_token_add_from_buf(lock_token_list_t* token_list, void* buf, tangram_uct_addr_t* owner) {
     lock_token_t* token = malloc(sizeof(lock_token_t));
