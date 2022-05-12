@@ -226,7 +226,7 @@ lock_acquire_result_t* tangram_lockmgr_server_acquire_lock(lock_table_t** lt, ta
     // 2. We can try to extend the lock range
     //    e.g., user asks for [0, 100], we can give [0, infinity]
     if(!conflict_token) {
-        //token = lock_token_add(&entry->token_list, offset, count, type, delegator);
+        //result->token = lock_token_add(&entry->token_list, offset, count, type, delegator);
         result->token = lock_token_add_extend(&entry->token_list, offset, count, type, delegator);
         return result;
     }

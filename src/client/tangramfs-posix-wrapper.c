@@ -206,7 +206,7 @@ size_t TANGRAM_WRAP(fwrite)(const void *ptr, size_t size, size_t count, FILE * s
 {
     tfs_file_t *tf = stream2tf(stream);
     if(tf) {
-        tangram_debug("[tangramfs client] fwrite %s (%ld, %lu*%lu) start\n", tf->filename, tf->offset, size, count);
+        //tangram_debug("[tangramfs client] fwrite %s (%ld, %lu*%lu) start\n", tf->filename, tf->offset, size, count);
         ssize_t res = tangram_write_impl(tf, ptr, count*size);
         // Note that fwrite on success returns the count not total bytes.
         res = (res == size*count) ? count: res;
