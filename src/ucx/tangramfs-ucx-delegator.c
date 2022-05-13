@@ -108,16 +108,22 @@ void tangram_ucx_delegator_init(tfs_info_t *tfs_info) {
 
     tangram_uct_context_init(g_delegator_async, tfs_info, &g_delegator_context);
 
+
+    // From node-local clients
     uct_iface_set_am_handler(g_delegator_context.iface, AM_ID_ACQUIRE_LOCK_REQUEST, am_acquire_lock_listener, NULL, 0);
     uct_iface_set_am_handler(g_delegator_context.iface, AM_ID_RELEASE_LOCK_REQUEST, am_release_lock_listener, NULL, 0);
     uct_iface_set_am_handler(g_delegator_context.iface, AM_ID_RELEASE_LOCK_FILE_REQUEST, am_release_lock_file_listener, NULL, 0);
     uct_iface_set_am_handler(g_delegator_context.iface, AM_ID_RELEASE_LOCK_CLIENT_REQUEST, am_release_lock_client_listener, NULL, 0);
-    uct_iface_set_am_handler(g_delegator_context.iface, AM_ID_SPLIT_LOCK_REQUEST, am_split_lock_request_listener, NULL, 0);
-
-    uct_iface_set_am_handler(g_delegator_context.iface, AM_ID_SPLIT_LOCK_RESPOND, am_respond_listener, NULL, 0);
-    uct_iface_set_am_handler(g_delegator_context.iface, AM_ID_ACQUIRE_LOCK_RESPOND, am_respond_listener, NULL, 0);
-
     uct_iface_set_am_handler(g_delegator_context.iface, AM_ID_STOP_REQUEST, am_stop_listener, NULL, 0);
+
+    // From other delegators
+    uct_iface_set_am_handler(g_delegator_context.iface, AM_ID_SPLIT_LOCK_REQUEST, am_split_lock_request_listener, NULL, 0);
+    uct_iface_set_am_handler(g_delegator_context.iface, AM_ID_SPLIT_LOCK_RESPOND, am_respond_listener, NULL, 0);
+
+    // From server, respond to our acquire_lock and release_lock request
+    uct_iface_set_am_handler(g_delegator_context.iface, AM_ID_ACQUIRE_LOCK_RESPOND, am_respond_listener, NULL, 0);
+    uct_iface_set_am_handler(g_delegator_context.iface, AM_ID_RELEASE_LOCK_RESPOND, am_respond_listener, NULL, 0);
+
 
     taskmgr_init(&g_taskmgr, 1, delegator_handle_task);
 }
