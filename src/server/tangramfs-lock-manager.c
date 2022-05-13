@@ -10,47 +10,55 @@
 
 void* lock_acquire_result_serialize(lock_acquire_result_t* res, size_t* len) {
 
-    size_t owner_len, token_len;
-    void* token_buf = lock_token_serialize(res->token, &token_len);
-
+    *len = sizeof(int);
     void* buf;
+
     if(res->result == LOCK_ACQUIRE_SUCCESS) {
-        *len = sizeof(int) + token_len;
+        size_t token_len;
+        void* token_buf = lock_token_serialize(res->token, &token_len);
+
+        *len += token_len;
         buf = malloc(*len);
+
         memcpy(buf, &res->result, sizeof(int));
         memcpy(buf+sizeof(int), token_buf, token_len);
+        free(token_buf);
     }
     if(res->result == LOCK_ACQUIRE_CONFLICT) {
+        size_t owner_len;
         void* owner_buf =  tangram_uct_addr_serialize(res->owner, &owner_len);
-        *len = sizeof(int) + owner_len + token_len;
+
+        *len += owner_len;
         buf = malloc(*len);
+
         memcpy(buf, &res->result, sizeof(int));
-        memcpy(buf+sizeof(int), token_buf, token_len);
-        memcpy(buf+sizeof(int)+token_len, owner_buf, owner_len);
+        memcpy(buf+sizeof(int), owner_buf, owner_len);
         free(owner_buf);
     }
 
-    free(token_buf);
     return buf;
 }
 
 lock_acquire_result_t* lock_acquire_result_deserialize(void* buf) {
     lock_acquire_result_t* res = malloc(sizeof(lock_acquire_result_t));
+    res->token = NULL;
+    res->owner = NULL;
+
     memcpy(&res->result, buf, sizeof(int));
 
-    size_t token_buf_size;
-    res->token = lock_token_deserialize(buf+sizeof(int), &token_buf_size);
+    if(res->result == LOCK_ACQUIRE_SUCCESS) {
+        size_t token_buf_size;
+        res->token = lock_token_deserialize(buf+sizeof(int), &token_buf_size);
+    }
 
     if(res->result == LOCK_ACQUIRE_CONFLICT) {
         res->owner = malloc(sizeof(tangram_uct_addr_t));
-        tangram_uct_addr_deserialize(buf+sizeof(int)+token_buf_size, res->owner);
+        tangram_uct_addr_deserialize(buf+sizeof(int), res->owner);
     }
     return res;
 }
 
-
-
-lock_token_t* split_lock(lock_token_list_t* token_list, lock_token_t* conflict_token, size_t offset, size_t count, int type, tangram_uct_addr_t* owner, bool server) {
+void split_lock(lock_token_list_t* token_list, lock_token_t* conflict_token, size_t offset, size_t count) {
 
     int org_start = conflict_token->block_start;
     int org_end   = conflict_token->block_end;
@@ -79,25 +87,16 @@ lock_token_t* split_lock(lock_token_list_t* token_list, lock_token_t* conflict_t
     if(conflict_token->block_start >= start && conflict_token->block_end <= end) {
         //printf("Case 1, server: %d, conflict: [%d-%d], ask: [%d-%d]\n", server, conflict_token->block_start, conflict_token->block_end, start, end);
         lock_token_delete(token_list, conflict_token);
-        if(server) {
-            return lock_token_add_extend(token_list, offset, count, type, owner);
-        }
     }
     // Case 2, shink the end
     else if(conflict_token->block_start < start && conflict_token->block_end < end) {
         //printf("Case 2, server: %d, conflict: [%d-%d], ask: [%d-%d]\n", server, conflict_token->block_start, conflict_token->block_end, start, end);
-        conflict_token->block_end   = start - 1;
-        if(server) {
-            return lock_token_add_extend(token_list, offset, count, type, owner);
-        }
+        conflict_token->block_end = start - 1;
     }
     // Case 3, shink the start
     else if(conflict_token->block_start > start && conflict_token->block_end >= end) {
         //printf("Case 3, server: %d, conflict: [%d-%d], ask: [%d-%d]\n", server, conflict_token->block_start, conflict_token->block_end, start, end);
         conflict_token->block_start = end + 1;
-        if(server) {
-            return lock_token_add(token_list, offset, count, type, owner);
-        }
     }
     // Case 4, algo 1: split the original lock into two
     //         algo 2: like case 2, shink the end, give all the rest to the requestor
@@ -111,28 +110,13 @@ lock_token_t* split_lock(lock_token_list_t* token_list, lock_token_t* conflict_t
             conflict_token->block_end   = new_end;
         }
 
-        int algo = 1;
-        if(algo == 1) {
-            new_start = end + 1;
-            new_end   = org_end;
-            if(new_start <= new_end) {
-                lock_token_t* right = lock_token_create(new_start, new_end, conflict_token->type, conflict_token->owner);
-                lock_token_add_direct(token_list, right);
-            }
-            if(server) {
-                return lock_token_add(token_list, offset, count, type, owner);
-            }
-        }
-        if(algo == 2) {
-            if(server)
-                return lock_token_add_extend(token_list, offset, count, type, owner);
+        new_start = end + 1;
+        new_end   = org_end;
+        if(new_start <= new_end) {
+            lock_token_t* right = lock_token_create(new_start, new_end, conflict_token->type, conflict_token->owner);
+            lock_token_add_direct(token_list, right);
         }
     }
-
-    if(server)
-        printf("CHEN server should not reach here, conflict: [%d-%d], ask: [%d-%d]\n", org_start, org_end, start, end);
-
-    return NULL;
 }
 
 
@@ -176,26 +160,41 @@ lock_token_t* tangram_lockmgr_delegator_acquire_lock(lock_table_t** lt, tangram_
 
     lock_acquire_result_t* res = lock_acquire_result_deserialize(out);
 
-    // No conflict, server simply granted us the lock
-    if(res->result == LOCK_ACQUIRE_SUCCESS) {
-    }
-    // Server found conflict, now we need to contact the lock owner to ask
-    // it to split the lock
-    else if(res->result == LOCK_ACQUIRE_CONFLICT) {
+    while(res->result == LOCK_ACQUIRE_CONFLICT) {
+        // 1. Ask the conflict token onwer to split and release the conflicting range
         void* ack;
         tangram_ucx_delegator_sendrecv_delegator(AM_ID_SPLIT_LOCK_REQUEST, res->owner, in, in_size, &ack);
         free(ack);
 
+        // 2. Once the conflict owner release its token, we can acquire it
+        // from the server again
+        free(out);
+        tangram_ucx_delegator_sendrecv_server(AM_ID_ACQUIRE_LOCK_REQUEST, in, in_size, &out);
+
+        // 3. Check if we indeed granted the token
+        // Reason for while() loop:
+        // Very rare case, before we complete the whole process
+        // of handling the conflict, someone else acquired the same
+        // lock token before us.
+        // i.e.,
+        // the conflict owner released its token,
+        // then someone acquired the same token before us.
         tangram_uct_addr_free(res->owner);
         free(res->owner);
+        free(res);
+        res = lock_acquire_result_deserialize(out);
     }
 
+    // Exit while loop indicates the token was successfully granted
+    assert(res->result == LOCK_ACQUIRE_SUCCESS);
     lock_token_add_direct(&entry->token_list, res->token);
 
+    // only free res, res->owner should be NULL, res->token will be returned;
+    token = res->token;
     free(res);
     free(in);
     free(out);
-    return res->token;
+    return token;
 }
 
 
@@ -210,10 +209,20 @@ void tangram_lockmgr_delegator_split_lock(lock_table_t* lt, char* filename, size
     lock_token_t* token;
     token = lock_token_find_conflict(&entry->token_list, offset, count);
 
-    if(token != NULL)
-        split_lock(&entry->token_list, token, offset, count, type, TANGRAM_UCT_ADDR_IGNORE, false);
-    else
+    if(token != NULL) {
+
+        split_lock(&entry->token_list, token, offset, count);
+
+        // Once I split my token and released locally partial of it,
+        // notify the server (use release lock request) and ask it to do the same
+        void* ack;
+        size_t in_size;
+        void* in = rpc_in_pack(filename, 1, &offset, &count, &type, &in_size);
+        tangram_ucx_delegator_sendrecv_server(AM_ID_RELEASE_LOCK_REQUEST, in, in_size, &ack);
+        free(ack);
+    } else {
         printf("CHEN Ask me to split lock, but no conflict found!\n");
+    }
 }
 
 lock_acquire_result_t* tangram_lockmgr_server_acquire_lock(lock_table_t** lt, tangram_uct_addr_t* delegator, char* filename, size_t offset, size_t count, int type) {
@@ -249,7 +258,7 @@ lock_acquire_result_t* tangram_lockmgr_server_acquire_lock(lock_table_t** lt, ta
     // 2. We can try to extend the lock range
     //    e.g., user asks for [0, 100], we can give [0, infinity]
     if(!conflict_token) {
-        result->token = lock_token_add(&entry->token_list, offset, count, type, delegator);
+        result->token = lock_token_add_exact(&entry->token_list, offset, count, type, delegator);
         //result->token = lock_token_add_extend(&entry->token_list, offset, count, type, delegator);
         return result;
     }
@@ -266,27 +275,23 @@ lock_acquire_result_t* tangram_lockmgr_server_acquire_lock(lock_table_t** lt, ta
     } else {
         result->result = LOCK_ACQUIRE_CONFLICT;
         result->owner  = tangram_uct_addr_duplicate(conflict_token->owner);
-        result->token  = split_lock(&entry->token_list, conflict_token, offset, count, type, delegator, true);
-        if(result->token == NULL || tangram_uct_addr_compare(result->owner, delegator) == 0) {
-            printf("CHEN not possible here!!!!!\n");
-        }
+        result->token  = NULL;
     }
 
     return result;
 }
 
-void tangram_lockmgr_server_release_lock(lock_table_t* lt, tangram_uct_addr_t* client, char* filename, size_t offset, size_t count) {
-
+void tangram_lockmgr_server_release_lock(lock_table_t* lt, tangram_uct_addr_t* delegator, char* filename, size_t offset, size_t count) {
     lock_table_t* entry = NULL;
     HASH_FIND_STR(lt, filename, entry);
 
     if(!entry) return;
 
     lock_token_t* token = NULL;
-    token = lock_token_find_cover(&entry->token_list, offset, count);
+    token = lock_token_find_conflict(&entry->token_list, offset, count);
 
-    if(token && tangram_uct_addr_compare(token->owner, client) == 0)
-        lock_token_delete(&entry->token_list, token);
+    if(token && tangram_uct_addr_compare(token->owner, delegator) == 0)
+        split_lock(&entry->token_list, token, offset, count);
 }
 
 void tangram_lockmgr_server_release_lock_file(lock_table_t* lt, tangram_uct_addr_t* client, char* filename) {

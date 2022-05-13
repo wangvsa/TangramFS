@@ -29,7 +29,8 @@ lock_token_t* lock_token_find_exact(lock_token_list_t* token_list, size_t offset
 lock_token_t* lock_token_create(int start, int end, int type, tangram_uct_addr_t* owner);
 lock_token_t* lock_token_add_direct(lock_token_list_t* token_list, lock_token_t* token);
 
-lock_token_t* lock_token_add(lock_token_list_t* token_list, size_t offset, size_t count, int type, tangram_uct_addr_t* owner);
+// Ask for [start, end] will get exactly [start, end]
+lock_token_t* lock_token_add_exact(lock_token_list_t* token_list, size_t offset, size_t count, int type, tangram_uct_addr_t* owner);
 
 // Add a extended lock token
 // e.g., user ask [0-100], we can give [0-inf] if possible
