@@ -52,6 +52,9 @@ lock_acquire_result_t* lock_acquire_result_deserialize(void* buf) {
 
 lock_token_t* split_lock(lock_token_list_t* token_list, lock_token_t* conflict_token, size_t offset, size_t count, int type, tangram_uct_addr_t* owner, bool server) {
 
+    int org_start = conflict_token->block_start;
+    int org_end   = conflict_token->block_end;
+
     int start = offset / LOCK_BLOCK_SIZE;
     int end   = (offset+count-1) / LOCK_BLOCK_SIZE;
 
@@ -74,40 +77,60 @@ lock_token_t* split_lock(lock_token_list_t* token_list, lock_token_t* conflict_t
      */
     // Case 1, directly delete old token and then add the new one
     if(conflict_token->block_start >= start && conflict_token->block_end <= end) {
+        //printf("Case 1, server: %d, conflict: [%d-%d], ask: [%d-%d]\n", server, conflict_token->block_start, conflict_token->block_end, start, end);
         lock_token_delete(token_list, conflict_token);
-        if(server)
+        if(server) {
             return lock_token_add_extend(token_list, offset, count, type, owner);
+        }
     }
     // Case 2, shink the end
     else if(conflict_token->block_start < start && conflict_token->block_end < end) {
+        //printf("Case 2, server: %d, conflict: [%d-%d], ask: [%d-%d]\n", server, conflict_token->block_start, conflict_token->block_end, start, end);
         conflict_token->block_end   = start - 1;
-        if(server)
+        if(server) {
             return lock_token_add_extend(token_list, offset, count, type, owner);
+        }
     }
     // Case 3, shink the start
     else if(conflict_token->block_start > start && conflict_token->block_end >= end) {
+        //printf("Case 3, server: %d, conflict: [%d-%d], ask: [%d-%d]\n", server, conflict_token->block_start, conflict_token->block_end, start, end);
         conflict_token->block_start = end + 1;
-        if(server)
+        if(server) {
             return lock_token_add(token_list, offset, count, type, owner);
+        }
     }
-    // Case 4, split the original lock into two
+    // Case 4, algo 1: split the original lock into two
+    //         algo 2: like case 2, shink the end, give all the rest to the requestor
     else if(conflict_token->block_start <= start && conflict_token->block_end >= end) {
+        //printf("Case 4, server: %d, conflict: [%d-%d], ask: [%d-%d]\n", server, org_start, org_end, start, end);
         int new_start, new_end;
-        new_start = conflict_token->block_start;
+        new_start = org_start;
         new_end   = start - 1;
         if(new_start <= new_end) {
             conflict_token->block_start = new_start;
             conflict_token->block_end   = new_end;
         }
 
-        new_start = end + 1;
-        new_end   = conflict_token->block_end;
-        if(new_start <= new_end) {
-            lock_token_add(token_list, new_start*LOCK_BLOCK_SIZE, new_end*LOCK_BLOCK_SIZE, conflict_token->type, conflict_token->owner);
+        int algo = 1;
+        if(algo == 1) {
+            new_start = end + 1;
+            new_end   = org_end;
+            if(new_start <= new_end) {
+                lock_token_t* right = lock_token_create(new_start, new_end, conflict_token->type, conflict_token->owner);
+                lock_token_add_direct(token_list, right);
+            }
+            if(server) {
+                return lock_token_add(token_list, offset, count, type, owner);
+            }
         }
-        if(server)
-            return lock_token_add(token_list, offset, count, type, owner);
+        if(algo == 2) {
+            if(server)
+                return lock_token_add_extend(token_list, offset, count, type, owner);
+        }
     }
+
+    if(server)
+        printf("CHEN server should not reach here, conflict: [%d-%d], ask: [%d-%d]\n", org_start, org_end, start, end);
 
     return NULL;
 }
@@ -190,7 +213,7 @@ void tangram_lockmgr_delegator_split_lock(lock_table_t* lt, char* filename, size
     if(token != NULL)
         split_lock(&entry->token_list, token, offset, count, type, TANGRAM_UCT_ADDR_IGNORE, false);
     else
-        printf("Ask me to split lock, but no conflict found!\n");
+        printf("CHEN Ask me to split lock, but no conflict found!\n");
 }
 
 lock_acquire_result_t* tangram_lockmgr_server_acquire_lock(lock_table_t** lt, tangram_uct_addr_t* delegator, char* filename, size_t offset, size_t count, int type) {
@@ -226,8 +249,8 @@ lock_acquire_result_t* tangram_lockmgr_server_acquire_lock(lock_table_t** lt, ta
     // 2. We can try to extend the lock range
     //    e.g., user asks for [0, 100], we can give [0, infinity]
     if(!conflict_token) {
-        //result->token = lock_token_add(&entry->token_list, offset, count, type, delegator);
-        result->token = lock_token_add_extend(&entry->token_list, offset, count, type, delegator);
+        result->token = lock_token_add(&entry->token_list, offset, count, type, delegator);
+        //result->token = lock_token_add_extend(&entry->token_list, offset, count, type, delegator);
         return result;
     }
 
@@ -244,6 +267,9 @@ lock_acquire_result_t* tangram_lockmgr_server_acquire_lock(lock_table_t** lt, ta
         result->result = LOCK_ACQUIRE_CONFLICT;
         result->owner  = tangram_uct_addr_duplicate(conflict_token->owner);
         result->token  = split_lock(&entry->token_list, conflict_token, offset, count, type, delegator, true);
+        if(result->token == NULL || tangram_uct_addr_compare(result->owner, delegator) == 0) {
+            printf("CHEN not possible here!!!!!\n");
+        }
     }
 
     return result;
