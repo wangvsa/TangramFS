@@ -131,8 +131,8 @@ int main(int argc, char* argv[]) {
 
     for(int i = 0; i < 1; i++) {
         MPI_Barrier(MPI_COMM_WORLD);
-        write_nonstrided();
-        //write_strided();
+        //write_nonstrided();
+        write_strided();
     }
 
     for(int i = 0; i < 1; i++) {
@@ -145,7 +145,7 @@ int main(int argc, char* argv[]) {
     if(mpi_rank == 0) {
         write_iops = N * mpi_size / (tend-tstart);
         write_bandwidth = DATA_SIZE / MB * N * mpi_size / (tend-tstart);
-        printf("Write IOPS: %d, Bandwidth: %.3f\t\tRead IOPS: %d, Bandwidth: %.3f\n", write_iops, write_bandwidth, read_iops, read_bandwidth);
+        printf("Write IOPS: %8d, Bandwidth: %.3f\t\tRead IOPS: %d, Bandwidth: %.3f\n", write_iops, write_bandwidth, read_iops, read_bandwidth);
         fflush(stdout);
     }
 
