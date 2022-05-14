@@ -85,7 +85,7 @@ void split_lock(lock_token_list_t* token_list, lock_token_t* conflict_token, siz
      */
     // Case 1, directly delete old token and then add the new one
     if(conflict_token->block_start >= start && conflict_token->block_end <= end) {
-        printf("Case 1, server: %d, conflict: [%d-%d], ask: [%d-%d]\n", server, conflict_token->block_start, conflict_token->block_end, start, end);
+        //printf("Case 1, server: %d, conflict: [%d-%d], ask: [%d-%d]\n", server, conflict_token->block_start, conflict_token->block_end, start, end);
         lock_token_delete(token_list, conflict_token);
     }
     // Case 2, shink the end
@@ -100,7 +100,7 @@ void split_lock(lock_token_list_t* token_list, lock_token_t* conflict_token, siz
     }
     // Case 4, three scenarios
     else if(conflict_token->block_start <= start && conflict_token->block_end >= end) {
-        printf("Case 4, server: %d, conflict: [%d-%d], ask: [%d-%d]\n", server, org_start, org_end, start, end);
+        //printf("Case 4, server: %d, conflict: [%d-%d], ask: [%d-%d]\n", server, org_start, org_end, start, end);
 
         // shink the start
         if(conflict_token->block_start == start) {
@@ -260,8 +260,8 @@ lock_acquire_result_t* tangram_lockmgr_server_acquire_lock(lock_table_t** lt, ta
     // 2. We can try to extend the lock range
     //    e.g., user asks for [0, 100], we can give [0, infinity]
     if(!conflict_token) {
-        //result->token = lock_token_add_exact(&entry->token_list, offset, count, type, delegator);
-        result->token = lock_token_add_extend(&entry->token_list, offset, count, type, delegator);
+        result->token = lock_token_add_exact(&entry->token_list, offset, count, type, delegator);
+        //result->token = lock_token_add_extend(&entry->token_list, offset, count, type, delegator);
         return result;
     }
 
