@@ -241,6 +241,9 @@ void uct_ep_create_connect(uct_iface_h iface, tangram_uct_addr_t* addr, uct_ep_h
 
     status = uct_ep_create(&ep_params, ep);
     assert(status == UCS_OK);
+    if(status != UCS_OK) {
+        printf("CHEN create_and_connect ep failed!\n");
+    }
 }
 
 void* pack_rpc_buffer(tangram_uct_addr_t* addr, void* data, size_t inlen, size_t* outlen) {
