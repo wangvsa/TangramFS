@@ -37,7 +37,13 @@ static tangram_uct_context_t g_client_inter_context;
 /**
  * Handles both query and post respond from server
  */
-static ucs_status_t am_server_respond_listener(void *arg, void *buf, size_t buf_len, unsigned flags) {
+static ucs_status_t am_inter_respond_listener(void *arg, void *buf, size_t buf_len, unsigned flags) {
+    unpack_rpc_buffer(buf, buf_len, TANGRAM_UCT_ADDR_IGNORE, g_client_inter_context.respond_ptr);
+    g_client_inter_context.respond_flag = true;
+    return UCS_OK;
+}
+
+static ucs_status_t am_intra_respond_listener(void *arg, void *buf, size_t buf_len, unsigned flags) {
     unpack_rpc_buffer(buf, buf_len, TANGRAM_UCT_ADDR_IGNORE, g_client_intra_context.respond_ptr);
     g_client_intra_context.respond_flag = true;
     return UCS_OK;
@@ -169,15 +175,15 @@ void tangram_ucx_client_start(tfs_info_t *tfs_info) {
         set_delegator_intra_addr(&g_client_intra_context);
 
     // Communicatinos between global server, use inter_context
-    status = uct_iface_set_am_handler(g_client_inter_context.iface, AM_ID_QUERY_RESPOND, am_server_respond_listener, NULL, 0);
+    status = uct_iface_set_am_handler(g_client_inter_context.iface, AM_ID_QUERY_RESPOND, am_inter_respond_listener, NULL, 0);
     assert(status == UCS_OK);
-    status = uct_iface_set_am_handler(g_client_inter_context.iface, AM_ID_POST_RESPOND, am_server_respond_listener, NULL, 0);
+    status = uct_iface_set_am_handler(g_client_inter_context.iface, AM_ID_POST_RESPOND, am_inter_respond_listener, NULL, 0);
     assert(status == UCS_OK);
-    status = uct_iface_set_am_handler(g_client_inter_context.iface, AM_ID_UNPOST_FILE_RESPOND, am_server_respond_listener, NULL, 0);
+    status = uct_iface_set_am_handler(g_client_inter_context.iface, AM_ID_UNPOST_FILE_RESPOND, am_inter_respond_listener, NULL, 0);
     assert(status == UCS_OK);
-    status = uct_iface_set_am_handler(g_client_inter_context.iface, AM_ID_UNPOST_CLIENT_RESPOND, am_server_respond_listener, NULL, 0);
+    status = uct_iface_set_am_handler(g_client_inter_context.iface, AM_ID_UNPOST_CLIENT_RESPOND, am_inter_respond_listener, NULL, 0);
     assert(status == UCS_OK);
-    status = uct_iface_set_am_handler(g_client_inter_context.iface, AM_ID_STAT_RESPOND, am_server_respond_listener, NULL, 0);
+    status = uct_iface_set_am_handler(g_client_inter_context.iface, AM_ID_STAT_RESPOND, am_inter_respond_listener, NULL, 0);
     assert(status == UCS_OK);
     status = uct_iface_set_am_handler(g_client_inter_context.iface, AM_ID_RMA_REQUEST, am_rma_request_listener, NULL, 0);
     assert(status == UCS_OK);
@@ -185,13 +191,13 @@ void tangram_ucx_client_start(tfs_info_t *tfs_info) {
     assert(status == UCS_OK);
 
     // Communications between node-local delegator, use intra_context
-    status = uct_iface_set_am_handler(g_client_intra_context.iface, AM_ID_ACQUIRE_LOCK_RESPOND, am_server_respond_listener, NULL, 0);
+    status = uct_iface_set_am_handler(g_client_intra_context.iface, AM_ID_ACQUIRE_LOCK_RESPOND, am_intra_respond_listener, NULL, 0);
     assert(status == UCS_OK);
-    status = uct_iface_set_am_handler(g_client_intra_context.iface, AM_ID_RELEASE_LOCK_RESPOND, am_server_respond_listener, NULL, 0);
+    status = uct_iface_set_am_handler(g_client_intra_context.iface, AM_ID_RELEASE_LOCK_RESPOND, am_intra_respond_listener, NULL, 0);
     assert(status == UCS_OK);
-    status = uct_iface_set_am_handler(g_client_intra_context.iface, AM_ID_RELEASE_LOCK_FILE_RESPOND, am_server_respond_listener, NULL, 0);
+    status = uct_iface_set_am_handler(g_client_intra_context.iface, AM_ID_RELEASE_LOCK_FILE_RESPOND, am_intra_respond_listener, NULL, 0);
     assert(status == UCS_OK);
-    status = uct_iface_set_am_handler(g_client_intra_context.iface, AM_ID_RELEASE_LOCK_CLIENT_RESPOND, am_server_respond_listener, NULL, 0);
+    status = uct_iface_set_am_handler(g_client_intra_context.iface, AM_ID_RELEASE_LOCK_CLIENT_RESPOND, am_intra_respond_listener, NULL, 0);
     assert(status == UCS_OK);
 }
 
