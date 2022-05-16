@@ -79,6 +79,10 @@ void server_handle_task(task_t* task) {
     pthread_mutex_unlock(&g_server_context.mutex);
 }
 
+/*
+ * Not used for now
+ */
+/*
 void tangram_ucx_server_sendrecv_delegator(uint8_t id, tangram_uct_addr_t* delegator, void* data, size_t length) {
     g_server_context.respond_flag = false;
 
@@ -99,6 +103,7 @@ void tangram_ucx_server_sendrecv_delegator(uint8_t id, tangram_uct_addr_t* deleg
     uct_ep_destroy(ep);
     pthread_mutex_unlock(&g_server_context.mutex);
 }
+*/
 
 
 void tangram_ucx_server_init(tfs_info_t *tfs_info) {

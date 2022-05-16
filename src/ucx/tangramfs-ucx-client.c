@@ -137,15 +137,22 @@ void tangram_ucx_stop_server() {
     sendrecv_inter(AM_ID_STOP_REQUEST, &g_client_inter_context.server_addr, NULL, 0, NULL);
 }
 
-void set_delegator_addr(tangram_uct_context_t* context) {
+void set_delegator_intra_addr(tangram_uct_context_t* context) {
     // Broadcast local server address
     void* buf;
     size_t len;
+
     if(g_tfs_info->mpi_intra_rank == 0)
         buf = tangram_uct_addr_serialize(tangram_ucx_delegator_intra_addr(), &len);
-    else
-        buf = tangram_uct_addr_serialize(&context->self_addr, &len);
+
+    // Get delegator address length first
+    MPI_Bcast(&len, sizeof(len), MPI_BYTE, 0, g_tfs_info->mpi_intra_comm);
+    if(g_tfs_info->mpi_intra_rank != 0)
+        buf = malloc(len);
+
+    // Bcast delegator adderss
     MPI_Bcast(buf, len, MPI_BYTE, 0, g_tfs_info->mpi_intra_comm);
+
     tangram_uct_addr_deserialize(buf, &context->delegator_addr);
     free(buf);
 }
@@ -158,10 +165,8 @@ void tangram_ucx_client_start(tfs_info_t *tfs_info) {
 
     tangram_uct_context_init(g_client_async, g_tfs_info, true,  &g_client_intra_context);
     tangram_uct_context_init(g_client_async, g_tfs_info, false, &g_client_inter_context);
-    if(tfs_info->use_delegator) {
-        set_delegator_addr(&g_client_intra_context);
-        set_delegator_addr(&g_client_inter_context);
-    }
+    if(tfs_info->use_delegator)
+        set_delegator_intra_addr(&g_client_intra_context);
 
     // Communicatinos between global server, use inter_context
     status = uct_iface_set_am_handler(g_client_inter_context.iface, AM_ID_QUERY_RESPOND, am_server_respond_listener, NULL, 0);
