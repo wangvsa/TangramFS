@@ -116,8 +116,8 @@ void tangram_rpc_service_stop(tfs_info_t* tfs_info) {
     tangram_ucx_client_stop();
 }
 
-tangram_uct_addr_t* tangram_rpc_client_addr() {
-    return tangram_ucx_client_addr();
+tangram_uct_addr_t* tangram_rpc_client_inter_addr() {
+    return tangram_ucx_client_inter_addr();
 }
 
 void tangram_rma_service_start(tfs_info_t *tfs_info, void* (*serve_rma_data_cb)(void*, size_t*)) {

@@ -107,7 +107,7 @@ void tangram_ucx_server_init(tfs_info_t *tfs_info) {
     ucs_status_t status;
     ucs_async_context_create(UCS_ASYNC_MODE_THREAD_SPINLOCK, &g_server_async);
 
-    tangram_uct_context_init(g_server_async, tfs_info, &g_server_context);
+    tangram_uct_context_init(g_server_async, tfs_info, false, &g_server_context);
 
     uct_iface_set_am_handler(g_server_context.iface, AM_ID_QUERY_REQUEST, am_query_listener, NULL, 0);
     uct_iface_set_am_handler(g_server_context.iface, AM_ID_POST_REQUEST, am_post_listener, NULL, 0);

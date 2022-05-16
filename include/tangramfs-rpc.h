@@ -111,6 +111,7 @@ void tangram_rma_service_start(tfs_info_t *tfs_info, void* (*serve_rma_data_cb)(
 void tangram_rma_service_stop();
 void tangram_rpc_service_start(tfs_info_t* tfs_info);
 void tangram_rpc_service_stop(tfs_info_t* tfs_info);
-tangram_uct_addr_t* tangram_rpc_client_addr();
+
+tangram_uct_addr_t* tangram_rpc_client_inter_addr();
 
 #endif

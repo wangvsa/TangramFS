@@ -11,7 +11,7 @@ void tangram_ucx_client_start(tfs_info_t* tfs_info);
 void tangram_ucx_client_stop();
 void tangram_ucx_stop_delegator();
 void tangram_ucx_stop_server();
-tangram_uct_addr_t* tangram_ucx_client_addr();
+tangram_uct_addr_t* tangram_ucx_client_inter_addr();
 size_t tangram_uct_am_short_max_size();
 
 #endif

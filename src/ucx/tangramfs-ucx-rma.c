@@ -348,8 +348,8 @@ void tangram_ucx_rma_service_start(tfs_info_t* tfs_info, void* (serve_rma_data_c
     ucs_status_t status;
     ucs_async_context_create(UCS_ASYNC_MODE_THREAD_SPINLOCK, &g_rma_async);
 
-    tangram_uct_context_init(g_rma_async, gg_tfs_info, &g_request_context);
-    tangram_uct_context_init(g_rma_async, gg_tfs_info, &g_respond_context);
+    tangram_uct_context_init(g_rma_async, gg_tfs_info, false, &g_request_context);
+    tangram_uct_context_init(g_rma_async, gg_tfs_info, false, &g_respond_context);
 
     status = uct_iface_set_am_handler(g_request_context.iface, AM_ID_RMA_RESPOND, am_rma_respond_listener, NULL, 0);
     assert(status == UCS_OK);

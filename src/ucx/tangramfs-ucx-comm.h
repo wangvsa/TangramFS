@@ -72,7 +72,7 @@ typedef struct tangram_uct_context {
     volatile bool      respond_flag;
 } tangram_uct_context_t;
 
-void tangram_uct_context_init(ucs_async_context_t* async, tfs_info_t* tfs_info, tangram_uct_context_t* context);
+void tangram_uct_context_init(ucs_async_context_t* async, tfs_info_t* tfs_info, bool intra_comm, tangram_uct_context_t* context);
 void tangram_uct_context_destroy(tangram_uct_context_t* context);
 void exchange_dev_iface_addr(tangram_uct_context_t* context, tangram_uct_addr_t* peer_addrs);
 

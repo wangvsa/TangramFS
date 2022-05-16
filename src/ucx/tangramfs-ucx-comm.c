@@ -12,35 +12,11 @@
 #include "tangramfs-ucx-comm.h"
 #include "tangramfs-posix-wrapper.h"
 
-void init_iface(char* dev_name, char* tl_name, tangram_uct_context_t *context) {
-    ucs_status_t        status;
-    uct_iface_config_t  *config; /* Defines interface configuration options */
-    uct_iface_params_t  params;
-    params.field_mask           = UCT_IFACE_PARAM_FIELD_OPEN_MODE   |
-                                  UCT_IFACE_PARAM_FIELD_DEVICE      |
-                                  UCT_IFACE_PARAM_FIELD_STATS_ROOT  |
-                                  UCT_IFACE_PARAM_FIELD_RX_HEADROOM |
-                                  UCT_IFACE_PARAM_FIELD_CPU_MASK;
-    params.open_mode            = UCT_IFACE_OPEN_MODE_DEVICE;
-    params.mode.device.dev_name = dev_name;
-    params.mode.device.tl_name  = tl_name;
-    params.stats_root           = NULL;
-    params.rx_headroom          = 0;
 
-    // TODO??
-    UCS_CPU_ZERO(&params.cpu_mask);
-
-    uct_md_iface_config_read(context->md, tl_name, NULL, NULL, &config);
-    status = uct_iface_open(context->md, context->worker, &params, config, &context->iface);
-    uct_config_release(config);
-
-    // enable progress
-    uct_iface_progress_enable(context->iface, UCT_PROGRESS_SEND | UCT_PROGRESS_RECV);
-
-    // get attr
-    uct_iface_query(context->iface, &context->iface_attr);
-}
-
+/*
+ * search for dev and tl
+ * This will open context->md and set context->md_attr
+ */
 void dev_tl_lookup(char* dev_name, char* tl_name, tangram_uct_context_t *context) {
 
     uct_component_h* components;
@@ -92,6 +68,38 @@ void dev_tl_lookup(char* dev_name, char* tl_name, tangram_uct_context_t *context
         }
     }
     uct_release_component_list(components);
+}
+
+void init_iface(char* dev_name, char* tl_name, tangram_uct_context_t *context) {
+
+    dev_tl_lookup(dev_name, tl_name, context);
+
+    ucs_status_t        status;
+    uct_iface_config_t  *config; /* Defines interface configuration options */
+    uct_iface_params_t  params;
+    params.field_mask           = UCT_IFACE_PARAM_FIELD_OPEN_MODE   |
+                                  UCT_IFACE_PARAM_FIELD_DEVICE      |
+                                  UCT_IFACE_PARAM_FIELD_STATS_ROOT  |
+                                  UCT_IFACE_PARAM_FIELD_RX_HEADROOM |
+                                  UCT_IFACE_PARAM_FIELD_CPU_MASK;
+    params.open_mode            = UCT_IFACE_OPEN_MODE_DEVICE;
+    params.mode.device.dev_name = dev_name;
+    params.mode.device.tl_name  = tl_name;
+    params.stats_root           = NULL;
+    params.rx_headroom          = 0;
+
+    // TODO??
+    UCS_CPU_ZERO(&params.cpu_mask);
+
+    uct_md_iface_config_read(context->md, tl_name, NULL, NULL, &config);
+    status = uct_iface_open(context->md, context->worker, &params, config, &context->iface);
+    uct_config_release(config);
+
+    // enable progress
+    uct_iface_progress_enable(context->iface, UCT_PROGRESS_SEND | UCT_PROGRESS_RECV);
+
+    // get attr
+    uct_iface_query(context->iface, &context->iface_attr);
 }
 
 void exchange_dev_iface_addr(tangram_uct_context_t* context, tangram_uct_addr_t* peer_addrs) {
@@ -173,15 +181,15 @@ void read_server_uct_addr(tfs_info_t* tfs_info, tangram_uct_addr_t* server_addr)
     free(buf);
 }
 
-void tangram_uct_context_init(ucs_async_context_t* async, tfs_info_t* tfs_info, tangram_uct_context_t *context) {
+void tangram_uct_context_init(ucs_async_context_t* async, tfs_info_t* tfs_info, bool intra_comm, tangram_uct_context_t *context) {
+
     uct_worker_create(async, UCS_THREAD_MODE_SERIALIZED, &context->worker);
 
-    // search for dev and tl
-    // This will open context->md and set context->md_attr
-    dev_tl_lookup(tfs_info->rpc_dev_name, tfs_info->rpc_tl_name, context);
-
     // This will open the context->iface and set context->iface_attr
-    init_iface(tfs_info->rpc_dev_name, tfs_info->rpc_tl_name, context);
+    if(intra_comm)
+        init_iface("memory", "posix", context);
+    else
+        init_iface(tfs_info->rpc_dev_name, tfs_info->rpc_tl_name, context);
 
     // Set up myself's addr
     context->self_addr.dev_len   = context->iface_attr.device_addr_len;
@@ -193,10 +201,10 @@ void tangram_uct_context_init(ucs_async_context_t* async, tfs_info_t* tfs_info, 
 
     // context->delegator will be filled by the calling client
     // context->server will be filled by read_uct_server_addr()
-    context->delegator_addr.dev    = NULL;
-    context->delegator_addr.iface  = NULL;
-    context->server_addr.dev   = NULL;
-    context->server_addr.iface = NULL;
+    context->delegator_addr.dev   = NULL;
+    context->delegator_addr.iface = NULL;
+    context->server_addr.dev      = NULL;
+    context->server_addr.iface    = NULL;
 
     if (tfs_info->role == TANGRAM_UCX_ROLE_CLIENT)
         read_server_uct_addr(tfs_info, &context->server_addr);
@@ -218,7 +226,6 @@ void tangram_uct_context_destroy(tangram_uct_context_t *context) {
     tangram_uct_addr_free(&context->server_addr);
 
     uct_worker_destroy(context->worker);
-
 
     pthread_mutex_destroy(&context->mutex);
     pthread_mutex_destroy(&context->cond_mutex);

@@ -13,24 +13,24 @@ static ucs_async_context_t*  g_client_async;
 
 
 /*
- * Send AMs and wait for the respond.
+ * Send AMs to node-local delegator and wait for the respond.
  *
- * Only one outgoing AM at a time
+ * Only one outgoing AM at a time, use intra-node device (share memory)
  */
-static tangram_uct_context_t g_client_context;
+static tangram_uct_context_t g_client_intra_context;
 
 
 /**
  * A seperate context for sending ep addr
  * as a part of rma_respond() call
  *
- * Can not use g_client_context for this as it
+ * Can not use g_client_intra_context for this as it
  * potentially causes deadlock.
  * e.g., rank 0 -> rma request -> rank 1
  *       rank 1 -> rma request -> rank 0
  * both block on sendrecv_client and wait for dest's ep addr.
  */
-static tangram_uct_context_t g_epaddr_context;
+static tangram_uct_context_t g_client_inter_context;
 
 
 
@@ -38,8 +38,8 @@ static tangram_uct_context_t g_epaddr_context;
  * Handles both query and post respond from server
  */
 static ucs_status_t am_server_respond_listener(void *arg, void *buf, size_t buf_len, unsigned flags) {
-    unpack_rpc_buffer(buf, buf_len, TANGRAM_UCT_ADDR_IGNORE, g_client_context.respond_ptr);
-    g_client_context.respond_flag = true;
+    unpack_rpc_buffer(buf, buf_len, TANGRAM_UCT_ADDR_IGNORE, g_client_intra_context.respond_ptr);
+    g_client_intra_context.respond_flag = true;
     return UCS_OK;
 }
 
@@ -57,8 +57,8 @@ static ucs_status_t am_rma_request_listener(void *arg, void *buf, size_t buf_len
 }
 
 static ucs_status_t am_ep_addr_listener(void *arg, void *buf, size_t buf_len, unsigned flags) {
-    unpack_rpc_buffer(buf, buf_len, TANGRAM_UCT_ADDR_IGNORE, g_client_context.respond_ptr);
-    g_client_context.respond_flag = true;
+    unpack_rpc_buffer(buf, buf_len, TANGRAM_UCT_ADDR_IGNORE, g_client_intra_context.respond_ptr);
+    g_client_intra_context.respond_flag = true;
     return UCS_OK;
 }
 
@@ -67,19 +67,39 @@ static ucs_status_t am_ep_addr_listener(void *arg, void *buf, size_t buf_len, un
  * Send a RPC request and wait for the respond
  * This is the core function for ucx communications
  */
-void sendrecv(uint8_t id, tangram_uct_addr_t* dest, void* data, size_t length, void** respond_ptr) {
-    g_client_context.respond_ptr  = respond_ptr;
-    g_client_context.respond_flag = false;
+void sendrecv_intra(uint8_t id, tangram_uct_addr_t* dest, void* data, size_t length, void** respond_ptr) {
+    g_client_intra_context.respond_ptr  = respond_ptr;
+    g_client_intra_context.respond_flag = false;
 
     uct_ep_h ep;
-    uct_ep_create_connect(g_client_context.iface, dest, &ep);
+    uct_ep_create_connect(g_client_intra_context.iface, dest, &ep);
 
-    do_uct_am_short_progress(g_client_context.worker, ep, id, &g_client_context.self_addr, data, length);
+    do_uct_am_short_progress(g_client_intra_context.worker, ep, id, &g_client_intra_context.self_addr, data, length);
 
     // if need to wait for a respond
     if(respond_ptr != NULL) {
-        while(!g_client_context.respond_flag) {
-            uct_worker_progress(g_client_context.worker);
+        while(!g_client_intra_context.respond_flag) {
+            uct_worker_progress(g_client_intra_context.worker);
+        }
+    }
+
+    uct_ep_destroy(ep);
+}
+
+
+void sendrecv_inter(uint8_t id, tangram_uct_addr_t* dest, void* data, size_t length, void** respond_ptr) {
+    g_client_inter_context.respond_ptr  = respond_ptr;
+    g_client_inter_context.respond_flag = false;
+
+    uct_ep_h ep;
+    uct_ep_create_connect(g_client_inter_context.iface, dest, &ep);
+
+    do_uct_am_short_progress(g_client_inter_context.worker, ep, id, &g_client_inter_context.self_addr, data, length);
+
+    // if need to wait for a respond
+    if(respond_ptr != NULL) {
+        while(!g_client_inter_context.respond_flag) {
+            uct_worker_progress(g_client_inter_context.worker);
         }
     }
 
@@ -87,19 +107,19 @@ void sendrecv(uint8_t id, tangram_uct_addr_t* dest, void* data, size_t length, v
 }
 
 void tangram_ucx_sendrecv_server(uint8_t id, void* data, size_t length, void** respond_ptr) {
-    sendrecv(id, &g_client_context.server_addr, data, length, respond_ptr);
+    sendrecv_inter(id, &g_client_inter_context.server_addr, data, length, respond_ptr);
 }
 
 void tangram_ucx_sendrecv_delegator(uint8_t id, void* data, size_t length, void** respond_ptr) {
-    sendrecv(id, &g_client_context.delegator_addr, data, length, respond_ptr);
+    sendrecv_intra(id, &g_client_intra_context.delegator_addr, data, length, respond_ptr);
 }
 
 void tangram_ucx_sendrecv_client(uint8_t id, tangram_uct_addr_t* dest, void* data, size_t length, void** respond_ptr) {
-    sendrecv(id, dest, data, length, respond_ptr);
+    sendrecv_inter(id, dest, data, length, respond_ptr);
 }
 
 void tangram_ucx_send_ep_addr(uint8_t id, tangram_uct_addr_t* dest, void* data, size_t length) {
-    sendrecv(id, dest, data, length, NULL);
+    sendrecv_inter(id, dest, data, length, NULL);
 }
 
 
@@ -110,11 +130,11 @@ void tangram_ucx_send_ep_addr(uint8_t id, tangram_uct_addr_t* dest, void* data, 
  * Used to send the stop server signal
  */
 void tangram_ucx_stop_delegator() {
-    sendrecv(AM_ID_STOP_REQUEST, &g_client_context.delegator_addr, NULL, 0, NULL);
+    sendrecv_intra(AM_ID_STOP_REQUEST, &g_client_intra_context.delegator_addr, NULL, 0, NULL);
 }
 
 void tangram_ucx_stop_server() {
-    sendrecv(AM_ID_STOP_REQUEST, &g_client_context.server_addr, NULL, 0, NULL);
+    sendrecv_inter(AM_ID_STOP_REQUEST, &g_client_inter_context.server_addr, NULL, 0, NULL);
 }
 
 void set_delegator_addr(tangram_uct_context_t* context) {
@@ -122,7 +142,7 @@ void set_delegator_addr(tangram_uct_context_t* context) {
     void* buf;
     size_t len;
     if(g_tfs_info->mpi_intra_rank == 0)
-        buf = tangram_uct_addr_serialize(tangram_ucx_delegator_addr(), &len);
+        buf = tangram_uct_addr_serialize(tangram_ucx_delegator_intra_addr(), &len);
     else
         buf = tangram_uct_addr_serialize(&context->self_addr, &len);
     MPI_Bcast(buf, len, MPI_BYTE, 0, g_tfs_info->mpi_intra_comm);
@@ -136,53 +156,57 @@ void tangram_ucx_client_start(tfs_info_t *tfs_info) {
     ucs_status_t status;
     ucs_async_context_create(UCS_ASYNC_MODE_THREAD_SPINLOCK, &g_client_async);
 
-    tangram_uct_context_init(g_client_async, g_tfs_info, &g_client_context);
-    tangram_uct_context_init(g_client_async, g_tfs_info, &g_epaddr_context);
+    tangram_uct_context_init(g_client_async, g_tfs_info, true,  &g_client_intra_context);
+    tangram_uct_context_init(g_client_async, g_tfs_info, false, &g_client_inter_context);
     if(tfs_info->use_delegator) {
-        set_delegator_addr(&g_client_context);
-        set_delegator_addr(&g_epaddr_context);
+        set_delegator_addr(&g_client_intra_context);
+        set_delegator_addr(&g_client_inter_context);
     }
 
-    status = uct_iface_set_am_handler(g_client_context.iface, AM_ID_QUERY_RESPOND, am_server_respond_listener, NULL, 0);
+    // Communicatinos between global server, use inter_context
+    status = uct_iface_set_am_handler(g_client_inter_context.iface, AM_ID_QUERY_RESPOND, am_server_respond_listener, NULL, 0);
     assert(status == UCS_OK);
-    status = uct_iface_set_am_handler(g_client_context.iface, AM_ID_POST_RESPOND, am_server_respond_listener, NULL, 0);
+    status = uct_iface_set_am_handler(g_client_inter_context.iface, AM_ID_POST_RESPOND, am_server_respond_listener, NULL, 0);
     assert(status == UCS_OK);
-    status = uct_iface_set_am_handler(g_client_context.iface, AM_ID_UNPOST_FILE_RESPOND, am_server_respond_listener, NULL, 0);
+    status = uct_iface_set_am_handler(g_client_inter_context.iface, AM_ID_UNPOST_FILE_RESPOND, am_server_respond_listener, NULL, 0);
     assert(status == UCS_OK);
-    status = uct_iface_set_am_handler(g_client_context.iface, AM_ID_UNPOST_CLIENT_RESPOND, am_server_respond_listener, NULL, 0);
+    status = uct_iface_set_am_handler(g_client_inter_context.iface, AM_ID_UNPOST_CLIENT_RESPOND, am_server_respond_listener, NULL, 0);
     assert(status == UCS_OK);
-    status = uct_iface_set_am_handler(g_client_context.iface, AM_ID_STAT_RESPOND, am_server_respond_listener, NULL, 0);
+    status = uct_iface_set_am_handler(g_client_inter_context.iface, AM_ID_STAT_RESPOND, am_server_respond_listener, NULL, 0);
     assert(status == UCS_OK);
-    status = uct_iface_set_am_handler(g_client_context.iface, AM_ID_ACQUIRE_LOCK_RESPOND, am_server_respond_listener, NULL, 0);
+    status = uct_iface_set_am_handler(g_client_inter_context.iface, AM_ID_RMA_REQUEST, am_rma_request_listener, NULL, 0);
     assert(status == UCS_OK);
-    status = uct_iface_set_am_handler(g_client_context.iface, AM_ID_RELEASE_LOCK_RESPOND, am_server_respond_listener, NULL, 0);
+    status = uct_iface_set_am_handler(g_client_inter_context.iface, AM_ID_RMA_EP_ADDR, am_ep_addr_listener, NULL, 0);
     assert(status == UCS_OK);
-    status = uct_iface_set_am_handler(g_client_context.iface, AM_ID_RELEASE_LOCK_FILE_RESPOND, am_server_respond_listener, NULL, 0);
+
+    // Communications between node-local delegator, use intra_context
+    status = uct_iface_set_am_handler(g_client_intra_context.iface, AM_ID_ACQUIRE_LOCK_RESPOND, am_server_respond_listener, NULL, 0);
     assert(status == UCS_OK);
-    status = uct_iface_set_am_handler(g_client_context.iface, AM_ID_RELEASE_LOCK_CLIENT_RESPOND, am_server_respond_listener, NULL, 0);
+    status = uct_iface_set_am_handler(g_client_intra_context.iface, AM_ID_RELEASE_LOCK_RESPOND, am_server_respond_listener, NULL, 0);
     assert(status == UCS_OK);
-    status = uct_iface_set_am_handler(g_client_context.iface, AM_ID_RMA_REQUEST, am_rma_request_listener, NULL, 0);
+    status = uct_iface_set_am_handler(g_client_intra_context.iface, AM_ID_RELEASE_LOCK_FILE_RESPOND, am_server_respond_listener, NULL, 0);
     assert(status == UCS_OK);
-    status = uct_iface_set_am_handler(g_client_context.iface, AM_ID_RMA_EP_ADDR, am_ep_addr_listener, NULL, 0);
+    status = uct_iface_set_am_handler(g_client_intra_context.iface, AM_ID_RELEASE_LOCK_CLIENT_RESPOND, am_server_respond_listener, NULL, 0);
     assert(status == UCS_OK);
 }
 
 void tangram_ucx_client_stop() {
-    ucs_status_t status = uct_iface_flush(g_client_context.iface, UCT_FLUSH_FLAG_LOCAL, NULL);
+    ucs_status_t status = uct_iface_flush(g_client_intra_context.iface, UCT_FLUSH_FLAG_LOCAL, NULL);
     assert(status == UCS_OK);
 
     MPI_Barrier(g_tfs_info->mpi_comm);
 
-    tangram_uct_context_destroy(&g_client_context);
-    tangram_uct_context_destroy(&g_epaddr_context);
+    tangram_uct_context_destroy(&g_client_intra_context);
+    tangram_uct_context_destroy(&g_client_inter_context);
     ucs_async_context_destroy(g_client_async);
 }
 
-tangram_uct_addr_t* tangram_ucx_client_addr() {
-    return &g_client_context.self_addr;
+tangram_uct_addr_t* tangram_ucx_client_inter_addr() {
+    return &g_client_inter_context.self_addr;
 }
 
+#define MIN(a,b) (((a)<(b))?(a):(b))
 size_t tangram_uct_am_short_max_size() {
-    return g_client_context.iface_attr.cap.am.max_short;
+    return MIN(g_client_inter_context.iface_attr.cap.am.max_short, g_client_intra_context.iface_attr.cap.am.max_short);
 }
 
