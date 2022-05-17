@@ -224,7 +224,7 @@ size_t TANGRAM_WRAP(fread)(void * ptr, size_t size, size_t count, FILE * stream)
     if(tf) {
         ssize_t res = tangram_read_impl(tf, ptr, count*size);
         res = (res == size*count) ? count: res;
-        tangram_debug("[tangramfs client] fread %s (%lu, %lu), return: %ld\n", tf->filename, size, count, res);
+        tangram_debug("[tangramfs client] fread %s (%ld, %lu*%lu), return: %ld\n", tf->filename, tf->offset, size, count, res);
         return res;
     }
 

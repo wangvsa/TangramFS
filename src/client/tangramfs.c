@@ -44,6 +44,15 @@ void tfs_init() {
 
 }
 
+void tfs_release(tfs_file_t* tf) {
+    // Clean up seg-tree and lock tokens
+    seg_tree_destroy(&tf->seg_tree);
+
+    // Delete from hash table
+    HASH_DEL(g_tfs_files, tf);
+    free(tf);
+}
+
 void tfs_finalize() {
     if(!g_tfs_info.initialized)
         return;
@@ -65,6 +74,7 @@ void tfs_finalize() {
     tfs_file_t *tf, *tmp;
     HASH_ITER(hh, g_tfs_files, tf, tmp) {
         tfs_close(tf);
+        tfs_release(tf);
     }
 
     // Need to have a barrier here because we can not allow
@@ -460,17 +470,13 @@ int tfs_query(tfs_file_t* tf, size_t offset, size_t size, tangram_uct_addr_t** o
 int tfs_close(tfs_file_t* tf) {
     int res = 0;
 
-    // Notify server to unpost and release lock
-    if(g_tfs_info.semantics != TANGRAM_STRONG_SEMANTICS)
-        tfs_unpost_file(tf);
-    else
+    if(g_tfs_info.semantics == TANGRAM_STRONG_SEMANTICS)
         tfs_release_lock_file(tf);
 
+    //if(g_tfs_info.semantics != TANGRAM_STRONG_SEMANTICS)
+    //    tfs_unpost_file(tf);
     // Flush from BB to PFS
-    // tfs_flush(tf);
-
-    // Clean up seg-tree and lock tokens
-    seg_tree_destroy(&tf->seg_tree);
+    //tfs_flush(tf);
 
     // Close all file descriptors
     if(tf->stream != NULL) {
@@ -486,16 +492,13 @@ int tfs_close(tfs_file_t* tf) {
         tf->local_fd = -1;
     }
 
-    // Delete from hash table
-    HASH_DEL(g_tfs_files, tf);
-    free(tf);
-    tf = NULL;
-
     // TODO: consider the below behaviour?
     // The tfs_file_t and its interval tree is not released
     // just like Linux page cache won't be cleared at close point
     // because the same file might be opened later again.
     // We clean all resources at tfs_finalize();
+    //
+    //tfs_release();
     return res;
 }
 
@@ -629,6 +632,7 @@ int tangram_get_semantics() {
  * Read data locally to serve for the RMA request
  */
 void* serve_rma_data_cb(void* in_arg, size_t* size) {
+    printf("serve rma data cb\n");
     rpc_in_t* in = rpc_in_unpack(in_arg);
 
     tfs_file_t* tf = NULL;

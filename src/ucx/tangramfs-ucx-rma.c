@@ -5,12 +5,14 @@
 #include <unistd.h>
 #include <stdbool.h>
 #include <alloca.h>
+#include "utlist.h"
 #include "tangramfs-ucx-rma.h"
 #include "tangramfs-ucx-client.h"
 
 static bool                 g_rma_running;
 pthread_t                   g_rma_progress_thread;
-tangram_rma_req_in_t*       g_rma_req_in;
+
+static tangram_rma_req_t*   g_rma_reqs;
 
 static ucs_async_context_t* g_rma_async;
 tfs_info_t*                 gg_tfs_info;
@@ -44,18 +46,21 @@ typedef struct zcopy_comp {
 // send though RMA
 void* (*g_serve_rma_data_cb)(void*, size_t *size);
 
-void  rma_respond(tangram_rma_req_in_t* in);
-void* rma_req_in_pack(tangram_rma_req_in_t* in, size_t* total_size);
-void  rma_req_in_unpack(void* buf, tangram_rma_req_in_t* in);
-void  rma_req_in_free(tangram_rma_req_in_t* in);
+void  rma_respond(tangram_rma_req_t* in);
+void* rma_req_pack(tangram_rma_req_t* in, size_t* total_size);
+void  rma_req_unpack(void* buf, tangram_rma_req_t* in);
+void  rma_req_free(tangram_rma_req_t* in);
 
 
 static ucs_status_t am_rma_request_listener(void *arg, void *buf, size_t buf_len, unsigned flags) {
-    g_rma_req_in = malloc(sizeof(tangram_rma_req_in_t));
+    tangram_rma_req_t* req = malloc(sizeof(tangram_rma_req_t));
+
     void* tmp;
-    unpack_rpc_buffer(buf, buf_len, &g_rma_req_in->src, &tmp);
-    rma_req_in_unpack(tmp, g_rma_req_in);
+    unpack_rpc_buffer(buf, buf_len, &req->src, &tmp);
+    rma_req_unpack(tmp, req);
     free(tmp);
+
+    DL_APPEND(g_rma_reqs, req);
     return UCS_OK;
 }
 
@@ -90,7 +95,7 @@ void rma_sendrecv_core(uint8_t id, tangram_uct_context_t* context, tangram_uct_a
 }
 
 
-void* rma_req_in_pack(tangram_rma_req_in_t* in, size_t* total_size) {
+void* rma_req_pack(tangram_rma_req_t* in, size_t* total_size) {
     // Format:
     // ep_addr_len  | ep_addr           sizeof(size_t) + ep_addr_len
     // dev_addr_len | dev_addr          sizeof(size_t) + dev_addr_len
@@ -132,7 +137,7 @@ void* rma_req_in_pack(tangram_rma_req_in_t* in, size_t* total_size) {
     return buf;
 }
 
-void rma_req_in_unpack(void* buf, tangram_rma_req_in_t* in) {
+void rma_req_unpack(void* buf, tangram_rma_req_t* in) {
     size_t pos = 0;
 
     memcpy(&in->ep_addr_len, buf+pos, sizeof(size_t));
@@ -166,7 +171,7 @@ void rma_req_in_unpack(void* buf, tangram_rma_req_in_t* in) {
     memcpy(in->user_arg, buf+pos, in->user_arg_len);
 }
 
-void rma_req_in_free(tangram_rma_req_in_t* in) {
+void rma_req_free(tangram_rma_req_t* in) {
     tangram_uct_addr_free(&in->src);
     free(in->ep_addr);
     free(in->dev_addr);
@@ -253,7 +258,7 @@ void do_put_zcopy(uct_ep_h ep, tangram_uct_context_t* info, uint64_t remote_addr
     }
 }
 
-void rma_respond(tangram_rma_req_in_t* in) {
+void rma_respond(tangram_rma_req_t* in) {
     pthread_mutex_lock(&g_ingoing_context.mutex);
 
     // First send back rma dev address and my ep address
@@ -317,13 +322,14 @@ void tangram_ucx_rma_request(tangram_uct_addr_t* dest, void* user_arg, size_t us
     ucs_status_t status;
     // TODO: should directly put data to user's buffer
 
-    // Fill in every filed of rma_req_in
-    tangram_rma_req_in_t req_in;
+    // Fill in every filed of rma_req
+    tangram_rma_req_t req_in;
     req_in.user_arg     = user_arg;
     req_in.user_arg_len = user_arg_len;
 
     req_in.dev_addr_len = g_outgoing_context.self_addr.dev_len;
     req_in.dev_addr     = alloca(req_in.dev_addr_len);
+    memcpy(req_in.dev_addr, g_outgoing_context.self_addr.dev, req_in.dev_addr_len);
 
     req_in.ep_addr_len  = g_outgoing_context.iface_attr.ep_addr_len;
     req_in.ep_addr      = alloca(req_in.ep_addr_len);
@@ -353,7 +359,7 @@ void tangram_ucx_rma_request(tangram_uct_addr_t* dest, void* user_arg, size_t us
 
     // send to peer and get peer ep address to connect
     size_t sendbuf_size;
-    void*  sendbuf = rma_req_in_pack(&req_in, &sendbuf_size);
+    void*  sendbuf = rma_req_pack(&req_in, &sendbuf_size);
 
     // Send RMA request to the destination client and wait
     // it to send back the ep address. The outgoing context
@@ -398,12 +404,13 @@ void* rma_ingoing_progress_loop(void* arg) {
         pthread_mutex_unlock(&g_ingoing_context.mutex);
 
         // We have a new RMA request we need to handle
-        if(g_rma_req_in != NULL) {
-            rma_respond(g_rma_req_in);
+        while(g_rma_reqs != NULL) {
+            tangram_rma_req_t* req = g_rma_reqs;
+            rma_respond(req);
 
-            rma_req_in_free(g_rma_req_in);
-            free(g_rma_req_in);
-            g_rma_req_in = NULL;
+            DL_DELETE(g_rma_reqs, req);
+            rma_req_free(req);
+            free(req);
         }
     }
     return NULL;
@@ -427,6 +434,7 @@ void tangram_ucx_rma_service_start(tfs_info_t* tfs_info, void* (serve_rma_data_c
     uct_iface_set_am_handler(g_outgoing_context.iface, AM_ID_RMA_EP_ADDR, am_ep_addr_listener, NULL, 0);
     uct_iface_set_am_handler(g_outgoing_context.iface, AM_ID_RMA_RESPOND, am_rma_respond_listener, NULL, 0);
 
+    g_rma_running = true;
     pthread_create(&g_rma_progress_thread, NULL, rma_ingoing_progress_loop, NULL);
 }
 
@@ -437,4 +445,8 @@ void tangram_ucx_rma_service_stop() {
     tangram_uct_context_destroy(&g_outgoing_context);
     tangram_uct_context_destroy(&g_ingoing_context);
     ucs_async_context_destroy(g_rma_async);
+}
+
+tangram_uct_addr_t* tangram_ucx_rma_addr() {
+    return &g_ingoing_context.self_addr;
 }
