@@ -148,6 +148,7 @@ void set_delegator_intra_addr(tangram_uct_context_t* context) {
 }
 
 void tangram_ucx_client_start(tfs_info_t *tfs_info) {
+    fflush(stdout);
     g_tfs_info = tfs_info;
 
     ucs_status_t status;

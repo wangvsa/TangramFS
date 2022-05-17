@@ -43,8 +43,6 @@ void tangram_issue_rpc(uint8_t id, char* filename, size_t *offsets, size_t *coun
     // In case its too large, we split it into multiple AM
     size_t am_max_size = tangram_uct_am_short_max_size();
     int num = rpc_in_intervals_per_am(filename, am_max_size);
-    num = 1;
-
     int remain = num_intervals;
 
     int i = 0;
@@ -61,11 +59,6 @@ void tangram_issue_rpc(uint8_t id, char* filename, size_t *offsets, size_t *coun
 
         remain -= num;
         i++;
-
-        if(remain % 10 == 0) {
-            printf("intervals per am: %d, c:%d, am_max_size: %ld, intervals: %d, remain: %d\n", num, c++, am_max_size, num_intervals, remain);
-            sleep(5);
-        }
     }
 }
 
@@ -106,9 +99,8 @@ void tangram_rpc_service_start(tfs_info_t *tfs_info){
     // later the client will need to broadcast delegator's address
     // to all clients
 
-    if(tfs_info->use_delegator && tfs_info->mpi_intra_rank == 0) {
+    if(tfs_info->use_delegator && tfs_info->mpi_intra_rank == 0)
         tangram_delegator_start(tfs_info);
-    }
 
     sleep(2);
     MPI_Barrier(tfs_info->mpi_comm);

@@ -121,7 +121,7 @@ void tangram_ucx_delegator_init(tfs_info_t *tfs_info) {
     tangram_uct_context_init(g_delegator_async, tfs_info, true, &g_delegator_intra_context);
     tangram_uct_context_init(g_delegator_async, tfs_info, false, &g_delegator_inter_context);
 
-    uct_ep_create_connect(g_delegator_intra_context.iface, &g_delegator_inter_context.server_addr, &g_ep_server);
+    uct_ep_create_connect(g_delegator_inter_context.iface, &g_delegator_inter_context.server_addr, &g_ep_server);
 
     // From node-local clients, use intra_context
     uct_iface_set_am_handler(g_delegator_intra_context.iface, AM_ID_ACQUIRE_LOCK_REQUEST, am_acquire_lock_listener, NULL, 0);
