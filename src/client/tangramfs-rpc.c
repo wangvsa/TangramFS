@@ -78,6 +78,8 @@ void tangram_issue_rma(uint8_t id, char* filename, tangram_uct_addr_t* dest,
         total_recv_size += counts[i];
 
     tangram_ucx_rma_request(dest, user_data, data_size, recv_buf, total_recv_size);
+
+    free(user_data);
 }
 
 void tangram_issue_metadata_rpc(uint8_t id, const char* path, void** respond_ptr) {
@@ -107,8 +109,8 @@ void tangram_rpc_service_start(tfs_info_t *tfs_info){
     tangram_ucx_client_start(tfs_info);
 }
 
-void tangram_rpc_service_stop(tfs_info_t* tfs_info) {
-    if(tfs_info->use_delegator && tfs_info->mpi_intra_rank == 0) {
+void tangram_rpc_service_stop() {
+    if(g_tfs_info->use_delegator && g_tfs_info->mpi_intra_rank == 0) {
         tangram_ucx_stop_delegator();
         tangram_delegator_stop();
     }

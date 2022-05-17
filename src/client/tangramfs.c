@@ -37,7 +37,7 @@ void tfs_init() {
 
     tangram_map_real_calls();
     tangram_rpc_service_start(&g_tfs_info);
-    //tangram_rma_service_start(&g_tfs_info, serve_rma_data_cb);
+    tangram_rma_service_start(&g_tfs_info, serve_rma_data_cb);
 
     MPI_Barrier(g_tfs_info.mpi_comm);
     g_tfs_info.initialized = true;
@@ -71,8 +71,8 @@ void tfs_finalize() {
     // server stoped before all other clients
     MPI_Barrier(g_tfs_info.mpi_comm);
 
-    //tangram_rma_service_stop();
-    tangram_rpc_service_stop(&g_tfs_info);
+    tangram_rma_service_stop();
+    tangram_rpc_service_stop();
 
     MPI_Barrier(g_tfs_info.mpi_comm);
 

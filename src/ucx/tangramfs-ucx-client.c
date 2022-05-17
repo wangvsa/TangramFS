@@ -53,25 +53,6 @@ static ucs_status_t am_intra_respond_listener(void *arg, void *buf, size_t buf_l
 }
 
 /**
- * Note this am handler func is called by pthread-progress funciton.
- * We can not do am_send here as no one will be performing the progress
- * We need to create a new thread to handle this rma request
- */
-static ucs_status_t am_rma_request_listener(void *arg, void *buf, size_t buf_len, unsigned flags) {
-    tangram_rma_req_in_t *arg_in = malloc(sizeof(tangram_rma_req_in_t));
-    unpack_rpc_buffer(buf, buf_len, &arg_in->src, &arg_in->data);
-    pthread_t thread;
-    pthread_create(&thread, NULL, rma_respond, arg_in);
-    return UCS_OK;
-}
-
-static ucs_status_t am_ep_addr_listener(void *arg, void *buf, size_t buf_len, unsigned flags) {
-    unpack_rpc_buffer(buf, buf_len, TANGRAM_UCT_ADDR_IGNORE, g_client_intra_context.respond_ptr);
-    g_client_intra_context.respond_flag = true;
-    return UCS_OK;
-}
-
-/**
  * Send a RPC request and wait for the respond
  * This is the core function for ucx communications
  */
@@ -163,30 +144,17 @@ void tangram_ucx_client_start(tfs_info_t *tfs_info) {
     uct_ep_create_connect(g_client_inter_context.iface, &g_client_inter_context.server_addr, &g_ep_server);
 
     // Communicatinos between global server, use inter_context
-    status = uct_iface_set_am_handler(g_client_inter_context.iface, AM_ID_QUERY_RESPOND, am_inter_respond_listener, NULL, 0);
-    assert(status == UCS_OK);
-    status = uct_iface_set_am_handler(g_client_inter_context.iface, AM_ID_POST_RESPOND, am_inter_respond_listener, NULL, 0);
-    assert(status == UCS_OK);
-    status = uct_iface_set_am_handler(g_client_inter_context.iface, AM_ID_UNPOST_FILE_RESPOND, am_inter_respond_listener, NULL, 0);
-    assert(status == UCS_OK);
-    status = uct_iface_set_am_handler(g_client_inter_context.iface, AM_ID_UNPOST_CLIENT_RESPOND, am_inter_respond_listener, NULL, 0);
-    assert(status == UCS_OK);
-    status = uct_iface_set_am_handler(g_client_inter_context.iface, AM_ID_STAT_RESPOND, am_inter_respond_listener, NULL, 0);
-    assert(status == UCS_OK);
-    status = uct_iface_set_am_handler(g_client_inter_context.iface, AM_ID_RMA_REQUEST, am_rma_request_listener, NULL, 0);
-    assert(status == UCS_OK);
-    status = uct_iface_set_am_handler(g_client_inter_context.iface, AM_ID_RMA_EP_ADDR, am_ep_addr_listener, NULL, 0);
-    assert(status == UCS_OK);
+    uct_iface_set_am_handler(g_client_inter_context.iface, AM_ID_QUERY_RESPOND, am_inter_respond_listener, NULL, 0);
+    uct_iface_set_am_handler(g_client_inter_context.iface, AM_ID_POST_RESPOND, am_inter_respond_listener, NULL, 0);
+    uct_iface_set_am_handler(g_client_inter_context.iface, AM_ID_UNPOST_FILE_RESPOND, am_inter_respond_listener, NULL, 0);
+    uct_iface_set_am_handler(g_client_inter_context.iface, AM_ID_UNPOST_CLIENT_RESPOND, am_inter_respond_listener, NULL, 0);
+    uct_iface_set_am_handler(g_client_inter_context.iface, AM_ID_STAT_RESPOND, am_inter_respond_listener, NULL, 0);
 
     // Communications between node-local delegator, use intra_context
-    status = uct_iface_set_am_handler(g_client_intra_context.iface, AM_ID_ACQUIRE_LOCK_RESPOND, am_intra_respond_listener, NULL, 0);
-    assert(status == UCS_OK);
-    status = uct_iface_set_am_handler(g_client_intra_context.iface, AM_ID_RELEASE_LOCK_RESPOND, am_intra_respond_listener, NULL, 0);
-    assert(status == UCS_OK);
-    status = uct_iface_set_am_handler(g_client_intra_context.iface, AM_ID_RELEASE_LOCK_FILE_RESPOND, am_intra_respond_listener, NULL, 0);
-    assert(status == UCS_OK);
-    status = uct_iface_set_am_handler(g_client_intra_context.iface, AM_ID_RELEASE_LOCK_CLIENT_RESPOND, am_intra_respond_listener, NULL, 0);
-    assert(status == UCS_OK);
+    uct_iface_set_am_handler(g_client_intra_context.iface, AM_ID_ACQUIRE_LOCK_RESPOND, am_intra_respond_listener, NULL, 0);
+    uct_iface_set_am_handler(g_client_intra_context.iface, AM_ID_RELEASE_LOCK_RESPOND, am_intra_respond_listener, NULL, 0);
+    uct_iface_set_am_handler(g_client_intra_context.iface, AM_ID_RELEASE_LOCK_FILE_RESPOND, am_intra_respond_listener, NULL, 0);
+    uct_iface_set_am_handler(g_client_intra_context.iface, AM_ID_RELEASE_LOCK_CLIENT_RESPOND, am_intra_respond_listener, NULL, 0);
 }
 
 void tangram_ucx_client_stop() {
