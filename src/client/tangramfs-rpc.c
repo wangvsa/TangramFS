@@ -16,6 +16,7 @@
 static double      rma_time;
 static tfs_info_t* g_tfs_info;
 
+static int c = 0;
 
 /*
  * Perform RPC (send to server).
@@ -42,11 +43,12 @@ void tangram_issue_rpc(uint8_t id, char* filename, size_t *offsets, size_t *coun
     // In case its too large, we split it into multiple AM
     size_t am_max_size = tangram_uct_am_short_max_size();
     int num = rpc_in_intervals_per_am(filename, am_max_size);
+    num = 1;
+
     int remain = num_intervals;
 
     int i = 0;
     while(remain > 0) {
-
         size_t data_size;
         void* user_data = rpc_in_pack(filename, num < remain ? num : remain,
                                       &offsets[i*num], &counts[i*num], types?&types[i*num]:NULL, &data_size);
@@ -59,6 +61,11 @@ void tangram_issue_rpc(uint8_t id, char* filename, size_t *offsets, size_t *coun
 
         remain -= num;
         i++;
+
+        if(remain % 10 == 0) {
+            printf("intervals per am: %d, c:%d, am_max_size: %ld, intervals: %d, remain: %d\n", num, c++, am_max_size, num_intervals, remain);
+            sleep(5);
+        }
     }
 }
 

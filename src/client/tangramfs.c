@@ -420,6 +420,7 @@ void tfs_post_file(tfs_file_t* tf) {
     // Coalesce all ranges in the tree
     seg_tree_coalesce_all_nolock(&tf->seg_tree);
 
+    printf("post file count: %d\n", num);
     int* ack;
     tangram_issue_rpc(AM_ID_POST_REQUEST, tf->filename, offsets, counts, NULL, num, (void**)&ack);
     free(ack);
