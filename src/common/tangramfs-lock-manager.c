@@ -173,9 +173,9 @@ lock_token_t* tangram_lockmgr_delegator_acquire_lock(lock_table_t** lt, tangram_
         free(out);
         tangram_ucx_delegator_sendrecv_server(AM_ID_ACQUIRE_LOCK_REQUEST, in, in_size, &out);
 
-        // 3. Check if we indeed granted the token
-        // Reason for while() loop:
-        // Very rare case, before we complete the whole process
+        // 3. Check if we were indeed granted the token
+        // Reason for while() loop due to a very rare
+        // case, where before we complete the whole process
         // of handling the conflict, someone else acquired the same
         // lock token before us.
         // i.e.,
@@ -203,7 +203,6 @@ lock_token_t* tangram_lockmgr_delegator_acquire_lock(lock_table_t** lt, tangram_
 // Someone tries to request a lock that conflicts with ours
 // so we are asked to split our lock.
 void tangram_lockmgr_delegator_split_lock(lock_table_t* lt, char* filename, size_t offset, size_t count, int type) {
-
     lock_table_t* entry = NULL;
     HASH_FIND_STR(lt, filename, entry);
     if(!entry) return;
@@ -260,8 +259,8 @@ lock_acquire_result_t* tangram_lockmgr_server_acquire_lock(lock_table_t** lt, ta
     // 2. We can try to extend the lock range
     //    e.g., user asks for [0, 100], we can give [0, infinity]
     if(!conflict_token) {
-        result->token = lock_token_add_exact(&entry->token_list, offset, count, type, delegator);
-        //result->token = lock_token_add_extend(&entry->token_list, offset, count, type, delegator);
+        //result->token = lock_token_add_exact(&entry->token_list, offset, count, type, delegator);
+        result->token = lock_token_add_extend(&entry->token_list, offset, count, type, delegator);
         return result;
     }
 

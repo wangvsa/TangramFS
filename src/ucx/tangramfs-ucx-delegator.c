@@ -64,19 +64,28 @@ static ucs_status_t am_stop_listener(void *arg, void *buf, size_t buf_len, unsig
 }
 
 
-// Handle node-local clients RPC tasks, use intra_context
-void delegator_handle_client_task(task_t* task) {
-    pthread_mutex_lock(&g_delegator_intra_context.mutex);
+// Handle RPC tasks
+// Most tasks are from node-local clients
+// Currently, only one task (SPLIT_LOCK_REQUEST) is
+// requested from remote delegators.
+void delegator_handle_task(task_t* task) {
+
+    // intra_context is used for all node-local clients tasks
+    tangram_uct_context_t* context = &g_delegator_intra_context;
+    if(task->id == AM_ID_SPLIT_LOCK_REQUEST)
+        context = &g_delegator_inter_context;
+
+    pthread_mutex_lock(&context->mutex);
     uct_ep_h ep;
-    uct_ep_create_connect(g_delegator_intra_context.iface, &task->client, &ep);
-    pthread_mutex_unlock(&g_delegator_intra_context.mutex);
+    uct_ep_create_connect(context->iface, &task->client, &ep);
+    pthread_mutex_unlock(&context->mutex);
 
     task->respond = (*delegator_am_handler)(task->id, &task->client, task->data, &task->id, &task->respond_len);
-    do_uct_am_short(&g_delegator_intra_context.mutex, ep, task->id, &g_delegator_intra_context.self_addr, task->respond, task->respond_len);
+    do_uct_am_short(&context->mutex, ep, task->id, &context->self_addr, task->respond, task->respond_len);
 
-    pthread_mutex_lock(&g_delegator_intra_context.mutex);
+    pthread_mutex_lock(&context->mutex);
     uct_ep_destroy(ep);
-    pthread_mutex_unlock(&g_delegator_intra_context.mutex);
+    pthread_mutex_unlock(&context->mutex);
 }
 
 void delegator_sendrecv_core(uint8_t id, tangram_uct_context_t* context, uct_ep_h ep, void* data, size_t length, void** respond_ptr) {
@@ -138,7 +147,7 @@ void tangram_ucx_delegator_init(tfs_info_t *tfs_info) {
     uct_iface_set_am_handler(g_delegator_inter_context.iface, AM_ID_ACQUIRE_LOCK_RESPOND, am_respond_listener, NULL, 0);
     uct_iface_set_am_handler(g_delegator_inter_context.iface, AM_ID_RELEASE_LOCK_RESPOND, am_respond_listener, NULL, 0);
 
-    taskmgr_init(&g_taskmgr, 1, delegator_handle_client_task);
+    taskmgr_init(&g_taskmgr, 1, delegator_handle_task);
 }
 
 void tangram_ucx_delegator_register_rpc(void* (*user_handler)(int8_t, tangram_uct_addr_t*, void*, uint8_t*, size_t*)) {
