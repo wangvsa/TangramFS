@@ -311,7 +311,7 @@ void unpack_rpc_buffer(void* buf, size_t buf_len, tangram_uct_addr_t *sender, vo
     }
 }
 
-void do_uct_am_short(pthread_mutex_t *lock, uct_ep_h ep, uint8_t id, tangram_uct_addr_t* my_addr, void* data, size_t data_len) {
+void do_uct_am_short_lock(pthread_mutex_t *lock, uct_ep_h ep, uint8_t id, tangram_uct_addr_t* my_addr, void* data, size_t data_len) {
     size_t buf_len;
     void* buf = pack_rpc_buffer(my_addr, data, data_len, &buf_len);
 

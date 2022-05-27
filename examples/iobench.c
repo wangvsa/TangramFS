@@ -132,8 +132,8 @@ int main(int argc, char* argv[]) {
 
     for(int i = 0; i < 1; i++) {
         MPI_Barrier(MPI_COMM_WORLD);
-        //write_contiguous();
-        write_strided();
+        write_contiguous();
+        //write_strided();
     }
 
     for(int i = 0; i < 1; i++) {

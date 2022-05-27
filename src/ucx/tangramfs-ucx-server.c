@@ -72,7 +72,7 @@ void server_handle_task(task_t* task) {
     pthread_mutex_unlock(&g_server_context.mutex);
 
     task->respond = (*server_am_handler)(task->id, &task->client, task->data, &task->id, &task->respond_len);
-    do_uct_am_short(&g_server_context.mutex, ep, task->id, &g_server_context.self_addr, task->respond, task->respond_len);
+    do_uct_am_short_lock(&g_server_context.mutex, ep, task->id, &g_server_context.self_addr, task->respond, task->respond_len);
 
     pthread_mutex_lock(&g_server_context.mutex);
     uct_ep_destroy(ep);
