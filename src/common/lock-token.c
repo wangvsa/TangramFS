@@ -133,18 +133,22 @@ lock_token_t* lock_token_add_exact(lock_token_list_t* token_list, size_t offset,
 
 lock_token_t* lock_token_add_extend(lock_token_list_t* token_list, size_t offset, size_t count, int type, tangram_uct_addr_t* owner) {
     lock_token_t* token = lock_token_create(offset/LOCK_BLOCK_SIZE, (offset+count-1)/LOCK_BLOCK_SIZE, type, owner);
-    int extend_end = INT_MAX;
+    int extend_start = 0;
+    int extend_end   = INT_MAX;
 
     pthread_rwlock_wrlock(&token_list->rwlock);
     lock_token_t* tmp;
 
     int algo = 1;
 
-    // Algorithm 1: Extend to the farest possible end block
+    // Algorithm 1: Extend to the farest possible start and end block
     if(algo == 1) {
         LL_FOREACH(token_list->head, tmp) {
             if( (tmp->block_start > token->block_end) && (tmp->block_start-1 < extend_end ) ) {
-                extend_end = tmp->block_start - 1;
+                extend_end   = tmp->block_start - 1;
+            }
+            if( (tmp->block_end < token->block_start) && (tmp->block_end+1 > extend_start) ) {
+                extend_start = tmp->block_end + 1;
             }
         }
     }
@@ -159,7 +163,8 @@ lock_token_t* lock_token_add_extend(lock_token_list_t* token_list, size_t offset
         }
     }
 
-    token->block_end = extend_end;
+    token->block_start = extend_start;
+    token->block_end   = extend_end;
     LL_APPEND(token_list->head, token);
     pthread_rwlock_unlock(&token_list->rwlock);
 
