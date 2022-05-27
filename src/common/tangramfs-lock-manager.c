@@ -67,57 +67,36 @@ void split_lock(lock_token_list_t* token_list, lock_token_t* conflict_token, siz
     int end   = (offset+count-1) / LOCK_BLOCK_SIZE;
 
     /**
-     * Case 1:
-     * conflict token:   |---|      |------|      |------|
+     * Case 1: start >= conflict_start
+     * conflict token:   |---|      |------|      |-------|
      * request token:  |-------| or |-------| or |-------|
+     * relinquish [start, conflict_end]
      *
-     * Case 2:
-     * conflict token: |------|
-     * request token:     |-------|
+     * Case 2: start < conflict_start
+     * conflict token: |------|        |--------|
+     * request token:     |-------| or  |------|
+     * relinquish [conflict_start, end]
      *
-     * Case 3:
-     * conflict token:    |------|
-     * request token:  |-------|
-     *
-     * Case 4:
-     * conflict token: |--------------| or |---------| or |---------|
-     * request token:     |-------|        |-----|           |------|
      */
-    // Case 1, directly delete old token and then add the new one
-    if(conflict_start >= start && conflict_end <= end) {
+    int new_start, new_end;
+
+    // Case 1, shink the end
+    if(start >= conflict_start) {
         printf("Case 1, server: %d, conflict: [%d-%d], ask: [%d-%d]\n", server, conflict_start, conflict_end, start, end);
-        lock_token_delete(token_list, conflict_token);
+        new_start = conflict_start;
+        new_end   = start - 1;
     }
-    // Case 2, shink the end
-    else if(conflict_start < start && conflict_end < end) {
+    // Case 2
+    else {
         printf("Case 2, server: %d, conflict: [%d-%d], ask: [%d-%d]\n", server, conflict_start, conflict_end, start, end);
-        lock_token_update_range(token_list, conflict_token, conflict_start, start-1);
+        new_start = end + 1;
+        new_end   = conflict_end;
     }
-    // Case 3, shink the start
-    else if(conflict_start > start && conflict_end >= end) {
-        printf("Case 3, server: %d, conflict: [%d-%d], ask: [%d-%d]\n", server, conflict_start, conflict_end, start, end);
-        lock_token_update_range(token_list, conflict_token, end+1, conflict_end);
-    }
-    // Case 4, three scenarios
-    else if(conflict_start <= start && conflict_end >= end) {
-        printf("Case 4, server: %d, conflict: [%d-%d], ask: [%d-%d]\n", server, conflict_start, conflict_end, start, end);
 
-        // shink the start
-        if(conflict_start == start) {
-            lock_token_update_range(token_list, conflict_token, end+1, conflict_end);
-        }
-        // shink the end
-        else if(conflict_end == end) {
-            lock_token_update_range(token_list, conflict_token, conflict_start, start-1);
-        }
-        // split into two
-        else {
-            lock_token_update_range(token_list, conflict_token, conflict_start, start-1);
-
-            lock_token_t* right = lock_token_create(end+1, conflict_end, lock_token_type(token_list, conflict_token), lock_token_owner(token_list, conflict_token));
-            lock_token_add_direct(token_list, right);
-        }
-    }
+    if(new_start < new_end)
+        lock_token_update_range(token_list, conflict_token, new_start, new_end);
+    else
+        lock_token_delete(token_list, conflict_token);
 }
 
 
@@ -277,7 +256,7 @@ lock_acquire_result_t* tangram_lockmgr_server_acquire_lock(lock_table_t** lt, ta
     // TODO we don't consider the case where we have multiple conflicting owners.
     // e.g. P1:[0-10], P2:[10-20], Accquire[0-20]
     } else {
-        printf("server found conflict: [%d-%d], ask: [%d-%d]\n", conflict_start, conflict_end, offset/4096, (offset+count-1)/4096);
+        printf("server found conflict: [%d-%d], ask: [%ld-%ld]\n", conflict_start, conflict_end, offset/4096, (offset+count-1)/4096);
         result->result = LOCK_ACQUIRE_CONFLICT;
         result->owner  = tangram_uct_addr_duplicate(conflict_owner);
         result->token  = NULL;
