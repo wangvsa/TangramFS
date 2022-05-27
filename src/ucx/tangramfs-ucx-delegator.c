@@ -46,7 +46,7 @@ static ucs_status_t am_release_lock_client_listener(void *arg, void *buf, size_t
     return UCS_OK;
 }
 static ucs_status_t am_split_lock_request_listener(void *arg, void *buf, size_t buf_len, unsigned flags) {
-    taskmgr_append_task_to_worker(&g_taskmgr, AM_ID_SPLIT_LOCK_REQUEST, buf, buf_len, 0);
+    taskmgr_append_task_to_worker(&g_taskmgr, AM_ID_SPLIT_LOCK_REQUEST, buf, buf_len, 1);
     return UCS_OK;
 }
 static ucs_status_t am_respond_listener(void *arg, void *buf, size_t buf_len, unsigned flags) {
@@ -70,7 +70,6 @@ static ucs_status_t am_stop_listener(void *arg, void *buf, size_t buf_len, unsig
 // requested from remote delegators.
 void delegator_handle_task(task_t* task) {
 
-    // intra_context is used for all node-local clients tasks
     tangram_uct_context_t* context = &g_delegator_intra_context;
     if(task->id == AM_ID_SPLIT_LOCK_REQUEST)
         context = &g_delegator_inter_context;
@@ -147,7 +146,7 @@ void tangram_ucx_delegator_init(tfs_info_t *tfs_info) {
     uct_iface_set_am_handler(g_delegator_inter_context.iface, AM_ID_ACQUIRE_LOCK_RESPOND, am_respond_listener, NULL, 0);
     uct_iface_set_am_handler(g_delegator_inter_context.iface, AM_ID_RELEASE_LOCK_RESPOND, am_respond_listener, NULL, 0);
 
-    taskmgr_init(&g_taskmgr, 1, delegator_handle_task);
+    taskmgr_init(&g_taskmgr, 2, delegator_handle_task);
 }
 
 void tangram_ucx_delegator_register_rpc(void* (*user_handler)(int8_t, tangram_uct_addr_t*, void*, uint8_t*, size_t*)) {

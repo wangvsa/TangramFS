@@ -60,8 +60,8 @@ lock_acquire_result_t* lock_acquire_result_deserialize(void* buf) {
 
 void split_lock(lock_token_list_t* token_list, lock_token_t* conflict_token, size_t offset, size_t count, bool server) {
 
-    int org_start = conflict_token->block_start;
-    int org_end   = conflict_token->block_end;
+    int conflict_start = lock_token_start(token_list, conflict_token);
+    int conflict_end   = lock_token_end(token_list, conflict_token);
 
     int start = offset / LOCK_BLOCK_SIZE;
     int end   = (offset+count-1) / LOCK_BLOCK_SIZE;
@@ -84,38 +84,37 @@ void split_lock(lock_token_list_t* token_list, lock_token_t* conflict_token, siz
      * request token:     |-------|        |-----|           |------|
      */
     // Case 1, directly delete old token and then add the new one
-    if(conflict_token->block_start >= start && conflict_token->block_end <= end) {
-        //printf("Case 1, server: %d, conflict: [%d-%d], ask: [%d-%d]\n", server, conflict_token->block_start, conflict_token->block_end, start, end);
+    if(conflict_start >= start && conflict_end <= end) {
+        printf("Case 1, server: %d, conflict: [%d-%d], ask: [%d-%d]\n", server, conflict_start, conflict_end, start, end);
         lock_token_delete(token_list, conflict_token);
     }
     // Case 2, shink the end
-    else if(conflict_token->block_start < start && conflict_token->block_end < end) {
-        printf("Case 2, server: %d, conflict: [%d-%d], ask: [%d-%d]\n", server, conflict_token->block_start, conflict_token->block_end, start, end);
-        conflict_token->block_end = start - 1;
+    else if(conflict_start < start && conflict_end < end) {
+        printf("Case 2, server: %d, conflict: [%d-%d], ask: [%d-%d]\n", server, conflict_start, conflict_end, start, end);
+        lock_token_update_range(token_list, conflict_token, conflict_start, start-1);
     }
     // Case 3, shink the start
-    else if(conflict_token->block_start > start && conflict_token->block_end >= end) {
-        printf("Case 3, server: %d, conflict: [%d-%d], ask: [%d-%d]\n", server, conflict_token->block_start, conflict_token->block_end, start, end);
-        conflict_token->block_start = end + 1;
+    else if(conflict_start > start && conflict_end >= end) {
+        printf("Case 3, server: %d, conflict: [%d-%d], ask: [%d-%d]\n", server, conflict_start, conflict_end, start, end);
+        lock_token_update_range(token_list, conflict_token, end+1, conflict_end);
     }
     // Case 4, three scenarios
-    else if(conflict_token->block_start <= start && conflict_token->block_end >= end) {
-        //printf("Case 4, server: %d, conflict: [%d-%d], ask: [%d-%d]\n", server, org_start, org_end, start, end);
+    else if(conflict_start <= start && conflict_end >= end) {
+        printf("Case 4, server: %d, conflict: [%d-%d], ask: [%d-%d]\n", server, conflict_start, conflict_end, start, end);
 
         // shink the start
-        if(conflict_token->block_start == start) {
-            conflict_token->block_start = start - 1;
+        if(conflict_start == start) {
+            lock_token_update_range(token_list, conflict_token, end+1, conflict_end);
         }
         // shink the end
-        else if(conflict_token->block_end == end) {
-            conflict_token->block_end   = end + 1;
+        else if(conflict_end == end) {
+            lock_token_update_range(token_list, conflict_token, conflict_start, start-1);
         }
         // split into two
         else {
-            conflict_token->block_start = org_start;
-            conflict_token->block_end   = start - 1;
+            lock_token_update_range(token_list, conflict_token, conflict_start, start-1);
 
-            lock_token_t* right = lock_token_create(end+1, org_end, conflict_token->type, conflict_token->owner);
+            lock_token_t* right = lock_token_create(end+1, conflict_end, lock_token_type(token_list, conflict_token), lock_token_owner(token_list, conflict_token));
             lock_token_add_direct(token_list, right);
         }
     }
@@ -145,7 +144,7 @@ lock_token_t* tangram_lockmgr_delegator_acquire_lock(lock_table_t** lt, tangram_
         // Delete my lock token locally and
         // ask the server to upgrade my lock
         // use the same AM_ID_ACQUIRE_LOCK_REQUEST RPC
-        if(token->type != type && type == LOCK_TYPE_WR) {
+        if(lock_token_type(&entry->token_list, token) != type && type == LOCK_TYPE_WR) {
             lock_token_delete(&entry->token_list, token);
         } else {
         // Case 2:
@@ -245,7 +244,7 @@ lock_acquire_result_t* tangram_lockmgr_server_acquire_lock(lock_table_t** lt, ta
     result->token = lock_token_find_cover(&entry->token_list, offset, count);
     if( result->token && (tangram_uct_addr_compare(result->token->owner, delegator) == 0) ) {
         if(type == LOCK_TYPE_WR)
-            lock_token_update_type(result->token, type);
+            lock_token_update_type(&entry->token_list, result->token, type);
         return result;
     }
 
@@ -265,17 +264,22 @@ lock_acquire_result_t* tangram_lockmgr_server_acquire_lock(lock_table_t** lt, ta
     }
 
     // Someone has already held the lock
+    int conflict_start = lock_token_start(&entry->token_list, conflict_token);
+    int conflict_end   = lock_token_end(&entry->token_list, conflict_token);
+    int conflict_type  = lock_token_type(&entry->token_list, conflict_token);
+    tangram_uct_addr_t* conflict_owner = lock_token_owner(&entry->token_list, conflict_token);
 
     // Case 1. Both are read locks
-    if(type == conflict_token->type && type == LOCK_TYPE_RD) {
+    if(type == conflict_type && type == LOCK_TYPE_RD) {
     // Case 2. Different lock type, split the current owner's lock
     // the requestor is responsible for contatcing the owner
     //
     // TODO we don't consider the case where we have multiple conflicting owners.
     // e.g. P1:[0-10], P2:[10-20], Accquire[0-20]
     } else {
+        printf("server found conflict: [%d-%d], ask: [%d-%d]\n", conflict_start, conflict_end, offset/4096, (offset+count-1)/4096);
         result->result = LOCK_ACQUIRE_CONFLICT;
-        result->owner  = tangram_uct_addr_duplicate(conflict_token->owner);
+        result->owner  = tangram_uct_addr_duplicate(conflict_owner);
         result->token  = NULL;
     }
 

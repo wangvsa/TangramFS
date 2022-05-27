@@ -59,8 +59,9 @@ void* delegator_rpc_handler(int8_t id, tangram_uct_addr_t* client, void* data, u
     } else if(id == AM_ID_SPLIT_LOCK_REQUEST) {
         rpc_in_t* in = rpc_in_unpack(data);
         assert(in->num_intervals == 1);
-        tangram_debug("[tangramfs delegator %s] split lock, filename: %s, offset:%lu, count: %lu\n", hostname, in->filename, in->intervals[0].offset, in->intervals[0].count);
+        tangram_debug("[tangramfs delegator %s] split lock start, filename: %s, offset:%lu, count: %lu\n", hostname, in->filename, in->intervals[0].offset, in->intervals[0].count);
         tangram_lockmgr_delegator_split_lock(g_lt, in->filename, in->intervals[0].offset, in->intervals[0].count, in->intervals[0].type);
+        tangram_debug("[tangramfs delegator %s] split lock done, filename: %s, offset:%lu, count: %lu\n", hostname, in->filename, in->intervals[0].offset, in->intervals[0].count);
         rpc_in_free(in);
         respond = malloc(sizeof(int));
         *respond_len = sizeof(int);

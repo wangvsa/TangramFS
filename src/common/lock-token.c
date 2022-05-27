@@ -8,6 +8,7 @@
 
 void lock_token_free(lock_token_t* token) {
     tangram_uct_addr_free(token->owner);
+    free(token->owner);
     free(token);
 }
 
@@ -214,8 +215,48 @@ void lock_token_list_destroy(lock_token_list_t* token_list) {
     pthread_rwlock_unlock(&token_list->rwlock);
 }
 
-void lock_token_update_type(lock_token_t* token, int type) {
-    // TODO should we protect this with a lock?
-    // should this funciton be thread-safe?
+void lock_token_update_type(lock_token_list_t* token_list, lock_token_t* token, int type) {
+    pthread_rwlock_wrlock(&token_list->rwlock);
     token->type = type;
+    pthread_rwlock_unlock(&token_list->rwlock);
 }
+
+int lock_token_update_range(lock_token_list_t* token_list, lock_token_t* token, int start, int end) {
+    pthread_rwlock_wrlock(&token_list->rwlock);
+    token->block_start = start;
+    token->block_end   = end;
+    pthread_rwlock_unlock(&token_list->rwlock);
+}
+
+int lock_token_start(lock_token_list_t* token_list, lock_token_t* token) {
+    int start;
+    pthread_rwlock_rdlock(&token_list->rwlock);
+    start = token->block_start;
+    pthread_rwlock_unlock(&token_list->rwlock);
+    return start;
+}
+
+int lock_token_end(lock_token_list_t* token_list, lock_token_t* token) {
+    int end;
+    pthread_rwlock_rdlock(&token_list->rwlock);
+    end = token->block_end;
+    pthread_rwlock_unlock(&token_list->rwlock);
+    return end;
+}
+
+int lock_token_type(lock_token_list_t* token_list, lock_token_t* token) {
+    int type;
+    pthread_rwlock_rdlock(&token_list->rwlock);
+    type = token->type;
+    pthread_rwlock_unlock(&token_list->rwlock);
+    return type;
+}
+
+tangram_uct_addr_t* lock_token_owner(lock_token_list_t* token_list, lock_token_t* token) {
+    tangram_uct_addr_t* owner;
+    pthread_rwlock_rdlock(&token_list->rwlock);
+    owner = token->owner;
+    pthread_rwlock_unlock(&token_list->rwlock);
+    return owner;
+}
+
