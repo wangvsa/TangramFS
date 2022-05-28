@@ -83,13 +83,13 @@ void split_lock(lock_token_list_t* token_list, lock_token_t* conflict_token, siz
 
     // Case 1, shink the end
     if(start >= conflict_start) {
-        printf("Case 1, server: %d, conflict: [%d-%d], ask: [%d-%d]\n", server, conflict_start, conflict_end, start, end);
+        //printf("Case 1, server: %d, conflict: [%d-%d], ask: [%d-%d]\n", server, conflict_start, conflict_end, start, end);
         new_start = conflict_start;
         new_end   = start - 1;
     }
     // Case 2
     else {
-        printf("Case 2, server: %d, conflict: [%d-%d], ask: [%d-%d]\n", server, conflict_start, conflict_end, start, end);
+        //printf("Case 2, server: %d, conflict: [%d-%d], ask: [%d-%d]\n", server, conflict_start, conflict_end, start, end);
         new_start = end + 1;
         new_end   = conflict_end;
     }
@@ -259,7 +259,7 @@ lock_acquire_result_t* tangram_lockmgr_server_acquire_lock(lock_table_t** lt, ta
     // TODO we don't consider the case where we have multiple conflicting owners.
     // e.g. P1:[0-10], P2:[10-20], Accquire[0-20]
     } else {
-        printf("server found conflict: [%d-%d], ask: [%ld-%ld]\n", conflict_start, conflict_end, offset/4096, (offset+count-1)/4096);
+        //printf("server found conflict: [%d-%d], ask: [%ld-%ld]\n", conflict_start, conflict_end, offset/4096, (offset+count-1)/4096);
         result->result = LOCK_ACQUIRE_CONFLICT;
         result->owner  = tangram_uct_addr_duplicate(conflict_owner);
         result->token  = NULL;
