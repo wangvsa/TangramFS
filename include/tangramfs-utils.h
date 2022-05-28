@@ -35,6 +35,7 @@ typedef struct tfs_info {
 
     int  role;                  // client (delegator) or server
     bool use_delegator;
+    int  lock_algo;             // Lock accquire algorithm, exact or extend
 
 } tfs_info_t;
 

@@ -12,6 +12,7 @@
 #include "tangramfs-lock-manager.h"
 
 static lock_table_t* g_lt;
+static tfs_info_t    g_tfs_info;
 
 /**
  * Return a respond, can be NULL
@@ -65,7 +66,7 @@ void* server_rpc_handler(int8_t id, tangram_uct_addr_t* client, void* data, uint
         assert(in->num_intervals == 1);
         //tangram_debug("[tangramfs server] acquire lock, filename: %s, ask [%ld-%ld] start\n",
         //        in->filename, in->intervals[0].offset/LOCK_BLOCK_SIZE, (in->intervals[0].offset+in->intervals[0].count-1)/LOCK_BLOCK_SIZE);
-        lock_acquire_result_t* res = tangram_lockmgr_server_acquire_lock(&g_lt, client, in->filename, in->intervals[0].offset, in->intervals[0].count, in->intervals[0].type);
+        lock_acquire_result_t* res = tangram_lockmgr_server_acquire_lock(&g_lt, client, in->filename, in->intervals[0].offset, in->intervals[0].count, in->intervals[0].type, g_tfs_info.lock_algo);
         assert(tangram_uct_addr_comp(token->owner, client) == 0);
 
         if(res->result == LOCK_ACQUIRE_SUCCESS) {
@@ -108,10 +109,10 @@ void* server_rpc_handler(int8_t id, tangram_uct_addr_t* client, void* data, uint
     return respond;
 }
 
-void tangram_server_start(tfs_info_t* tfs_info) {
+void tangram_server_start() {
     tangram_metamgr_init();
     tangram_lockmgr_init(&g_lt);
-    tangram_ucx_server_init(tfs_info);
+    tangram_ucx_server_init(&g_tfs_info);
     tangram_ucx_server_register_rpc(server_rpc_handler);
 
     // Main thread will enther the progress loop
@@ -129,25 +130,24 @@ int main(int argc, char* argv[]) {
 
     MPI_Init(&argc, &argv);
 
-    tfs_info_t tfs_info;
-    tangram_info_init(&tfs_info);
+    tangram_info_init(&g_tfs_info);
 
     if( strcmp(argv[1], "start") == 0 ) {
-        tfs_info.role = TANGRAM_UCX_ROLE_SERVER;
+        g_tfs_info.role = TANGRAM_UCX_ROLE_SERVER;
         tangram_info("[tangramfs] Global server started\n");
-        tangram_server_start(&tfs_info);
+        tangram_server_start();
     } else if( strcmp(argv[1], "stop") == 0 ) {
-        tfs_info.role = TANGRAM_UCX_ROLE_CLIENT;
-        tangram_rpc_service_start(&tfs_info);
+        g_tfs_info.role = TANGRAM_UCX_ROLE_CLIENT;
+        tangram_rpc_service_start(&g_tfs_info);
 
-        if(tfs_info.mpi_rank == 0)
+        if(g_tfs_info.mpi_rank == 0)
             tangram_ucx_stop_server();
 
-        tangram_rpc_service_stop(&tfs_info);
+        tangram_rpc_service_stop(&g_tfs_info);
         tangram_info("[tangramfs] Global server stoped\n");
     }
 
-    tangram_info_finalize(&tfs_info);
+    tangram_info_finalize(&g_tfs_info);
     MPI_Finalize();
 
     return 0;

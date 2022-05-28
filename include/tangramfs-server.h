@@ -3,6 +3,6 @@
 
 #include "tangramfs.h"
 
-void tangram_server_start(tfs_info_t* tfs_info);
+void tangram_server_start();
 
 #endif

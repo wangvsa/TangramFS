@@ -3,6 +3,7 @@
 #include "utlist.h"
 #include "uthash.h"
 #include "lock-token.h"
+#include "tangramfs.h"
 #include "tangramfs-utils.h"
 #include "tangramfs-lock-manager.h"
 #include "tangramfs-ucx-server.h"
@@ -204,7 +205,7 @@ void tangram_lockmgr_delegator_split_lock(lock_table_t* lt, char* filename, size
     }
 }
 
-lock_acquire_result_t* tangram_lockmgr_server_acquire_lock(lock_table_t** lt, tangram_uct_addr_t* delegator, char* filename, size_t offset, size_t count, int type) {
+lock_acquire_result_t* tangram_lockmgr_server_acquire_lock(lock_table_t** lt, tangram_uct_addr_t* delegator, char* filename, size_t offset, size_t count, int type, int lock_algo) {
     lock_acquire_result_t *result = malloc(sizeof(lock_acquire_result_t));
     result->result = LOCK_ACQUIRE_SUCCESS;
 
@@ -237,8 +238,10 @@ lock_acquire_result_t* tangram_lockmgr_server_acquire_lock(lock_table_t** lt, ta
     // 2. We can try to extend the lock range
     //    e.g., user asks for [0, 100], we can give [0, infinity]
     if(!conflict_token) {
-        //result->token = lock_token_add_exact(&entry->token_list, offset, count, type, delegator);
-        result->token = lock_token_add_extend(&entry->token_list, offset, count, type, delegator);
+        if(lock_algo == TANGRAM_LOCK_ALGO_EXACT)
+            result->token = lock_token_add_exact(&entry->token_list, offset, count, type, delegator);
+        if(lock_algo == TANGRAM_LOCK_ALGO_EXTEND)
+            result->token = lock_token_add_extend(&entry->token_list, offset, count, type, delegator);
         return result;
     }
 

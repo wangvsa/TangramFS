@@ -7,20 +7,6 @@
 #include "tangramfs.h"
 #include "tangramfs-utils.h"
 
-static size_t memory_usage = 0;
-
-/*
-void* tangram_malloc(size_t size) {
-    memory_usage += size;
-    return malloc(size);
-}
-
-void tangram_free(void* ptr, size_t size) {
-    memory_usage -= size;
-    free(ptr);
-}
-*/
-
 void tangram_info_init(tfs_info_t* tfs_info) {
     MPI_Comm_dup(MPI_COMM_WORLD, &tfs_info->mpi_comm);
     MPI_Comm_rank(tfs_info->mpi_comm, &tfs_info->mpi_rank);
@@ -41,9 +27,9 @@ void tangram_info_init(tfs_info_t* tfs_info) {
     realpath(buffer_dir, tfs_info->tfs_dir);
 
     const char* rpc_dev = getenv(TANGRAM_UCX_RPC_DEV_ENV);
-    const char* rpc_tl = getenv(TANGRAM_UCX_RPC_TL_ENV);
+    const char* rpc_tl  = getenv(TANGRAM_UCX_RPC_TL_ENV);
     const char* rma_dev = getenv(TANGRAM_UCX_RMA_DEV_ENV);
-    const char* rma_tl = getenv(TANGRAM_UCX_RMA_TL_ENV);
+    const char* rma_tl  = getenv(TANGRAM_UCX_RMA_TL_ENV);
 
     if(!rpc_dev || !rpc_tl || !rma_dev || !rma_tl) {
         tangram_info("ERROR: Please set UCX device and transport.\n\n");
@@ -68,6 +54,15 @@ void tangram_info_init(tfs_info_t* tfs_info) {
     const char* use_delegator = getenv(TANGRAM_USE_DELEGATOR_ENV);
     if(use_delegator)
         tfs_info->use_delegator = atoi(use_delegator);
+
+    tfs_info->lock_algo = TANGRAM_LOCK_ALGO_EXACT;
+    const char* lock_algo_str = getenv(TANGRAM_LOCK_ALGO_ENV);
+    if(lock_algo_str)  {
+        if(strcmp(lock_algo_str, "exact") == 0)
+            tfs_info->lock_algo = TANGRAM_LOCK_ALGO_EXACT;
+        if(strcmp(lock_algo_str, "extend") == 0)
+            tfs_info->lock_algo = TANGRAM_LOCK_ALGO_EXTEND;
+    }
 }
 
 void tangram_info_finalize(tfs_info_t *tfs_info) {

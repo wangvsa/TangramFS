@@ -25,7 +25,7 @@ void tangram_lockmgr_finalize(lock_table_t** lt);
 
 // Delegator has its own acquire lock function
 lock_token_t* tangram_lockmgr_delegator_acquire_lock(lock_table_t** lt, tangram_uct_addr_t* client, char* filename, size_t offset, size_t count, int type);
-lock_acquire_result_t* tangram_lockmgr_server_acquire_lock(lock_table_t** lt, tangram_uct_addr_t* client, char* filename, size_t offset, size_t count, int type);
+lock_acquire_result_t* tangram_lockmgr_server_acquire_lock(lock_table_t** lt, tangram_uct_addr_t* client, char* filename, size_t offset, size_t count, int type, int lock_algo);
 
 void tangram_lockmgr_delegator_split_lock(lock_table_t* lt, char* filename, size_t offset, size_t count, int type);
 

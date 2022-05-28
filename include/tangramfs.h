@@ -11,9 +11,11 @@
 #define TANGRAM_SESSION_SEMANTICS       3
 #define TANGRAM_CUSTOM_SEMANTICS        4
 
+#define TANGRAM_LOCK_ALGO_EXACT         1
+#define TANGRAM_LOCK_ALGO_EXTEND        2
+
 /**
  * A list of environment variables can be set
- *
  */
 #define TANGRAM_PERSIST_DIR_ENV         "TANGRAM_PERSIST_DIR"
 #define TANGRAM_BUFFER_DIR_ENV          "TANGRAM_BUFFER_DIR"
@@ -25,6 +27,7 @@
 // optional
 #define TANGRAM_DEBUG_ENV               "TANGRAM_DEBUG"
 #define TANGRAM_USE_DELEGATOR_ENV       "TANGRAM_USE_DELEGATOR"
+#define TANGRAM_LOCK_ALGO_ENV           "TANGRAM_LOCK_ALGO"
 
 
 typedef struct tfs_file {
