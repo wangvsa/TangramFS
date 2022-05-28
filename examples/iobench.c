@@ -12,6 +12,7 @@
 
 #define WRITE_MODE_STRIDED    "strided"
 #define WRITE_MODE_CONTIGUOUS "contiguous"
+#define WRITE_MODE_FPP        "fpp"
 #define READ_MODE_CONTIGUOUS  "contiguous"
 #define READ_MODE_RANDOM      "random"
 
@@ -38,9 +39,6 @@ static int    write_iops, read_iops;
 static double write_bandwidth, read_bandwidth;
 
 void write_contiguous() {
-    char hostname[128];
-    gethostname(hostname, 128);
-
     FILE* fp = fopen(FILENAME, "wb");
 
     char* data = malloc(sizeof(char)*access_size);
@@ -74,6 +72,29 @@ void write_strided() {
         fwrite(data, 1, access_size, fp);
     }
 
+    MPI_Barrier(MPI_COMM_WORLD);
+    write_tend = MPI_Wtime();
+
+    free(data);
+    fclose(fp);
+}
+
+// file per process
+void write_fpp() {
+    char fname[256];
+    sprintf(fname, "%s.%d", FILENAME, mpi_rank);
+
+    FILE* fp = fopen(fname, "wb");
+
+    char*  data = malloc(sizeof(char)*access_size);
+    size_t offset = 0;
+    fseek(fp, offset, SEEK_SET);
+
+    MPI_Barrier(MPI_COMM_WORLD);
+    write_tstart = MPI_Wtime();
+    for(int i = 0; i < num_accesses; i++) {
+        fwrite(data, 1, access_size, fp);
+    }
     MPI_Barrier(MPI_COMM_WORLD);
     write_tend = MPI_Wtime();
 
@@ -178,6 +199,8 @@ int main(int argc, char* argv[]) {
         write_contiguous();
     if(strcmp(write_mode, WRITE_MODE_STRIDED) == 0)
         write_strided();
+    if(strcmp(write_mode, WRITE_MODE_FPP) == 0)
+        write_fpp();
 
     // Read phase
     MPI_Barrier(MPI_COMM_WORLD);
