@@ -9,7 +9,18 @@
 #include "tangramfs-ucx-delegator.h"
 #include "tangramfs-ucx-taskmgr.h"
 
-#define NUM_THREADS 1
+#define NUM_THREADS         1
+#define NUM_OUTGOING_RPC    4
+
+typedef struct rpc_respond {
+    pthread_mutex_t mutex;
+    pthread_cond_t  cond;
+    volatile bool   in_use;
+    volatile bool   flag;
+    void**          ptr;
+} rpc_respond_t;
+static rpc_respond_t* g_responds;
+
 
 static tfs_info_t*           g_tfs_info;
 static taskmgr_t             g_taskmgr;
@@ -50,11 +61,16 @@ static ucs_status_t am_split_lock_request_listener(void *arg, void *buf, size_t 
     return UCS_OK;
 }
 static ucs_status_t am_respond_listener(void *arg, void *buf, size_t buf_len, unsigned flags) {
-    pthread_mutex_lock(&g_delegator_inter_context.cond_mutex);
-    unpack_rpc_buffer(buf, buf_len, TANGRAM_UCT_ADDR_IGNORE, g_delegator_inter_context.respond_ptr);
-    g_delegator_inter_context.respond_flag = true;
-    pthread_cond_signal(&g_delegator_inter_context.cond);
-    pthread_mutex_unlock(&g_delegator_inter_context.cond_mutex);
+    uint64_t seq_id;
+    void*    ptr;
+    unpack_rpc_buffer(buf, buf_len, &seq_id, TANGRAM_UCT_ADDR_IGNORE, &ptr);
+
+    pthread_mutex_lock(&g_responds[seq_id].mutex);
+    g_responds[seq_id].flag   = true;
+    *(g_responds[seq_id].ptr) = ptr;
+    pthread_cond_signal(&g_responds[seq_id].cond);
+    pthread_mutex_unlock(&g_responds[seq_id].mutex);
+
     return UCS_OK;
 }
 
@@ -80,34 +96,44 @@ void delegator_handle_task(task_t* task) {
 
     task->respond = (*delegator_am_handler)(task->id, &task->client, task->data, &task->id, &task->respond_len);
 
-    do_uct_am_short_lock(&context->mutex, ep, task->id, &context->self_addr, task->respond, task->respond_len);
+    do_uct_am_short_lock(&context->mutex, ep, task->id, task->seq_id, &context->self_addr, task->respond, task->respond_len);
 
     pthread_mutex_lock(&context->mutex);
     uct_ep_destroy(ep);
     pthread_mutex_unlock(&context->mutex);
 }
 
-// Ensure we have at most one outgoing inter-process RPC at a time.
-// This guarantees that context->respond_xxx will be not overwritten
-// by different RPC requests.
-static pthread_mutex_t g_rpc_mutex = PTHREAD_MUTEX_INITIALIZER;
 void delegator_sendrecv_core(uint8_t id, tangram_uct_context_t* context, uct_ep_h ep, void* data, size_t length, void** respond_ptr) {
-    pthread_mutex_lock(&g_rpc_mutex);
+    int seq_id = 0;
+    if(respond_ptr != NULL) {
+        int i = 0;
+        while(true) {
+            pthread_mutex_lock(&g_responds[i].mutex);
+            if(g_responds[i].in_use) {
+                pthread_mutex_unlock(&g_responds[i].mutex);
+                i = (i + 1) % NUM_OUTGOING_RPC;
+            } else {
+                seq_id = i;
+                g_responds[i].in_use = true;
+                g_responds[i].flag   = false;
+                g_responds[i].ptr    = respond_ptr;
+                pthread_mutex_unlock(&g_responds[i].mutex);
+                break;
+            }
+        }
 
-    context->respond_flag = false;
-    context->respond_ptr  = respond_ptr;
+    }
 
-    do_uct_am_short_lock(&context->mutex, ep, id, &context->self_addr, data, length);
+    do_uct_am_short_lock(&context->mutex, ep, id, seq_id, &context->self_addr, data, length);
 
     // wait for respond
     if(respond_ptr != NULL) {
-        pthread_mutex_lock(&context->cond_mutex);
-        while(!context->respond_flag)
-            pthread_cond_wait(&context->cond, &context->cond_mutex);
-        pthread_mutex_unlock(&context->cond_mutex);
+        pthread_mutex_lock(&g_responds[seq_id].mutex);
+        while(!g_responds[seq_id].flag)
+            pthread_cond_wait(&g_responds[seq_id].cond, &g_responds[seq_id].mutex);
+        g_responds[seq_id].in_use = false;
+        pthread_mutex_unlock(&g_responds[seq_id].mutex);
     }
-
-    pthread_mutex_unlock(&g_rpc_mutex);
 }
 
 void tangram_ucx_delegator_sendrecv_server(uint8_t id, void* data, size_t length, void** respond_ptr) {
@@ -129,6 +155,14 @@ void tangram_ucx_delegator_sendrecv_delegator(uint8_t id, tangram_uct_addr_t* de
 
 void tangram_ucx_delegator_init(tfs_info_t *tfs_info) {
     g_tfs_info = tfs_info;
+
+    g_responds = malloc(sizeof(rpc_respond_t) * NUM_OUTGOING_RPC);
+    for(int i = 0; i < NUM_OUTGOING_RPC; i++) {
+        g_responds[i].in_use = false;
+        pthread_mutex_init(&g_responds[i].mutex, NULL);
+        pthread_cond_init(&g_responds[i].cond, NULL);
+    }
+
 
     ucs_status_t status;
     ucs_async_context_create(UCS_ASYNC_MODE_THREAD_SPINLOCK, &g_delegator_async);
@@ -153,7 +187,7 @@ void tangram_ucx_delegator_init(tfs_info_t *tfs_info) {
     uct_iface_set_am_handler(g_delegator_inter_context.iface, AM_ID_ACQUIRE_LOCK_RESPOND, am_respond_listener, NULL, 0);
     uct_iface_set_am_handler(g_delegator_inter_context.iface, AM_ID_RELEASE_LOCK_RESPOND, am_respond_listener, NULL, 0);
 
-    taskmgr_init(&g_taskmgr, 2, delegator_handle_task);
+    taskmgr_init(&g_taskmgr, NUM_THREADS, delegator_handle_task);
 }
 
 void tangram_ucx_delegator_register_rpc(void* (*user_handler)(uint8_t, tangram_uct_addr_t*, void*, uint8_t*, size_t*)) {
@@ -187,6 +221,13 @@ void tangram_ucx_delegator_stop() {
     }
 
     taskmgr_finalize(&g_taskmgr);
+
+    for(int i = 0; i < NUM_OUTGOING_RPC; i++) {
+        pthread_cond_destroy(&g_responds[i].cond);
+        pthread_mutex_destroy(&g_responds[i].mutex);
+    }
+    free(g_responds);
+
 
     uct_ep_destroy(g_ep_server);
     tangram_uct_context_destroy(&g_delegator_intra_context);

@@ -21,7 +21,7 @@ task_t* create_task(uint8_t id, void* buf, size_t buf_len) {
     task->respond     = NULL;
     task->respond_len = 0;
     task->data        = NULL;
-    unpack_rpc_buffer(buf, buf_len, &task->client, &task->data);
+    unpack_rpc_buffer(buf, buf_len, &task->seq_id, &task->client, &task->data);
     return task;
 }
 

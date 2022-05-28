@@ -55,8 +55,9 @@ void  rma_req_free(tangram_rma_req_t* in);
 static ucs_status_t am_rma_request_listener(void *arg, void *buf, size_t buf_len, unsigned flags) {
     tangram_rma_req_t* req = malloc(sizeof(tangram_rma_req_t));
 
+    uint64_t seq_id;
     void* tmp;
-    unpack_rpc_buffer(buf, buf_len, &req->src, &tmp);
+    unpack_rpc_buffer(buf, buf_len, &seq_id, &req->src, &tmp);
     rma_req_unpack(tmp, req);
     free(tmp);
 
@@ -65,7 +66,8 @@ static ucs_status_t am_rma_request_listener(void *arg, void *buf, size_t buf_len
 }
 
 static ucs_status_t am_ep_addr_listener(void *arg, void *buf, size_t buf_len, unsigned flags) {
-    unpack_rpc_buffer(buf, buf_len, TANGRAM_UCT_ADDR_IGNORE, g_outgoing_context.respond_ptr);
+    uint64_t seq_id;
+    unpack_rpc_buffer(buf, buf_len, &seq_id, TANGRAM_UCT_ADDR_IGNORE, g_outgoing_context.respond_ptr);
     g_outgoing_context.respond_flag = true;
     return UCS_OK;
 }
@@ -83,7 +85,7 @@ void rma_sendrecv_core(uint8_t id, tangram_uct_context_t* context, tangram_uct_a
     uct_ep_h ep;
     uct_ep_create_connect(context->iface, dest, &ep);
 
-    do_uct_am_short_progress(context->worker, ep, id, &context->self_addr, data, length);
+    do_uct_am_short_progress(context->worker, ep, id, 0, &context->self_addr, data, length);
 
     // if need to wait for a respond
     if(respond_ptr != NULL) {

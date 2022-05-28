@@ -79,10 +79,10 @@ void exchange_dev_iface_addr(tangram_uct_context_t* context, tangram_uct_addr_t*
 void uct_ep_create_connect(uct_iface_h iface, tangram_uct_addr_t* dest, uct_ep_h* ep);
 
 
-void unpack_rpc_buffer(void* buf, size_t buf_len, tangram_uct_addr_t *sender, void** data_ptr);
+void unpack_rpc_buffer(void* buf, size_t buf_len, uint64_t* seq_id, tangram_uct_addr_t* sender, void** data_ptr);
 
-void do_uct_am_short_lock(pthread_mutex_t *lock, uct_ep_h ep, uint8_t id, tangram_uct_addr_t* my_addr, void* data, size_t length);
-void do_uct_am_short_progress(uct_worker_h worker, uct_ep_h ep, uint8_t id, tangram_uct_addr_t* my_addr, void* data, size_t length);
+void do_uct_am_short_lock(pthread_mutex_t *lock, uct_ep_h ep, uint8_t id, uint64_t seq_id, tangram_uct_addr_t* my_addr, void* data, size_t length);
+void do_uct_am_short_progress(uct_worker_h worker, uct_ep_h ep, uint8_t id, uint64_t seq_id, tangram_uct_addr_t* my_addr, void* data, size_t length);
 
 void* tangram_uct_addr_serialize(tangram_uct_addr_t* addr, size_t* len);
 void  tangram_uct_addr_deserialize(void* buf, tangram_uct_addr_t* addr);

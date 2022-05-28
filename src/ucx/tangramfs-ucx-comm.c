@@ -278,9 +278,16 @@ void* pack_rpc_buffer(tangram_uct_addr_t* addr, void* data, size_t inlen, size_t
     return out;
 }
 
-void unpack_rpc_buffer(void* buf, size_t buf_len, tangram_uct_addr_t *sender, void** data_ptr) {
-    buf_len = buf_len - sizeof(uint64_t);   // skip header;
-    void* ptr = buf + sizeof(uint64_t);
+void unpack_rpc_buffer(void* buf, size_t buf_len, uint64_t* seq_id, tangram_uct_addr_t *sender, void** data_ptr) {
+
+    // uint64_t header is used to pass seq_id
+    void* ptr = buf;
+    memcpy(seq_id, ptr, sizeof(uint64_t));
+
+    // buf length is the length returned from pack_rpc_buffer(),
+    // which does not include the header
+    buf_len = buf_len - sizeof(uint64_t);
+    ptr += sizeof(uint64_t);
 
     size_t dev_len, iface_len;
     memcpy(&dev_len, ptr, sizeof(size_t));
@@ -311,14 +318,14 @@ void unpack_rpc_buffer(void* buf, size_t buf_len, tangram_uct_addr_t *sender, vo
     }
 }
 
-void do_uct_am_short_lock(pthread_mutex_t *lock, uct_ep_h ep, uint8_t id, tangram_uct_addr_t* my_addr, void* data, size_t data_len) {
+void do_uct_am_short_lock(pthread_mutex_t *lock, uct_ep_h ep, uint8_t id, uint64_t seq_id, tangram_uct_addr_t* my_addr, void* data, size_t data_len) {
     size_t buf_len;
     void* buf = pack_rpc_buffer(my_addr, data, data_len, &buf_len);
 
     ucs_status_t status = UCS_OK;
     do {
         pthread_mutex_lock(lock);
-        status = uct_ep_am_short(ep, id, 0, buf, buf_len);
+        status = uct_ep_am_short(ep, id, seq_id, buf, buf_len);
         pthread_mutex_unlock(lock);
     } while (status == UCS_ERR_NO_RESOURCE);
 
@@ -326,13 +333,13 @@ void do_uct_am_short_lock(pthread_mutex_t *lock, uct_ep_h ep, uint8_t id, tangra
     assert(status == UCS_OK);
 }
 
-void do_uct_am_short_progress(uct_worker_h worker, uct_ep_h ep, uint8_t id, tangram_uct_addr_t* my_addr, void* data, size_t data_len) {
+void do_uct_am_short_progress(uct_worker_h worker, uct_ep_h ep, uint8_t id, uint64_t seq_id, tangram_uct_addr_t* my_addr, void* data, size_t data_len) {
     size_t buf_len;
     void* buf = pack_rpc_buffer(my_addr, data, data_len, &buf_len);
 
     ucs_status_t status = UCS_OK;
     do {
-        status = uct_ep_am_short(ep, id, 0, buf, buf_len);
+        status = uct_ep_am_short(ep, id, seq_id, buf, buf_len);
         uct_worker_progress(worker);
     } while (status == UCS_ERR_NO_RESOURCE);
 

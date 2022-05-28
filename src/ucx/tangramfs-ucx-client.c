@@ -41,13 +41,15 @@ static uct_ep_h g_ep_server;
  * Handles both query and post respond from server
  */
 static ucs_status_t am_inter_respond_listener(void *arg, void *buf, size_t buf_len, unsigned flags) {
-    unpack_rpc_buffer(buf, buf_len, TANGRAM_UCT_ADDR_IGNORE, g_client_inter_context.respond_ptr);
+    uint64_t seq_id;
+    unpack_rpc_buffer(buf, buf_len, &seq_id, TANGRAM_UCT_ADDR_IGNORE, g_client_inter_context.respond_ptr);
     g_client_inter_context.respond_flag = true;
     return UCS_OK;
 }
 
 static ucs_status_t am_intra_respond_listener(void *arg, void *buf, size_t buf_len, unsigned flags) {
-    unpack_rpc_buffer(buf, buf_len, TANGRAM_UCT_ADDR_IGNORE, g_client_intra_context.respond_ptr);
+    uint64_t seq_id;
+    unpack_rpc_buffer(buf, buf_len, &seq_id, TANGRAM_UCT_ADDR_IGNORE, g_client_intra_context.respond_ptr);
     g_client_intra_context.respond_flag = true;
     return UCS_OK;
 }
@@ -60,7 +62,7 @@ void client_sendrecv_core(uint8_t id, tangram_uct_context_t* context, uct_ep_h e
     context->respond_ptr  = respond_ptr;
     context->respond_flag = false;
 
-    do_uct_am_short_progress(context->worker, ep, id, &context->self_addr, data, length);
+    do_uct_am_short_progress(context->worker, ep, id, 0, &context->self_addr, data, length);
 
     // if need to wait for a respond
     if(respond_ptr != NULL) {

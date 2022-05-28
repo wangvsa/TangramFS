@@ -4,11 +4,12 @@
 
 /* Represents one RPC request */
 typedef struct _task {
-    uint8_t id;                     // UCX AM id
-    void*   respond;
-    size_t  respond_len;
-    void*   data;
-    struct  _task *next, *prev;
+    uint8_t  id;                     // UCX AM id
+    uint64_t seq_id;                 // seq id from AM header
+    void*    respond;
+    size_t   respond_len;
+    void*    data;
+    struct _task *next, *prev;
     tangram_uct_addr_t client;
 } task_t;
 

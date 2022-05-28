@@ -72,39 +72,12 @@ void server_handle_task(task_t* task) {
     pthread_mutex_unlock(&g_server_context.mutex);
 
     task->respond = (*server_am_handler)(task->id, &task->client, task->data, &task->id, &task->respond_len);
-    do_uct_am_short_lock(&g_server_context.mutex, ep, task->id, &g_server_context.self_addr, task->respond, task->respond_len);
+    do_uct_am_short_lock(&g_server_context.mutex, ep, task->id, task->seq_id, &g_server_context.self_addr, task->respond, task->respond_len);
 
     pthread_mutex_lock(&g_server_context.mutex);
     uct_ep_destroy(ep);
     pthread_mutex_unlock(&g_server_context.mutex);
 }
-
-/*
- * Not used for now
- */
-/*
-void tangram_ucx_server_sendrecv_delegator(uint8_t id, tangram_uct_addr_t* delegator, void* data, size_t length) {
-    g_server_context.respond_flag = false;
-
-    pthread_mutex_lock(&g_server_context.mutex);
-    uct_ep_h ep;
-    uct_ep_create_connect(g_server_context.iface, delegator, &ep);
-    pthread_mutex_unlock(&g_server_context.mutex);
-
-    // this call will lock the mutext itself
-    do_uct_am_short(&g_server_context.mutex, ep, id, &g_server_context.self_addr, data, length);
-
-    pthread_mutex_lock(&g_server_context.cond_mutex);
-    while(!g_server_context.respond_flag)
-        pthread_cond_wait(&g_server_context.cond, &g_server_context.cond_mutex);
-    pthread_mutex_unlock(&g_server_context.cond_mutex);
-
-    pthread_mutex_lock(&g_server_context.mutex);
-    uct_ep_destroy(ep);
-    pthread_mutex_unlock(&g_server_context.mutex);
-}
-*/
-
 
 void tangram_ucx_server_init(tfs_info_t *tfs_info) {
     g_tfs_info = tfs_info;
