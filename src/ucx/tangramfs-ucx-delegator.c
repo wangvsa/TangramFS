@@ -27,7 +27,7 @@ static tangram_uct_context_t g_delegator_inter_context;
 static uct_ep_h g_ep_server;
 
 
-void* (*delegator_am_handler)(int8_t, tangram_uct_addr_t* client, void* data, uint8_t* respond_id, size_t *respond_len);
+void* (*delegator_am_handler)(uint8_t, tangram_uct_addr_t* client, void* data, uint8_t* respond_id, size_t *respond_len);
 
 static ucs_status_t am_acquire_lock_listener(void *arg, void *buf, size_t buf_len, unsigned flags) {
     taskmgr_append_task_to_worker(&g_taskmgr, AM_ID_ACQUIRE_LOCK_REQUEST, buf, buf_len, 0);
@@ -156,7 +156,7 @@ void tangram_ucx_delegator_init(tfs_info_t *tfs_info) {
     taskmgr_init(&g_taskmgr, 2, delegator_handle_task);
 }
 
-void tangram_ucx_delegator_register_rpc(void* (*user_handler)(int8_t, tangram_uct_addr_t*, void*, uint8_t*, size_t*)) {
+void tangram_ucx_delegator_register_rpc(void* (*user_handler)(uint8_t, tangram_uct_addr_t*, void*, uint8_t*, size_t*)) {
     delegator_am_handler = user_handler;
 }
 

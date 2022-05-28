@@ -15,7 +15,7 @@ static lock_table_t *g_lt;
 /**
  * Return a respond, can be NULL
  */
-void* delegator_rpc_handler(int8_t id, tangram_uct_addr_t* client, void* data, uint8_t* respond_id, size_t *respond_len) {
+void* delegator_rpc_handler(uint8_t id, tangram_uct_addr_t* client, void* data, uint8_t* respond_id, size_t *respond_len) {
     *respond_len = 0;
     void *respond = NULL;
 
