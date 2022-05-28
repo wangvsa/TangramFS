@@ -9,7 +9,7 @@
 #include "tangramfs-ucx-delegator.h"
 #include "tangramfs-ucx-taskmgr.h"
 
-#define NUM_THREADS         1
+#define NUM_THREADS         2
 #define NUM_OUTGOING_RPC    4
 
 typedef struct rpc_respond {
@@ -57,7 +57,7 @@ static ucs_status_t am_release_lock_client_listener(void *arg, void *buf, size_t
     return UCS_OK;
 }
 static ucs_status_t am_split_lock_request_listener(void *arg, void *buf, size_t buf_len, unsigned flags) {
-    taskmgr_append_task_to_worker(&g_taskmgr, AM_ID_SPLIT_LOCK_REQUEST, buf, buf_len, 0);
+    taskmgr_append_task_to_worker(&g_taskmgr, AM_ID_SPLIT_LOCK_REQUEST, buf, buf_len, 1);
     return UCS_OK;
 }
 static ucs_status_t am_respond_listener(void *arg, void *buf, size_t buf_len, unsigned flags) {
