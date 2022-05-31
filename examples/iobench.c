@@ -218,7 +218,7 @@ int main(int argc, char* argv[]) {
         read_iops = num_accesses * mpi_size / (read_tend-read_tstart);
         read_bandwidth  = access_size / (access_size>=MB?MB:KB) * num_accesses * mpi_size / (read_tend-read_tstart);
 
-        printf("Write IOPS: %8d, Bandwidth: %.3f\t\tRead IOPS: %d, Bandwidth: %.3f\n", write_iops, write_bandwidth, read_iops, read_bandwidth);
+        printf("Write time: %3.3f, Write IOPS: %8d, Bandwidth: %.3f\t\tRead IOPS: %d, Bandwidth: %.3f\n", (write_tend-write_tstart), write_iops, write_bandwidth, read_iops, read_bandwidth);
         fflush(stdout);
     }
 
