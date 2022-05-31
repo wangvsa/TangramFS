@@ -190,19 +190,18 @@ void tangram_lockmgr_delegator_split_lock(lock_table_t* lt, char* filename, size
     token = lock_token_find_conflict(&entry->token_list, offset, count);
 
     if(token != NULL) {
-
         split_lock(&entry->token_list, token, offset, count, false);
-
-        // Once I split my token and released locally partial of it,
-        // notify the server (use release lock request) and ask it to do the same
-        void* ack;
-        size_t in_size;
-        void* in = rpc_in_pack(filename, 1, &offset, &count, &type, &in_size);
-        tangram_ucx_delegator_sendrecv_server(AM_ID_RELEASE_LOCK_REQUEST, in, in_size, &ack);
-        free(ack);
     } else {
         printf("CHEN Ask me to split lock, but no conflict found!\n");
     }
+
+    // Once I split my token and released locally partial of it,
+    // notify the server (use release lock request) and ask it to do the same
+    void* ack;
+    size_t in_size;
+    void* in = rpc_in_pack(filename, 1, &offset, &count, &type, &in_size);
+    tangram_ucx_delegator_sendrecv_server(AM_ID_RELEASE_LOCK_REQUEST, in, in_size, &ack);
+    free(ack);
 }
 
 lock_acquire_result_t* tangram_lockmgr_server_acquire_lock(lock_table_t** lt, tangram_uct_addr_t* delegator, char* filename, size_t offset, size_t count, int type, int lock_algo) {
