@@ -94,17 +94,18 @@ tfs_file_t* tfs_open(const char* pathname) {
 
     char abs_filename[PATH_MAX+64];
 
-    char* tmp = strdup(pathname);
-    for(int i = 0; i < strlen(pathname); i++) {
-        if(tmp[i] == '/')
-            tmp[i] = '_';
+    int i;
+    for(i = strlen(pathname); i >= 0; i--) {
+        if(pathname[i] == '/')
+            break;
     }
+    const char* shortname = &(pathname[i+1]);
 
-    sprintf(abs_filename, "%s/tfs_tmp.%s.%d", g_tfs_info.tfs_dir, tmp, g_tfs_info.mpi_rank);
-    free(tmp);
+
+    sprintf(abs_filename, "%s/tfs_tmp.%s.%d", g_tfs_info.tfs_dir, shortname, g_tfs_info.mpi_rank);
 
     tfs_file_t *tf = NULL;
-    HASH_FIND_STR(g_tfs_files, pathname, tf);
+    HASH_FIND_STR(g_tfs_files, shortname, tf);
 
     if(tf) {
         tf->offset = 0;
@@ -113,10 +114,10 @@ tfs_file_t* tfs_open(const char* pathname) {
         tf->stream = NULL;
         tf->fd     = -1;
         tf->offset = 0;
-        strcpy(tf->filename, pathname);
+        strcpy(tf->filename, shortname);
 
         #ifndef TANGRAMFS_PRELOAD
-        tf->fd = TANGRAM_REAL_CALL(open)(tf->filename, O_CREAT|O_RDWR, S_IRWXU);
+        tf->fd = TANGRAM_REAL_CALL(open)(pathname, O_CREAT|O_RDWR, S_IRWXU);
         // TANGRAMFS_PRELOAD=ON, the file will be opened by the real POSIX call
         // See posix-wrapper.c
         #endif
@@ -151,7 +152,6 @@ void tfs_stat(tfs_file_t* tf, struct stat* buf) {
  *         -- A coordinated flush mechanism is needed.
  */
 void tfs_flush(tfs_file_t *tf) {
-
     size_t chunk_size = 4*1024*1024;
     char* buf = malloc(chunk_size);
 
@@ -617,6 +617,13 @@ bool tangram_should_intercept(const char* filename) {
     if ( strncmp(g_tfs_info.persist_dir, abs_path, strlen(g_tfs_info.persist_dir)) == 0 ) {
         //if(TANGRAM_REAL_CALL(access)(filename, F_OK) != 0)
         //    return true;
+        // CHEN here
+        /*
+        if(strstr(filename, "sedov_hdf5_chk_") != NULL)
+            return true;
+        else
+            return false;
+        */
         return true;
     }
 
