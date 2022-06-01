@@ -175,7 +175,7 @@ void parse_cmd_args(int argc, char* argv[]) {
                 break;
         }
     }
-    printf("Write mode: %s, Read mode: %s, Access size: %ldKB, Num accesses: %d\n", write_mode, read_mode, access_size, num_accesses);
+    printf("Write mode: %s, Read mode: %s, Access size: %ldKB, Num accesses: %d\n", write_mode, read_mode, access_size/KB, num_accesses);
 }
 
 int main(int argc, char* argv[]) {
