@@ -12,6 +12,7 @@ void tangram_info_init(tfs_info_t* tfs_info) {
     MPI_Comm_rank(tfs_info->mpi_comm, &tfs_info->mpi_rank);
     MPI_Comm_size(tfs_info->mpi_comm, &tfs_info->mpi_size);
 
+    // Put processes into the same subgroup if they can access the same shared memory (i.e., on the same node).
     MPI_Comm_split_type(tfs_info->mpi_comm, MPI_COMM_TYPE_SHARED, 0, MPI_INFO_NULL, &tfs_info->mpi_intra_comm);
     MPI_Comm_rank(tfs_info->mpi_intra_comm, &tfs_info->mpi_intra_rank);
     MPI_Comm_size(tfs_info->mpi_intra_comm, &tfs_info->mpi_intra_size);
