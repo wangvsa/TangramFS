@@ -60,7 +60,7 @@ void tfs_finalize() {
     g_tfs_info.initialized = false;
 
     // Notify the server to unpost all and release all locks
-    if(g_tfs_info.semantics != TANGRAM_STRONG_SEMANTICS)
+    if(tangram_get_semantics() != TANGRAM_STRONG_SEMANTICS)
         tfs_unpost_client();
     else
         tfs_release_lock_client();

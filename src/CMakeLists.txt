@@ -49,6 +49,8 @@ set(TANGRAMFS_SRCS
         ${CMAKE_CURRENT_SOURCE_DIR}/client/tangramfs-posix-wrapper.c
         ${CMAKE_CURRENT_SOURCE_DIR}/client/tangramfs-semantics-impl.c
         ${CMAKE_CURRENT_SOURCE_DIR}/client/tangramfs-delegator.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/client/commitfs.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/client/sessionfs.c
         ${CMAKE_CURRENT_SOURCE_DIR}/common/tangramfs-utils.c
         ${CMAKE_CURRENT_SOURCE_DIR}/common/seg_tree.c
         ${CMAKE_CURRENT_SOURCE_DIR}/common/lock-token.c
