@@ -37,7 +37,7 @@ void tangram_metamgr_handle_post(tangram_uct_addr_t* client, char* filename, siz
     HASH_FIND_STR(g_stt, filename, entry);
 
     if(!entry) {
-        entry = tangram_malloc(sizeof(seg_tree_table_t));
+        entry = malloc(sizeof(seg_tree_table_t));
         seg_tree_init(&entry->tree);
         strcpy(entry->filename, filename);
         HASH_ADD_STR(g_stt, filename, entry);
@@ -145,6 +145,6 @@ void tangram_metamgr_finalize() {
     HASH_ITER(hh, g_stt, entry, tmp) {
         HASH_DEL(g_stt, entry);
         seg_tree_destroy(&entry->tree);
-        tangram_free(entry, sizeof(seg_tree_table_t));
+        free(entry);
     }
 }

@@ -2,7 +2,7 @@
 #define _TANGRAMFS_RPC_H_
 #include <stdlib.h>
 #include <string.h>
-#include "tangramfs-ucx.h"
+#include "tangramfs-ucx-comm.h"
 
 typedef struct rpc_interval {
     size_t offset;
@@ -31,7 +31,7 @@ static int rpc_in_intervals_per_am(char* filename, size_t am_max_size) {
 
     size_t interval_size = sizeof(size_t)*2+sizeof(int);
 
-    int num_intervals = (am_max_size - filelen - 64/*a safe guard, just in case*/) / interval_size;
+    int num_intervals = (am_max_size - filelen - 32/*a safe guard, just in case*/) / interval_size;
     return num_intervals;
 }
 
@@ -107,10 +107,13 @@ static void rpc_in_free(rpc_in_t *in) {
 void tangram_issue_rpc(uint8_t id, char* filename, size_t* offsets, size_t* counts, int* types, int len, void** respond_ptr);
 void tangram_issue_rma(uint8_t id, char* filename, tangram_uct_addr_t* dest, size_t *offsets, size_t *counts, int len, void* recv_buf);
 void tangram_issue_metadata_rpc(uint8_t id, const char* filename, void** respond_ptr);
+
 void tangram_rma_service_start(tfs_info_t *tfs_info, void* (*serve_rma_data_cb)(void*, size_t*));
 void tangram_rma_service_stop();
-void tangram_rpc_service_start(tfs_info_t *tfs_info, void (*revoke_lock_cb)(void*));
+
+void tangram_rpc_service_start(tfs_info_t* tfs_info);
 void tangram_rpc_service_stop();
-tangram_uct_addr_t* tangram_rpc_get_client_addr();
+
+tangram_uct_addr_t* tangram_rpc_client_inter_addr();
 
 #endif

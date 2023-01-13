@@ -3,7 +3,6 @@
 #include <stdbool.h>
 #include <sys/stat.h>
 #include "seg_tree.h"
-#include "lock-token.h"
 #include "uthash.h"
 #include "tangramfs-rpc.h"
 
@@ -12,9 +11,11 @@
 #define TANGRAM_SESSION_SEMANTICS       3
 #define TANGRAM_CUSTOM_SEMANTICS        4
 
+#define TANGRAM_LOCK_ALGO_EXACT         1
+#define TANGRAM_LOCK_ALGO_EXTEND        2
+
 /**
  * A list of environment variables can be set
- *
  */
 #define TANGRAM_PERSIST_DIR_ENV         "TANGRAM_PERSIST_DIR"
 #define TANGRAM_BUFFER_DIR_ENV          "TANGRAM_BUFFER_DIR"
@@ -25,7 +26,8 @@
 #define TANGRAM_UCX_RMA_TL_ENV          "TANGRAM_RMA_TL"
 // optional
 #define TANGRAM_DEBUG_ENV               "TANGRAM_DEBUG"
-#define TANGRAM_USE_LOCAL_SERVER_ENV    "TANGRAM_USE_LOCAL_SERVER"
+#define TANGRAM_USE_DELEGATOR_ENV       "TANGRAM_USE_DELEGATOR"
+#define TANGRAM_LOCK_ALGO_ENV           "TANGRAM_LOCK_ALGO"
 
 
 typedef struct tfs_file {
@@ -40,8 +42,6 @@ typedef struct tfs_file {
 
     struct seg_tree seg_tree;
 
-    lock_token_list_t token_list;   // lock tokens, used only for implmenting POSIX consistency
-
     UT_hash_handle hh;              // filename as key
 
 } tfs_file_t;
@@ -55,16 +55,16 @@ int tfs_close(tfs_file_t* tf);
 ssize_t tfs_write(tfs_file_t* tf, const void* buf, size_t size);
 ssize_t tfs_read(tfs_file_t* tf, void* buf, size_t size);
 ssize_t tfs_read_lazy(tfs_file_t* tf, void* buf, size_t size);
-size_t tfs_seek(tfs_file_t* tf, size_t offset, int whence);
-size_t tfs_tell(tfs_file_t* tf);
-void   tfs_stat(tfs_file_t* tf, struct stat* buf);
-void   tfs_flush(tfs_file_t* tf);
+size_t  tfs_seek(tfs_file_t* tf, size_t offset, int whence);
+size_t  tfs_tell(tfs_file_t* tf);
+void    tfs_stat(tfs_file_t* tf, struct stat* buf);
+void    tfs_flush(tfs_file_t* tf);
 
-void tfs_post(tfs_file_t* tf, size_t offset, size_t count);
-void tfs_post_file(tfs_file_t* tf);
-void tfs_unpost_file(tfs_file_t* tf);
-void tfs_unpost_client();
-int  tfs_query(tfs_file_t* tf, size_t offset, size_t count, tangram_uct_addr_t** owner);
+void    tfs_post(tfs_file_t* tf, size_t offset, size_t count);
+void    tfs_post_file(tfs_file_t* tf);
+void    tfs_unpost_file(tfs_file_t* tf);
+void    tfs_unpost_client();
+int     tfs_query(tfs_file_t* tf, size_t offset, size_t count, tangram_uct_addr_t** owner);
 
 
 // Lock based API

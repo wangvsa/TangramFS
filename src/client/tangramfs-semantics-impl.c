@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include "tangramfs.h"
+#include "lock-token.h"
 
 ssize_t tangram_write_impl(tfs_file_t* tf, const void* buf, size_t count) {
     int semantics = tangram_get_semantics();

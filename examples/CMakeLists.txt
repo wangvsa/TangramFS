@@ -1,7 +1,13 @@
 #------------------------------------------------------------------------------
 # Include source and build directories
 #------------------------------------------------------------------------------
-include_directories(${CMAKE_SOURCE_DIR}/include)
+include_directories(
+    ${CMAKE_SOURCE_DIR}/include
+    ${CMAKE_SOURCE_DIR}/src/ucx
+    ${CMAKE_SOURCE_DIR}/src/client
+    ${CMAKE_SOURCE_DIR}/src/server
+    )
+
 
 #------------------------------------------------------------------------------
 # MPI
@@ -36,6 +42,12 @@ target_link_libraries(iobench
                       PUBLIC ${MPI_C_LIBRARIES}
                      )
 
+add_executable(iobench_direct iobench_direct.c)
+target_link_libraries(iobench_direct
+                      PUBLIC ${MPI_C_LIBRARIES}
+                      tangramfs
+                      )
+
 add_executable(workflow workflow.c)
 target_link_libraries(workflow
                       PUBLIC ${MPI_C_LIBRARIES}
@@ -47,7 +59,7 @@ add_dependencies(workflow tangramfs)
 #-----------------------------------------------------------------------------
 # Add Target(s) to CMake Install
 #-----------------------------------------------------------------------------
-set(targets example workflow iobench)
+set(targets example workflow iobench iobench_direct)
 foreach(target ${targets})
     install(
         TARGETS

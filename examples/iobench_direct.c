@@ -1,9 +1,10 @@
 /**
- * To test TangramFS tunable consistency implementation
+ * To test the impact of different consistency models
+ * on performance.
+ * We have implemented commitfs and sessionfs on top of
+ * TangramFS primitives.
  *
- * TangramFS intercepts POSIX IO calls, and check which
- * consistency model was selected. Then TangramFS invokes
- * the corresponding primitives.
+ * This code directly uses APIs from commitfs and sessionfs.
  */
 #include <stdlib.h>
 #include <stdio.h>
@@ -16,6 +17,8 @@
 #include <unistd.h>
 #include <time.h>
 #include "mpi.h"
+#include "commitfs.h"
+#include "sessionfs.h"
 
 #define WRITE_MODE_STRIDED    "strided"
 #define WRITE_MODE_CONTIGUOUS "contiguous"
@@ -46,26 +49,26 @@ static int    write_iops, read_iops;
 static double write_bandwidth, read_bandwidth;
 
 void write_contiguous() {
-    FILE* fp = fopen(FILENAME, "wb");
+    tfs_file_t* tf = commitfs_open(FILENAME);
 
     char* data = malloc(sizeof(char)*access_size);
     size_t offset = mpi_rank*access_size*num_accesses;
-    fseek(fp, offset, SEEK_SET);
+    commitfs_seek(tf, offset, SEEK_SET);
 
     MPI_Barrier(MPI_COMM_WORLD);
     write_tstart = MPI_Wtime();
     for(int i = 0; i < num_accesses; i++) {
-        fwrite(data, 1, access_size, fp);
+        commitfs_write(tf, data, access_size);
     }
     MPI_Barrier(MPI_COMM_WORLD);
     write_tend = MPI_Wtime();
 
     free(data);
-    fclose(fp);
+    commitfs_close(tf);
 }
 
 void write_strided() {
-    FILE* fp = fopen(FILENAME, "wb");
+    tfs_file_t* tf = commitfs_open(FILENAME);
 
     size_t offset;
     char* data = malloc(sizeof(char)*access_size);
@@ -75,15 +78,15 @@ void write_strided() {
 
     for(int i = 0; i < num_accesses; i++) {
         size_t offset = mpi_size*access_size*i + mpi_rank*access_size;
-        fseek(fp, offset, SEEK_SET);
-        fwrite(data, 1, access_size, fp);
+        commitfs_seek(tf, offset, SEEK_SET);
+        commitfs_write(tf, data, access_size);
     }
 
     MPI_Barrier(MPI_COMM_WORLD);
     write_tend = MPI_Wtime();
 
     free(data);
-    fclose(fp);
+    commitfs_close(tf);
 }
 
 // file per process
@@ -91,46 +94,46 @@ void write_fpp() {
     char fname[256];
     sprintf(fname, "%s.%d", FILENAME, mpi_rank);
 
-    FILE* fp = fopen(fname, "wb");
+    tfs_file_t* tf = commitfs_open(fname);
 
     char*  data = malloc(sizeof(char)*access_size);
     size_t offset = 0;
-    fseek(fp, offset, SEEK_SET);
+    commitfs_seek(tf, offset, SEEK_SET);
 
     MPI_Barrier(MPI_COMM_WORLD);
     write_tstart = MPI_Wtime();
     for(int i = 0; i < num_accesses; i++) {
-        fwrite(data, 1, access_size, fp);
+        commitfs_write(tf, data, access_size);
     }
     MPI_Barrier(MPI_COMM_WORLD);
     write_tend = MPI_Wtime();
 
     free(data);
-    fclose(fp);
+    commitfs_close(tf);
 }
 
 void read_contiguous() {
-    FILE* fp = fopen(FILENAME, "rb");
+    tfs_file_t* tf = commitfs_open(FILENAME);
 
     char* data = malloc(sizeof(char)*access_size);
 
     size_t offset = mpi_rank*access_size*num_accesses;
-    fseek(fp, offset, SEEK_SET);
+    commitfs_seek(tf, offset, SEEK_SET);
 
     MPI_Barrier(MPI_COMM_WORLD);
     read_tstart = MPI_Wtime();
     for(int i = 0; i < num_accesses; i++) {
-        fread(data, 1, access_size, fp);
+        commitfs_read(tf, data, access_size);
     }
     MPI_Barrier(MPI_COMM_WORLD);
     read_tend = MPI_Wtime();
 
     free(data);
-    fclose(fp);
+    commitfs_close(tf);
 }
 
 void read_random() {
-    FILE* fp = fopen(FILENAME, "rb");
+    tfs_file_t* tf = commitfs_open(FILENAME);
     struct stat st;
 
     char* data = malloc(sizeof(char)*access_size);
@@ -144,14 +147,14 @@ void read_random() {
     read_tstart = MPI_Wtime();
     for(int i = 0; i < num_accesses; i++) {
         offset = (rand() % num_blocks) * access_size;
-        fseek(fp, offset, SEEK_SET);
-        fread(data, 1, access_size, fp);
+        commitfs_seek(tf, offset, SEEK_SET);
+        commitfs_read(tf, data, access_size);
     }
     MPI_Barrier(MPI_COMM_WORLD);
     read_tend = MPI_Wtime();
 
     free(data);
-    fclose(fp);
+    commitfs_close(tf);
 }
 
 void init_args() {
@@ -190,6 +193,7 @@ int main(int argc, char* argv[]) {
     MPI_Init_thread(&argc, &argv, MPI_THREAD_MULTIPLE, &provided);
     MPI_Comm_size(MPI_COMM_WORLD, &mpi_size);
     MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
+    tfs_init();
 
     if(mpi_rank == 0) {
         init_args();
@@ -229,6 +233,7 @@ int main(int argc, char* argv[]) {
         fflush(stdout);
     }
 
+    tfs_finalize();
     MPI_Finalize();
     return 0;
 }

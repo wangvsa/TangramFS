@@ -1,3 +1,4 @@
+#define _GNU_SOURCE
 #define _POSIX_C_SOURCE 200112L
 #define NI_MAXHOST      1025
 #include <stdio.h>
@@ -7,39 +8,15 @@
 #include <unistd.h>
 #include <alloca.h>
 #include <mpi.h>
-#include "tangramfs-utils.h"
+#include "tangramfs.h"
 #include "tangramfs-ucx-comm.h"
+#include "tangramfs-posix-wrapper.h"
 
 
-void init_iface(char* dev_name, char* tl_name, tangram_uct_context_t *context) {
-    ucs_status_t        status;
-    uct_iface_config_t  *config; /* Defines interface configuration options */
-    uct_iface_params_t  params;
-    params.field_mask           = UCT_IFACE_PARAM_FIELD_OPEN_MODE   |
-                                  UCT_IFACE_PARAM_FIELD_DEVICE      |
-                                  UCT_IFACE_PARAM_FIELD_STATS_ROOT  |
-                                  UCT_IFACE_PARAM_FIELD_RX_HEADROOM |
-                                  UCT_IFACE_PARAM_FIELD_CPU_MASK;
-    params.open_mode            = UCT_IFACE_OPEN_MODE_DEVICE;
-    params.mode.device.dev_name = dev_name;
-    params.mode.device.tl_name  = tl_name;
-    params.stats_root           = NULL;
-    params.rx_headroom          = 0;
-
-    // TODO??
-    UCS_CPU_ZERO(&params.cpu_mask);
-
-    uct_md_iface_config_read(context->md, tl_name, NULL, NULL, &config);
-    status = uct_iface_open(context->md, context->worker, &params, config, &context->iface);
-    uct_config_release(config);
-
-    // enable progress
-    uct_iface_progress_enable(context->iface, UCT_PROGRESS_SEND | UCT_PROGRESS_RECV);
-
-    // get attr
-    uct_iface_query(context->iface, &context->iface_attr);
-}
-
+/*
+ * search for dev and tl
+ * This will open context->md and set context->md_attr
+ */
 void dev_tl_lookup(char* dev_name, char* tl_name, tangram_uct_context_t *context) {
 
     uct_component_h* components;
@@ -93,6 +70,38 @@ void dev_tl_lookup(char* dev_name, char* tl_name, tangram_uct_context_t *context
     uct_release_component_list(components);
 }
 
+void init_iface(char* dev_name, char* tl_name, tangram_uct_context_t *context) {
+
+    dev_tl_lookup(dev_name, tl_name, context);
+
+    ucs_status_t        status;
+    uct_iface_config_t  *config; /* Defines interface configuration options */
+    uct_iface_params_t  params;
+    params.field_mask           = UCT_IFACE_PARAM_FIELD_OPEN_MODE   |
+                                  UCT_IFACE_PARAM_FIELD_DEVICE      |
+                                  UCT_IFACE_PARAM_FIELD_STATS_ROOT  |
+                                  UCT_IFACE_PARAM_FIELD_RX_HEADROOM |
+                                  UCT_IFACE_PARAM_FIELD_CPU_MASK;
+    params.open_mode            = UCT_IFACE_OPEN_MODE_DEVICE;
+    params.mode.device.dev_name = dev_name;
+    params.mode.device.tl_name  = tl_name;
+    params.stats_root           = NULL;
+    params.rx_headroom          = 0;
+
+    // TODO??
+    UCS_CPU_ZERO(&params.cpu_mask);
+
+    uct_md_iface_config_read(context->md, tl_name, NULL, NULL, &config);
+    status = uct_iface_open(context->md, context->worker, &params, config, &context->iface);
+    uct_config_release(config);
+
+    // enable progress
+    uct_iface_progress_enable(context->iface, UCT_PROGRESS_SEND | UCT_PROGRESS_RECV);
+
+    // get attr
+    uct_iface_query(context->iface, &context->iface_attr);
+}
+
 void exchange_dev_iface_addr(tangram_uct_context_t* context, tangram_uct_addr_t* peer_addrs) {
     int mpi_size;
     MPI_Comm_size(MPI_COMM_WORLD, &mpi_size);
@@ -125,15 +134,62 @@ void exchange_dev_iface_addr(tangram_uct_context_t* context, tangram_uct_addr_t*
     free(all_addrs);
 }
 
-void tangram_uct_context_init(ucs_async_context_t* async, tfs_info_t* tfs_info, tangram_uct_context_t *context) {
+void fill_addr_config_filename(tfs_info_t* tfs_info, char* cfg_path) {
+    sprintf(cfg_path, "%s/tfs.cfg", tfs_info->persist_dir);
+}
+
+void write_server_uct_addr(tfs_info_t* tfs_info, tangram_uct_addr_t* server_addr) {
+
+    tangram_map_real_calls();
+
+    char cfg_path[PATH_MAX+10] = {0};
+    fill_addr_config_filename(tfs_info, cfg_path);
+
+    FILE* f = TANGRAM_REAL_CALL(fopen)(cfg_path, "wb");
+    assert(f != NULL);
+
+    size_t len;
+    void* buf = tangram_uct_addr_serialize(server_addr, &len);
+
+    TANGRAM_REAL_CALL(fwrite)(&len, sizeof(len), 1, f);
+    TANGRAM_REAL_CALL(fwrite)(buf, len, 1, f);
+    TANGRAM_REAL_CALL(fflush)(f);
+    TANGRAM_REAL_CALL(fclose)(f);
+
+    free(buf);
+}
+
+void read_server_uct_addr(tfs_info_t* tfs_info, tangram_uct_addr_t* server_addr) {
+
+    tangram_map_real_calls();
+
+    char cfg_path[PATH_MAX+10] = {0};
+    fill_addr_config_filename(tfs_info, cfg_path);
+
+    FILE* f = TANGRAM_REAL_CALL(fopen)(cfg_path, "r");
+    assert(f != NULL);  // this assert does not work on Quartz/Catalyst
+
+    size_t len;
+    void* buf;
+
+    TANGRAM_REAL_CALL(fread)(&len, sizeof(size_t), 1, f);
+    buf = malloc(len);
+    TANGRAM_REAL_CALL(fread)(buf, len, 1, f);
+    tangram_uct_addr_deserialize(buf, server_addr);
+    TANGRAM_REAL_CALL(fclose)(f);
+
+    free(buf);
+}
+
+void tangram_uct_context_init(ucs_async_context_t* async, tfs_info_t* tfs_info, bool intra_comm, tangram_uct_context_t *context) {
+
     uct_worker_create(async, UCS_THREAD_MODE_SERIALIZED, &context->worker);
 
-    // search for dev and tl
-    // This will open context->md and set context->md_attr
-    dev_tl_lookup(tfs_info->rpc_dev_name, tfs_info->rpc_tl_name, context);
-
     // This will open the context->iface and set context->iface_attr
-    init_iface(tfs_info->rpc_dev_name, tfs_info->rpc_tl_name, context);
+    if(intra_comm)
+        init_iface("memory", "posix", context);
+    else
+        init_iface(tfs_info->rpc_dev_name, tfs_info->rpc_tl_name, context);
 
     // Set up myself's addr
     context->self_addr.dev_len   = context->iface_attr.device_addr_len;
@@ -143,64 +199,33 @@ void tangram_uct_context_init(ucs_async_context_t* async, tfs_info_t* tfs_info, 
     uct_iface_get_device_address(context->iface, context->self_addr.dev);
     uct_iface_get_address(context->iface, context->self_addr.iface);
 
-    // context->local_server and context->global_server
-    // will be allocated and filled in the read_uct_server_addr() function.
-    context->local_server_addr.dev    = NULL;
-    context->local_server_addr.iface  = NULL;
-    context->global_server_addr.dev   = NULL;
-    context->global_server_addr.iface = NULL;
+    // context->delegator will be filled by the calling client
+    // context->server will be filled by read_uct_server_addr()
+    context->delegator_addr.dev   = NULL;
+    context->delegator_addr.iface = NULL;
+    context->server_addr.dev      = NULL;
+    context->server_addr.iface    = NULL;
 
-    if (tfs_info->role == TANGRAM_UCX_ROLE_RMA_CLIENT ||
-        tfs_info->role == TANGRAM_UCX_ROLE_RPC_CLIENT) {
-        // read both local and global server address
-        tangram_read_uct_server_addr(true, (void**)&context->global_server_addr.dev, &context->global_server_addr.dev_len,
-                                           (void**)&context->global_server_addr.iface, &context->global_server_addr.iface_len);
-        if(tfs_info->use_local_server)
-            tangram_read_uct_server_addr(false, (void**)&context->local_server_addr.dev, &context->local_server_addr.dev_len,
-                                                (void**)&context->local_server_addr.iface, &context->local_server_addr.iface_len);
-    }
+    if (tfs_info->role == TANGRAM_UCX_ROLE_CLIENT)
+        read_server_uct_addr(tfs_info, &context->server_addr);
 
-    if (tfs_info->role == TANGRAM_UCX_ROLE_LOCAL_SERVER) {
-        // read only global server address
-        tangram_read_uct_server_addr(true, (void**)&context->global_server_addr.dev, &context->global_server_addr.dev_len,
-                                           (void**)&context->global_server_addr.iface, &context->global_server_addr.iface_len);
-        // write out my address
-        tangram_write_uct_server_addr(false, context->self_addr.dev, context->self_addr.dev_len,
-                                      context->self_addr.iface, context->self_addr.iface_len);
-    }
-
-    if(tfs_info->role == TANGRAM_UCX_ROLE_GLOBAL_SERVER) {
-        // write out my address
-        tangram_write_uct_server_addr(true, context->self_addr.dev, context->self_addr.dev_len,
-                                      context->self_addr.iface, context->self_addr.iface_len);
-    }
+    if(tfs_info->role == TANGRAM_UCX_ROLE_SERVER)
+        write_server_uct_addr(tfs_info, &context->self_addr);
 
     pthread_mutex_init(&context->mutex, NULL);
     pthread_mutex_init(&context->cond_mutex, NULL);
     pthread_cond_init(&context->cond, NULL);
 }
 
-
 void tangram_uct_context_destroy(tangram_uct_context_t *context) {
     uct_iface_close(context->iface);
     uct_md_close(context->md);
 
-
-    // TODO use tangram_uct_addr_free() instead
-    free(context->self_addr.dev);
-    free(context->self_addr.iface);
-    if(context->local_server_addr.dev)
-        free(context->local_server_addr.dev);
-    if(context->local_server_addr.iface)
-        free(context->local_server_addr.iface);
-    if(context->global_server_addr.dev)
-        free(context->global_server_addr.dev);
-    if(context->global_server_addr.iface)
-        free(context->global_server_addr.iface);
-
+    tangram_uct_addr_free(&context->self_addr);
+    tangram_uct_addr_free(&context->delegator_addr);
+    tangram_uct_addr_free(&context->server_addr);
 
     uct_worker_destroy(context->worker);
-
 
     pthread_mutex_destroy(&context->mutex);
     pthread_mutex_destroy(&context->cond_mutex);
@@ -223,6 +248,9 @@ void uct_ep_create_connect(uct_iface_h iface, tangram_uct_addr_t* addr, uct_ep_h
 
     status = uct_ep_create(&ep_params, ep);
     assert(status == UCS_OK);
+    if(status != UCS_OK) {
+        printf("CHEN create_and_connect ep failed!\n");
+    }
 }
 
 void* pack_rpc_buffer(tangram_uct_addr_t* addr, void* data, size_t inlen, size_t* outlen) {
@@ -250,9 +278,16 @@ void* pack_rpc_buffer(tangram_uct_addr_t* addr, void* data, size_t inlen, size_t
     return out;
 }
 
-void unpack_rpc_buffer(void* buf, size_t buf_len, tangram_uct_addr_t *sender, void** data_ptr) {
-    buf_len = buf_len - sizeof(uint64_t);   // skip header;
-    void* ptr = buf + sizeof(uint64_t);
+void unpack_rpc_buffer(void* buf, size_t buf_len, uint64_t* seq_id, tangram_uct_addr_t *sender, void** data_ptr) {
+
+    // uint64_t header is used to pass seq_id
+    void* ptr = buf;
+    memcpy(seq_id, ptr, sizeof(uint64_t));
+
+    // buf length is the length returned from pack_rpc_buffer(),
+    // which does not include the header
+    buf_len = buf_len - sizeof(uint64_t);
+    ptr += sizeof(uint64_t);
 
     size_t dev_len, iface_len;
     memcpy(&dev_len, ptr, sizeof(size_t));
@@ -283,14 +318,14 @@ void unpack_rpc_buffer(void* buf, size_t buf_len, tangram_uct_addr_t *sender, vo
     }
 }
 
-void do_uct_am_short(pthread_mutex_t *lock, uct_ep_h ep, uint8_t id, tangram_uct_addr_t* my_addr, void* data, size_t data_len) {
+void do_uct_am_short_lock(pthread_mutex_t *lock, uct_ep_h ep, uint8_t id, uint64_t seq_id, tangram_uct_addr_t* my_addr, void* data, size_t data_len) {
     size_t buf_len;
     void* buf = pack_rpc_buffer(my_addr, data, data_len, &buf_len);
 
     ucs_status_t status = UCS_OK;
     do {
         pthread_mutex_lock(lock);
-        status = uct_ep_am_short(ep, id, 0, buf, buf_len);
+        status = uct_ep_am_short(ep, id, seq_id, buf, buf_len);
         pthread_mutex_unlock(lock);
     } while (status == UCS_ERR_NO_RESOURCE);
 
@@ -298,19 +333,14 @@ void do_uct_am_short(pthread_mutex_t *lock, uct_ep_h ep, uint8_t id, tangram_uct
     assert(status == UCS_OK);
 }
 
-void do_uct_am_short_progress(uct_worker_h worker, uct_ep_h ep, uint8_t id, tangram_uct_addr_t* my_addr, void* data, size_t data_len) {
+void do_uct_am_short_progress(uct_worker_h worker, uct_ep_h ep, uint8_t id, uint64_t seq_id, tangram_uct_addr_t* my_addr, void* data, size_t data_len) {
     size_t buf_len;
     void* buf = pack_rpc_buffer(my_addr, data, data_len, &buf_len);
 
-    char hostname[128];
-    gethostname(hostname, 128);
-
     ucs_status_t status = UCS_OK;
     do {
-        status = uct_ep_am_short(ep, id, 0, buf, buf_len);
-        int prog = uct_worker_progress(worker);
-        //sleep(1);
-        //printf("%s, ucs_status_string: %s, id:%d, len:%ld, progress: %d\n", hostname, ucs_status_string(status), id, buf_len, prog);
+        status = uct_ep_am_short(ep, id, seq_id, buf, buf_len);
+        uct_worker_progress(worker);
     } while (status == UCS_ERR_NO_RESOURCE);
 
     free(buf);

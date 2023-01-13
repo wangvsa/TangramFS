@@ -1,7 +1,12 @@
 #------------------------------------------------------------------------------
 # Include source and build directories
 #------------------------------------------------------------------------------
-include_directories(${CMAKE_SOURCE_DIR}/include)
+include_directories(
+    ${CMAKE_SOURCE_DIR}/include
+    ${CMAKE_SOURCE_DIR}/src/ucx
+    ${CMAKE_SOURCE_DIR}/src/client
+    ${CMAKE_SOURCE_DIR}/src/server
+    )
 
 
 #------------------------------------------------------------------------------
@@ -43,12 +48,18 @@ set(TANGRAMFS_SRCS
         ${CMAKE_CURRENT_SOURCE_DIR}/client/tangramfs-rpc.c
         ${CMAKE_CURRENT_SOURCE_DIR}/client/tangramfs-posix-wrapper.c
         ${CMAKE_CURRENT_SOURCE_DIR}/client/tangramfs-semantics-impl.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/client/tangramfs-delegator.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/client/commitfs.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/client/sessionfs.c
         ${CMAKE_CURRENT_SOURCE_DIR}/common/tangramfs-utils.c
         ${CMAKE_CURRENT_SOURCE_DIR}/common/seg_tree.c
         ${CMAKE_CURRENT_SOURCE_DIR}/common/lock-token.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/common/tangramfs-lock-manager.c
         ${CMAKE_CURRENT_SOURCE_DIR}/ucx/tangramfs-ucx-comm.c
         ${CMAKE_CURRENT_SOURCE_DIR}/ucx/tangramfs-ucx-server.c
         ${CMAKE_CURRENT_SOURCE_DIR}/ucx/tangramfs-ucx-client.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/ucx/tangramfs-ucx-delegator.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/ucx/tangramfs-ucx-taskmgr.c
         ${CMAKE_CURRENT_SOURCE_DIR}/ucx/tangramfs-ucx-rma.c)
 add_library(tangramfs ${TANGRAMFS_SRCS})
 
@@ -72,16 +83,17 @@ tangramfs_set_lib_options(tangramfs "tangramfs" ${TANGRAMFS_LIBTYPE})
 #------------------------------------------------------------------------------
 set(TFS_SERVER_SRCS
         ${CMAKE_CURRENT_SOURCE_DIR}/server/tangramfs-metadata-manager.c
-        ${CMAKE_CURRENT_SOURCE_DIR}/server/tangramfs-lock-manager.c
         ${CMAKE_CURRENT_SOURCE_DIR}/server/tangramfs-server.c
-        ${CMAKE_CURRENT_SOURCE_DIR}/server/tangramfs-server-local.c
-        ${CMAKE_CURRENT_SOURCE_DIR}/server/tangramfs-server-global.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/client/tangramfs-delegator.c
         ${CMAKE_CURRENT_SOURCE_DIR}/client/tangramfs-rpc.c
         ${CMAKE_CURRENT_SOURCE_DIR}/common/tangramfs-utils.c
         ${CMAKE_CURRENT_SOURCE_DIR}/common/lock-token.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/common/tangramfs-lock-manager.c
         ${CMAKE_CURRENT_SOURCE_DIR}/common/seg_tree.c
         ${CMAKE_CURRENT_SOURCE_DIR}/ucx/tangramfs-ucx-comm.c
         ${CMAKE_CURRENT_SOURCE_DIR}/ucx/tangramfs-ucx-server.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/ucx/tangramfs-ucx-delegator.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/ucx/tangramfs-ucx-taskmgr.c
         ${CMAKE_CURRENT_SOURCE_DIR}/ucx/tangramfs-ucx-client.c
         ${CMAKE_CURRENT_SOURCE_DIR}/ucx/tangramfs-ucx-rma.c)
 add_executable(server ${TFS_SERVER_SRCS})

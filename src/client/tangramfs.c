@@ -13,17 +13,16 @@
 #include "tangramfs-utils.h"
 #include "tangramfs-posix-wrapper.h"
 
-tfs_info_t tfs;
-tfs_file_t* tfs_files;
+static tfs_info_t  g_tfs_info;
+static tfs_file_t* g_tfs_files;
 
 // Below callbacks will be invoked by tangram-ucx-client/rma
 void* serve_rma_data_cb(void* in_arg, size_t* size);
-void  revoke_lock_cb(void* in_arg);
 
 
 void tfs_init() {
 
-    if(tfs.initialized) {
+    if(g_tfs_info.initialized) {
         printf("double init!\n");
         return;
     }
@@ -33,51 +32,61 @@ void tfs_init() {
     if(!flag)
         MPI_Init(NULL, NULL);
 
-    tangram_get_info(&tfs);
+    tangram_info_init(&g_tfs_info);
+    g_tfs_info.role = TANGRAM_UCX_ROLE_CLIENT;
 
     tangram_map_real_calls();
-    tangram_rpc_service_start(&tfs, revoke_lock_cb);
-    //tangram_rma_service_start(&tfs, serve_rma_data_cb);
+    tangram_rpc_service_start(&g_tfs_info);
+    tangram_rma_service_start(&g_tfs_info, serve_rma_data_cb);
 
-    MPI_Barrier(tfs.mpi_comm);
-    tfs.initialized = true;
+    MPI_Barrier(g_tfs_info.mpi_comm);
+    g_tfs_info.initialized = true;
+
+}
+
+void tfs_release(tfs_file_t* tf) {
+    // Clean up seg-tree and lock tokens
+    seg_tree_destroy(&tf->seg_tree);
+
+    // Delete from hash table
+    HASH_DEL(g_tfs_files, tf);
+    free(tf);
 }
 
 void tfs_finalize() {
-    if(!tfs.initialized)
+    if(!g_tfs_info.initialized)
         return;
 
-    tfs.initialized = false;
+    g_tfs_info.initialized = false;
 
     // Notify the server to unpost all and release all locks
-    if(tfs.semantics != TANGRAM_STRONG_SEMANTICS)
+    if(tangram_get_semantics() != TANGRAM_STRONG_SEMANTICS)
         tfs_unpost_client();
     else
         tfs_release_lock_client();
 
     // TODO
-    // need to free lock tokens
+    // need to free local lock tokens
 
     // We should have no files in the table now.
     // Just in case users did not close all files
     // before calling finalize()
     tfs_file_t *tf, *tmp;
-    HASH_ITER(hh, tfs_files, tf, tmp) {
+    HASH_ITER(hh, g_tfs_files, tf, tmp) {
         tfs_close(tf);
+        tfs_release(tf);
     }
-    //if(tfs.mpi_rank == 0)
-    //    tangram_ucx_stop_global_server();
-    //if(tfs.use_local_server)
-    //    tangram_ucx_stop_local_server();
 
     // Need to have a barrier here because we can not allow
     // server stoped before all other clients
-    MPI_Barrier(tfs.mpi_comm);
+    MPI_Barrier(g_tfs_info.mpi_comm);
 
-    //tangram_rma_service_stop();
+    tangram_rma_service_stop();
     tangram_rpc_service_stop();
 
-    tangram_release_info(&tfs);
+    MPI_Barrier(g_tfs_info.mpi_comm);
+
+    tangram_info_finalize(&g_tfs_info);
 }
 
 
@@ -85,39 +94,39 @@ tfs_file_t* tfs_open(const char* pathname) {
 
     char abs_filename[PATH_MAX+64];
 
-    char* tmp = strdup(pathname);
-    for(int i = 0; i < strlen(pathname); i++) {
-        if(tmp[i] == '/')
-            tmp[i] = '_';
+    int i;
+    for(i = strlen(pathname); i >= 0; i--) {
+        if(pathname[i] == '/')
+            break;
     }
+    const char* shortname = &(pathname[i+1]);
 
-    sprintf(abs_filename, "%s/tfs_tmp.%s.%d", tfs.tfs_dir, tmp, tfs.mpi_rank);
-    free(tmp);
+
+    sprintf(abs_filename, "%s/tfs_tmp.%s.%d", g_tfs_info.tfs_dir, shortname, g_tfs_info.mpi_rank);
 
     tfs_file_t *tf = NULL;
-    HASH_FIND_STR(tfs_files, pathname, tf);
+    HASH_FIND_STR(g_tfs_files, shortname, tf);
 
     if(tf) {
         tf->offset = 0;
     } else {
-        tf         = tangram_malloc(sizeof(tfs_file_t));
+        tf         = malloc(sizeof(tfs_file_t));
         tf->stream = NULL;
         tf->fd     = -1;
         tf->offset = 0;
-        strcpy(tf->filename, pathname);
+        strcpy(tf->filename, shortname);
 
         #ifndef TANGRAMFS_PRELOAD
-        tf->fd = TANGRAM_REAL_CALL(open)(tf->filename, O_CREAT|O_RDWR, S_IRWXU);
+        tf->fd = TANGRAM_REAL_CALL(open)(pathname, O_CREAT|O_RDWR, S_IRWXU);
         // TANGRAMFS_PRELOAD=ON, the file will be opened by the real POSIX call
         // See posix-wrapper.c
         #endif
 
         seg_tree_init(&tf->seg_tree);
-        lock_token_list_init(&tf->token_list);
 
                                 // TODO remove() call is not intercepted
         remove(abs_filename);   // delete the local file first
-        HASH_ADD_STR(tfs_files, filename, tf);
+        HASH_ADD_STR(g_tfs_files, filename, tf);
     }
 
     // open node-local buffer file
@@ -143,9 +152,8 @@ void tfs_stat(tfs_file_t* tf, struct stat* buf) {
  *         -- A coordinated flush mechanism is needed.
  */
 void tfs_flush(tfs_file_t *tf) {
-
     size_t chunk_size = 4*1024*1024;
-    char* buf = tangram_malloc(chunk_size);
+    char* buf = malloc(chunk_size);
 
     seg_tree_rdlock(&tf->seg_tree);
     struct seg_tree_node *node = NULL;
@@ -180,7 +188,7 @@ void tfs_flush(tfs_file_t *tf) {
 
     seg_tree_unlock(&tf->seg_tree);
 
-    tangram_free(buf, chunk_size);
+    free(buf);
 }
 
 
@@ -189,7 +197,7 @@ ssize_t tfs_write(tfs_file_t* tf, const void* buf, size_t size) {
     ssize_t res = TANGRAM_REAL_CALL(pwrite)(tf->local_fd, buf, size, local_offset);
     TANGRAM_REAL_CALL(fsync)(tf->local_fd);
 
-    int rc = seg_tree_add(&tf->seg_tree, tf->offset, tf->offset+size-1, local_offset, tangram_rpc_get_client_addr(), false);
+    int rc = seg_tree_add(&tf->seg_tree, tf->offset, tf->offset+size-1, local_offset, tangram_rpc_client_inter_addr(), false);
     assert(rc == 0);
 
     tf->offset += size;
@@ -197,7 +205,7 @@ ssize_t tfs_write(tfs_file_t* tf, const void* buf, size_t size) {
 }
 
 ssize_t tfs_read(tfs_file_t* tf, void* buf, size_t size) {
-    tangram_uct_addr_t *self  = tangram_rpc_get_client_addr();
+    tangram_uct_addr_t *self  = tangram_rpc_client_inter_addr();
     tangram_uct_addr_t *owner = NULL;
     int res = tfs_query(tf, tf->offset, size, &owner);
     //printf("[tangramfs %d] read %s (%d, [%lu,%lu])\n", tfs.mpi_rank, tf->filename, out.rank, tf->offset, size);
@@ -407,8 +415,8 @@ void tfs_post_file(tfs_file_t* tf) {
         return;
     }
 
-    offsets = tangram_malloc(sizeof(size_t) * num);
-    counts  = tangram_malloc(sizeof(size_t) * num);
+    offsets = malloc(sizeof(size_t) * num);
+    counts  = malloc(sizeof(size_t) * num);
 
     node = NULL;
     while ((node = seg_tree_iter(&tf->seg_tree, node))) {
@@ -426,8 +434,8 @@ void tfs_post_file(tfs_file_t* tf) {
     tangram_issue_rpc(AM_ID_POST_REQUEST, tf->filename, offsets, counts, NULL, num, (void**)&ack);
     free(ack);
 
-    tangram_free(offsets, sizeof(size_t)*num);
-    tangram_free(counts, sizeof(size_t)*num);
+    free(offsets);
+    free(counts);
 
     seg_tree_unlock(&tf->seg_tree);
 }
@@ -462,18 +470,13 @@ int tfs_query(tfs_file_t* tf, size_t offset, size_t size, tangram_uct_addr_t** o
 int tfs_close(tfs_file_t* tf) {
     int res = 0;
 
-    // Notify server to unpost and release lock
-    if(tfs.semantics != TANGRAM_STRONG_SEMANTICS)
-        tfs_unpost_file(tf);
-    else
+    if(g_tfs_info.semantics == TANGRAM_STRONG_SEMANTICS)
         tfs_release_lock_file(tf);
 
+    //if(g_tfs_info.semantics != TANGRAM_STRONG_SEMANTICS)
+    //    tfs_unpost_file(tf);
     // Flush from BB to PFS
-    tfs_flush(tf);
-
-    // Clean up seg-tree and lock tokens
-    seg_tree_destroy(&tf->seg_tree);
-    lock_token_list_destroy(&tf->token_list);
+    //tfs_flush(tf);
 
     // Close all file descriptors
     if(tf->stream != NULL) {
@@ -489,70 +492,44 @@ int tfs_close(tfs_file_t* tf) {
         tf->local_fd = -1;
     }
 
-    // Delete from hash table
-    HASH_DEL(tfs_files, tf);
-    tangram_free(tf, sizeof(tfs_file_t));
-    tf = NULL;
-
     // TODO: consider the below behaviour?
     // The tfs_file_t and its interval tree is not released
     // just like Linux page cache won't be cleared at close point
     // because the same file might be opened later again.
     // We clean all resources at tfs_finalize();
+    //
+    //tfs_release();
     return res;
 }
 
 int tfs_acquire_lock(tfs_file_t* tf, size_t offset, size_t count, int type) {
-
-    lock_token_t* token;
-
-    // already hold the lock - 2 cases
-    token = lock_token_find_cover(&tf->token_list, offset, count);
-    if(token) {
-        // Case 1:
-        // Had the read lock but ask for a write lock
-        // Delete my lock token locally and
-        // ask the server to upgrade my lock
-        // use the same AM_ID_ACQUIRE_LOCK_REQUEST RPC
-        if(token->type != type && type == LOCK_TYPE_WR) {
-            lock_token_delete(&tf->token_list, token);
-        } else {
-        // Case 2:
-        // Had the write lock alraedy, nothing to do.
-            return 0;
-        }
-    }
-
     // Do not have the lock, ask lock manager for it
-    void* buf;
-    tangram_issue_rpc(AM_ID_ACQUIRE_LOCK_REQUEST, tf->filename, &offset, &count, &type, 1, &buf);
-    token = lock_token_add_from_buf(&tf->token_list, buf);
-    free(buf);
+    //printf("acquire lock %d\n", offset/4096);
+    void* ack;
+    tangram_issue_rpc(AM_ID_ACQUIRE_LOCK_REQUEST, tf->filename, &offset, &count, &type, 1, &ack);
+    free(ack);
+    return 0;
 }
 
 int tfs_release_lock_client() {
     int* ack;
     tangram_issue_rpc(AM_ID_RELEASE_LOCK_CLIENT_REQUEST, NULL, NULL, NULL, NULL, 0, (void**)&ack);
     free(ack);
+    return 0;
 }
 
 int tfs_release_lock_file(tfs_file_t* tf) {
     int* ack;
     tangram_issue_rpc(AM_ID_RELEASE_LOCK_FILE_REQUEST, tf->filename, NULL, NULL, NULL, 0, (void**)&ack);
     free(ack);
+    return 0;
 }
 
 int tfs_release_lock(tfs_file_t* tf, size_t offset, size_t count) {
-
-    lock_token_t* token;
-    token = lock_token_find_cover(&tf->token_list, offset, count);
-    assert(token);
-
     int* ack;
     tangram_issue_rpc(AM_ID_RELEASE_LOCK_REQUEST, tf->filename, &offset, &count, NULL, 1, (void**)&ack);
     free(ack);
-
-    lock_token_delete(&tf->token_list, token);
+    return 0;
 }
 
 
@@ -582,7 +559,7 @@ size_t tfs_fetch_pfs(const char* filename, void* buf, size_t size) {
 size_t tfs_fetch(const char* filename, void* buf, size_t size) {
     tfs_file_t* tf = tfs_open(filename);
 
-    tangram_uct_addr_t *self  = tangram_rpc_get_client_addr();
+    tangram_uct_addr_t *self  = tangram_rpc_client_inter_addr();
     tangram_uct_addr_t *owner = NULL;
 
     //int res = tfs_query(tf, 0, size, &owner);
@@ -629,24 +606,24 @@ size_t tfs_fetch(const char* filename, void* buf, size_t size) {
 
 bool tangram_should_intercept(const char* filename) {
     // Not initialized yet
-    if(!tfs.initialized) {
+    if(!g_tfs_info.initialized) {
         return false;
     }
 
     char abs_path[PATH_MAX];
     realpath(filename, abs_path);
 
-    /*
-    const char* prefix = "/p/lustre2/wang116/applications/FLASH4.4/Sedov_2d_ug_fbs/sedov_hdf5_chk_";
-    if(strncmp(prefix, abs_path, strlen(prefix)) == 0)
-        return true;
-    return false;
-    */
-
     // file in persist directory and not exist in the backend file system.
-    if ( strncmp(tfs.persist_dir, abs_path, strlen(tfs.persist_dir)) == 0 ) {
+    if ( strncmp(g_tfs_info.persist_dir, abs_path, strlen(g_tfs_info.persist_dir)) == 0 ) {
         //if(TANGRAM_REAL_CALL(access)(filename, F_OK) != 0)
         //    return true;
+        // CHEN here
+        /*
+        if(strstr(filename, "sedov_hdf5_chk_") != NULL)
+            return true;
+        else
+            return false;
+        */
         return true;
     }
 
@@ -654,7 +631,7 @@ bool tangram_should_intercept(const char* filename) {
 }
 
 int tangram_get_semantics() {
-    return tfs.semantics;
+    return g_tfs_info.semantics;
 }
 
 
@@ -662,10 +639,11 @@ int tangram_get_semantics() {
  * Read data locally to serve for the RMA request
  */
 void* serve_rma_data_cb(void* in_arg, size_t* size) {
+    printf("serve rma data cb\n");
     rpc_in_t* in = rpc_in_unpack(in_arg);
 
     tfs_file_t* tf = NULL;
-    HASH_FIND_STR(tfs_files, in->filename, tf);
+    HASH_FIND_STR(g_tfs_files, in->filename, tf);
 
     assert(tf != NULL);
 
@@ -680,25 +658,4 @@ void* serve_rma_data_cb(void* in_arg, size_t* size) {
 
     rpc_in_free(in);
     return data;
-}
-
-// Asked by lock server to revoke my lock
-void revoke_lock_cb(void* in_arg) {
-
-    rpc_in_t* in = rpc_in_unpack(in_arg);
-
-    tfs_file_t* tf = NULL;
-    HASH_FIND_STR(tfs_files, in->filename, tf);
-    if(tf == NULL) return;
-
-
-    lock_token_t* token;
-    token = lock_token_find_cover(&tf->token_list, in->intervals[0].offset, in->intervals[0].count);
-
-    // the if(token) should be uncessary, we should be certain
-    // that we hold the lock that server wants to revoke
-    if(token)
-        lock_token_delete(&tf->token_list, token);
-
-    rpc_in_free(in);
 }
