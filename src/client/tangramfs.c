@@ -62,6 +62,7 @@ void tfs_finalize() {
     // Notify the server to unpost all and release all locks
     if(tangram_get_semantics() != TANGRAM_STRONG_SEMANTICS)
         tfs_unpost_client();
+    // We use lock-based implementation for strong consistency
     else
         tfs_release_lock_client();
 
