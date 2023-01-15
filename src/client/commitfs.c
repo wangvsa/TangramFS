@@ -44,7 +44,12 @@ int commitfs_close(tfs_file_t* tf) {
     return tfs_close(tf);
 }
 
-int commitfs_commit(tfs_file_t* tf, size_t offset, size_t count) {
+int commitfs_commit_range(tfs_file_t* tf, size_t offset, size_t count) {
     tfs_post(tf, offset, count);
+    return 0;
+}
+
+int commitfs_commit_file(tfs_file_t* tf) {
+    tfs_post_file(tf);
     return 0;
 }

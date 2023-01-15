@@ -16,6 +16,7 @@ size_t  commitfs_seek(tfs_file_t* tf, size_t offset, int whence);
 size_t  commitfs_tell(tfs_file_t* tf);
 void    commitfs_stat(tfs_file_t* tf, struct stat* buf);
 void    commitfs_flush(tfs_file_t* tf);
-int     commitfs_commit(tfs_file_t* tf, size_t offset, size_t count);
+int     commitfs_commit_range(tfs_file_t* tf, size_t offset, size_t count);
+int     commitfs_commit_file(tfs_file_t* tf);
 
 #endif
