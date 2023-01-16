@@ -64,6 +64,7 @@ void write_contiguous() {
     for(int i = 0; i < num_writes; i++) {
         commitfs_write(tf, data, access_size);
     }
+    commitfs_commit_file(tf);
     MPI_Barrier(io_comm);
     write_tend = MPI_Wtime();
 
@@ -85,7 +86,7 @@ void write_strided() {
         commitfs_seek(tf, offset, SEEK_SET);
         commitfs_write(tf, data, access_size);
     }
-
+    commitfs_commit_file(tf);
     MPI_Barrier(io_comm);
     write_tend = MPI_Wtime();
 
@@ -109,6 +110,7 @@ void write_fpp() {
     for(int i = 0; i < num_writes; i++) {
         commitfs_write(tf, data, access_size);
     }
+    commitfs_commit_file(tf);
     MPI_Barrier(io_comm);
     write_tend = MPI_Wtime();
 
