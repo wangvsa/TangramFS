@@ -209,8 +209,7 @@ ssize_t tfs_read(tfs_file_t* tf, void* buf, size_t size) {
     tangram_uct_addr_t *self  = tangram_rpc_client_inter_addr();
     tangram_uct_addr_t *owner = NULL;
     int res = tfs_query(tf, tf->offset, size, &owner);
-    //printf("[tangramfs %d] read %s (%d, [%lu,%lu])\n", tfs.mpi_rank, tf->filename, out.rank, tf->offset, size);
-
+    //printf("[tangramfs %d] res: %d, read %s ([%lu,%lu])\n", g_tfs_info.mpi_rank, res, tf->filename, tf->offset, size);
 
     // Another client holds the latest data,
     // issue a RMA request to get the data
@@ -220,7 +219,8 @@ ssize_t tfs_read(tfs_file_t* tf, void* buf, size_t size) {
         tangram_issue_rma(AM_ID_RMA_REQUEST, tf->filename, owner, &offset, &size, 1, buf);
         tf->offset += size;
         double t2 = MPI_Wtime();
-        //printf("[tangramfs %d] rpc for read: %.6fseconds, %.3fMB/s\n", tfs.mpi_rank, (t2-t1), size/1024.0/1024.0/(t2-t1));
+        //tangram_debug("[tangramfs %d] rpc for read: %.6fseconds, %.3fMB/s\n", g_tfs_info.mpi_rank, (t2-t1), size/1024.0/1024.0/(t2-t1));
+        printf("[tangramfs %d] rpc for read: %.6fseconds, %.3fMB/s\n", g_tfs_info.mpi_rank, (t2-t1), size/1024.0/1024.0/(t2-t1));
 
         if(owner)
             tangram_uct_addr_free(owner);
@@ -640,7 +640,7 @@ int tangram_get_semantics() {
  * Read data locally to serve for the RMA request
  */
 void* serve_rma_data_cb(void* in_arg, size_t* size) {
-    printf("serve rma data cb\n");
+    //printf("serve rma data cb\n");
     rpc_in_t* in = rpc_in_unpack(in_arg);
 
     tfs_file_t* tf = NULL;
@@ -654,8 +654,8 @@ void* serve_rma_data_cb(void* in_arg, size_t* size) {
     size_t req_start = in->intervals[0].offset;
     size_t req_end = req_start + in->intervals[0].count - 1;
 
-    ssize_t res = read_local(tf, data, req_start, req_end);
-    assert(res == *size);
+    //ssize_t res = read_local(tf, data, req_start, req_end);
+    //assert(res == *size);
 
     rpc_in_free(in);
     return data;
