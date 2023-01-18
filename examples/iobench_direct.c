@@ -224,9 +224,9 @@ void read_strided() {
 
     int rank = mpi_rank - num_writers;
 
-    size_t* offsets = malloc(sizeof(size_t) * num_writes);
-    size_t* sizes   = malloc(sizeof(size_t) * num_writes);
-    for(int i = 0; i < num_writes; i++) {
+    size_t* offsets = malloc(sizeof(size_t) * num_reads);
+    size_t* sizes   = malloc(sizeof(size_t) * num_reads);
+    for(int i = 0; i < num_reads; i++) {
         offsets[i] = num_readers*access_size*i + rank*access_size;
         sizes[i]   = access_size;
     }
