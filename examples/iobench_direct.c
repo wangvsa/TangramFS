@@ -217,6 +217,37 @@ void read_contiguous() {
     iobench_file_close(tf);
 }
 
+void read_strided() {
+    tfs_file_t* tf = iobench_file_open(FILENAME);
+
+    char* data = malloc(sizeof(char)*access_size);
+
+    int rank = mpi_rank - num_writers;
+
+    size_t* offsets = malloc(sizeof(size_t) * num_writes);
+    size_t* sizes   = malloc(sizeof(size_t) * num_writes);
+    for(int i = 0; i < num_writes; i++) {
+        offsets[i] = num_writers*access_size*i + rank*access_size;
+        sizes[i]   = access_size;
+    }
+
+    MPI_Barrier(io_comm);
+    read_tstart = MPI_Wtime();
+    iobench_file_prologue(tf, offsets, sizes, num_reads);
+    for(int i = 0; i < num_reads; i++) {
+        iobench_file_seek(tf, offsets[i], SEEK_SET);
+        iobench_file_read(tf, data, access_size);
+    }
+    iobench_file_epilogue(tf);
+    MPI_Barrier(io_comm);
+    read_tend = MPI_Wtime();
+
+    free(offsets);
+    free(sizes);
+    free(data);
+    iobench_file_close(tf);
+}
+
 void read_random() {
     tfs_file_t* tf = iobench_file_open(FILENAME);
     struct stat st;
@@ -302,7 +333,7 @@ int main(int argc, char* argv[]) {
         num_writers = mpi_size - num_readers;   // if not set, num_readers = 0, all prcocesses are writer.
         if(num_readers > 0)
             num_reads = num_writers * num_writes / num_readers;
-        printf("Consistency: %s, Write mode: %s, Read mode: %s, Access size: %ldKB, Num writes: %d, Readers: %d\n", consistency_model, write_pattern, read_pattern, access_size/KB, num_writes, num_readers);
+        printf("Consistency: %s, Write pattern: %s, Read pattern: %s, Access size: %ldKB, Num writes: %d, Readers: %d\n", consistency_model, write_pattern, read_pattern, access_size/KB, num_writes, num_readers);
     }
     MPI_Bcast(&write_pattern,  20, MPI_BYTE, 0, MPI_COMM_WORLD);
     MPI_Bcast(&read_pattern,   20, MPI_BYTE, 0, MPI_COMM_WORLD);
@@ -331,6 +362,8 @@ int main(int argc, char* argv[]) {
     if(mpi_rank >= num_writers) {
         if(strcmp(read_pattern, IO_PATTERN_CONTIGUOUS) == 0)
             read_contiguous();
+        if(strcmp(read_pattern, IO_PATTERN_STRIDED) == 0)
+            read_strided();
         if(strcmp(read_pattern, IO_PATTERN_RANDOM) == 0)
             read_random();
     }
