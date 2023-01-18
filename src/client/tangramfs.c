@@ -239,6 +239,7 @@ ssize_t tfs_read(tfs_file_t* tf, void* buf, size_t size) {
     // 2. res = 0, but myself has the latest data
     // In both case, we read it locally
     if(res != 0 || tangram_uct_addr_compare(owner, self) == 0) {
+        printf("tfs_read(). here?? res: %d, owner==NULL? %d\n", res, owner==NULL);
         if(owner)
             tangram_uct_addr_free(owner);
         return tfs_read_local(tf, buf, size);
@@ -307,7 +308,7 @@ ssize_t read_local_or_pfs(tfs_file_t* tf, void* buf, size_t req_start, size_t re
 
         // TODO what if opend as tf->stream?
         ssize_t res = TANGRAM_REAL_CALL(pread)(tf->fd, buf, req_end-req_start+1, req_start);
-        tangram_debug("[tangramfs] read from PFS %s, [%ld, %ld], res: %ld\n", tf->filename, req_start, req_end-req_start+1, res);
+        tangram_debug("[tangramfs client %d] read from PFS %s, [%luKB, %luKB], res: %ld\n", g_tfs_info.mpi_rank, tf->filename, req_start/1024, (req_end-req_start+1)/1024, res);
 
         return res;
     }
@@ -438,6 +439,7 @@ void tfs_post_file(tfs_file_t* tf) {
     int* ack;
     tangram_issue_rpc(AM_ID_POST_REQUEST, tf->filename, offsets, counts, NULL, num, (void**)&ack);
     free(ack);
+    printf("%d post [%lu, %lu]\n", g_tfs_info.mpi_rank, offsets[0]/1024, counts[0]/1024);
 
     free(offsets);
     free(counts);
@@ -461,6 +463,7 @@ int tfs_query(tfs_file_t* tf, size_t offset, size_t size, tangram_uct_addr_t** o
     void* buf = NULL;
     tangram_issue_rpc(AM_ID_QUERY_REQUEST, tf->filename, &offset, &size, NULL, 1, &buf);
 
+    int err = 0;
     bool found_owner;
     memcpy(&found_owner, buf, sizeof(bool));
     if(found_owner) {
@@ -468,10 +471,11 @@ int tfs_query(tfs_file_t* tf, size_t offset, size_t size, tangram_uct_addr_t** o
         tangram_uct_addr_deserialize(buf+sizeof(bool), *owner);
     } else {
         *owner = NULL;
+        err = -1;
     }
 
     free(buf);
-    return found_owner;
+    return err;
 }
 
 int tfs_query_many(tfs_file_t* tf, size_t* offsets, size_t* sizes, int num, tangram_uct_addr_t** owners) {
@@ -593,7 +597,7 @@ size_t tfs_fetch(const char* filename, void* buf, size_t size) {
     int res = -1;
 
     // Server knows who has the data
-    if(res == 0 ) {
+    if(res == 0) {
         // Other clients have a copy in their buffer
         if( tangram_uct_addr_compare(owner, self) != 0 ) {
             size_t offset = 0;
@@ -666,7 +670,6 @@ int tangram_get_semantics() {
  * Read data locally to serve for the RMA request
  */
 void* serve_rma_data_cb(void* in_arg, size_t* size) {
-    //printf("serve rma data cb\n");
     rpc_in_t* in = rpc_in_unpack(in_arg);
 
     tfs_file_t* tf = NULL;
@@ -679,6 +682,8 @@ void* serve_rma_data_cb(void* in_arg, size_t* size) {
 
     size_t req_start = in->intervals[0].offset;
     size_t req_end = req_start + in->intervals[0].count - 1;
+
+    tangram_debug("[tangramfs client %d]Serve rma data [%luKB-%luKB]\n", g_tfs_info.mpi_rank, req_start/1024, req_end/1024);
 
     ssize_t res = read_local_or_pfs(tf, data, req_start, req_end);
     assert(res == *size);

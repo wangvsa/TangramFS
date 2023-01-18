@@ -227,7 +227,7 @@ void read_strided() {
     size_t* offsets = malloc(sizeof(size_t) * num_writes);
     size_t* sizes   = malloc(sizeof(size_t) * num_writes);
     for(int i = 0; i < num_writes; i++) {
-        offsets[i] = num_writers*access_size*i + rank*access_size;
+        offsets[i] = num_readers*access_size*i + rank*access_size;
         sizes[i]   = access_size;
     }
 

@@ -44,20 +44,21 @@ ssize_t sessionfs_write(tfs_file_t* tf, const void* buf, size_t size) {
 ssize_t sessionfs_read(tfs_file_t* tf, void* buf, size_t size) {
     tangram_uct_addr_t *self  = tangram_rpc_client_inter_addr();
     tangram_uct_addr_t *owner = NULL;
-    int found_owner = -1;
+    bool found_owner = false;
 
     size_t offset = tf->offset;
     for(int i = 0; i < g_session_book.num; i++) {
         if(g_session_book.offsets[i] <= offset && g_session_book.sizes[i] >= size) {
-            found_owner = 0;
+            found_owner = true;
             owner = g_session_book.owners[i];
+            printf("found owner [%lu,%lu], [%lu,%lu]\n", g_session_book.offsets[i], g_session_book.sizes[i], offset, size);
             break;
         }
     }
 
     // Another client holds the latest data,
     // issue a RMA request to get the data
-    if(found_owner == 0 && tangram_uct_addr_compare(owner, self) != 0) {
+    if(found_owner && tangram_uct_addr_compare(owner, self) != 0) {
         return tfs_read_peer(tf, buf, size, owner);
     }
 
@@ -67,7 +68,8 @@ ssize_t sessionfs_read(tfs_file_t* tf, void* buf, size_t size) {
     //      (b) the file already exists on PFS
     // 2. res = 0, but myself has the latest data
     // In both case, we read it locally
-    if(found_owner != 0 || tangram_uct_addr_compare(owner, self) == 0) {
+    if(!found_owner || tangram_uct_addr_compare(owner, self) == 0) {
+        printf("sessionfs_read() huh??? found owner: %d\n", found_owner);
         return tfs_read_local(tf, buf, size);
     }
 
