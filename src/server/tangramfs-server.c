@@ -23,8 +23,8 @@ void* server_rpc_handler(int8_t id, tangram_uct_addr_t* client, void* data, uint
 
     if(id == AM_ID_POST_REQUEST) {
         rpc_in_t* in = rpc_in_unpack(data);
-        tangram_debug("[tangramfs server] post, filename: %s, num_intervals: %d, offset:%lu, count: %lu\n",
-                        in->filename, in->num_intervals, in->intervals[0].offset, in->intervals[0].count);
+        tangram_debug("[tangramfs server] post, filename: %s, num_intervals: %d, offset:%luKB, size:%luKB\n",
+                        in->filename, in->num_intervals, in->intervals[0].offset/1024, in->intervals[0].count/1024);
 
         for(int i = 0; i < in->num_intervals; i++)
             tangram_metamgr_handle_post(client, in->filename, in->intervals[i].offset, in->intervals[i].count);
@@ -47,13 +47,43 @@ void* server_rpc_handler(int8_t id, tangram_uct_addr_t* client, void* data, uint
         *respond_len = sizeof(int);
         *respond_id = AM_ID_UNPOST_CLIENT_RESPOND;
     } else if(id == AM_ID_QUERY_REQUEST) {
+
         rpc_in_t* in = rpc_in_unpack(data);
-        tangram_uct_addr_t *owner;
-        owner = tangram_metamgr_handle_query(in->filename, in->intervals[0].offset, in->intervals[0].count);
-        tangram_debug("[tangramfs server] query, filename: %s, offset:%lu, count: %lu\n",
-                in->filename, in->intervals[0].offset, in->intervals[0].count);
+
+        tangram_uct_addr_t** owners = (tangram_uct_addr_t**)malloc(sizeof(tangram_uct_addr_t*)*in->num_intervals);
+        *respond_len = in->num_intervals * sizeof(bool);
+        void** tmp = (void**) malloc(sizeof(void*) * in->num_intervals);
+        size_t* tmp_lens = (size_t*) malloc(in->num_intervals * sizeof(size_t));
+
+        for(int i = 0; i < in->num_intervals; i++) {
+            owners[i] = tangram_metamgr_handle_query(in->filename, in->intervals[i].offset, in->intervals[i].count);
+            tmp[i] = tangram_uct_addr_serialize(owners[i], &tmp_lens[i]);
+            *respond_len += tmp_lens[i];
+        }
+
+        respond = malloc(*respond_len);
+        memset(respond, 0, *respond_len);
+
+        void* ptr = respond;
+        for(int i = 0; i < in->num_intervals; i++) {
+            bool found = (tmp[i] != NULL);
+            memcpy(ptr, &found, sizeof(bool));
+            ptr += sizeof(bool);
+            if(found) {
+                memcpy(ptr, tmp[i], tmp_lens[i]);
+                ptr += tmp_lens[i];
+                free(tmp[i]);
+            }
+        }
+
+        tangram_debug("[tangramfs server] query, filename: %s, offset:%luKB, count: %luKB\n",
+                in->filename, in->intervals[0].offset/1024, in->intervals[0].count/1024);
+
+        free(tmp);
+        free(tmp_lens);
+        free(owners);
         rpc_in_free(in);
-        respond = tangram_uct_addr_serialize(owner, respond_len);
+
         *respond_id = AM_ID_QUERY_RESPOND;
     } else if(id == AM_ID_STAT_REQUEST) {
         char* path = data;

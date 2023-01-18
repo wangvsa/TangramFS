@@ -205,28 +205,32 @@ ssize_t tfs_write(tfs_file_t* tf, const void* buf, size_t size) {
     return res;
 }
 
+ssize_t tfs_read_peer(tfs_file_t* tf, void* buf, size_t size, tangram_uct_addr_t* owner) {
+    size_t offset = tf->offset;
+    double t1 = MPI_Wtime();
+    tangram_issue_rma(AM_ID_RMA_REQUEST, tf->filename, owner, &offset, &size, 1, buf);
+    tf->offset += size;
+    double t2 = MPI_Wtime();
+    //tangram_debug("[tangramfs %d] rpc for read: %.6fseconds, %.3fMB/s\n", g_tfs_info.mpi_rank, (t2-t1), size/1024.0/1024.0/(t2-t1));
+    //printf("[tangramfs %d] rpc for read: %.6fseconds, %.3fMB/s\n", g_tfs_info.mpi_rank, (t2-t1), size/1024.0/1024.0/(t2-t1));
+    return size;
+}
+
 ssize_t tfs_read(tfs_file_t* tf, void* buf, size_t size) {
     tangram_uct_addr_t *self  = tangram_rpc_client_inter_addr();
     tangram_uct_addr_t *owner = NULL;
     int res = tfs_query(tf, tf->offset, size, &owner);
-    //printf("[tangramfs %d] res: %d, read %s ([%lu,%lu])\n", g_tfs_info.mpi_rank, res, tf->filename, tf->offset, size);
+    //printf("[tangramfs %d] res: %d, read %s ([%luKB,%luKB])\n", g_tfs_info.mpi_rank, res, tf->filename, tf->offset/1024, size/1024);
 
     // Another client holds the latest data,
     // issue a RMA request to get the data
     if(res == 0 && tangram_uct_addr_compare(owner, self) != 0) {
-        size_t offset = tf->offset;
-        double t1 = MPI_Wtime();
-        tangram_issue_rma(AM_ID_RMA_REQUEST, tf->filename, owner, &offset, &size, 1, buf);
-        tf->offset += size;
-        double t2 = MPI_Wtime();
-        //tangram_debug("[tangramfs %d] rpc for read: %.6fseconds, %.3fMB/s\n", g_tfs_info.mpi_rank, (t2-t1), size/1024.0/1024.0/(t2-t1));
-        printf("[tangramfs %d] rpc for read: %.6fseconds, %.3fMB/s\n", g_tfs_info.mpi_rank, (t2-t1), size/1024.0/1024.0/(t2-t1));
-
+        tfs_read_peer(tf, buf, size, owner);
         if(owner)
             tangram_uct_addr_free(owner);
-
         return size;
     }
+
 
     // Otherwise, two cases:
     // 1. res != 0, server doesn't know, which means:
@@ -237,7 +241,7 @@ ssize_t tfs_read(tfs_file_t* tf, void* buf, size_t size) {
     if(res != 0 || tangram_uct_addr_compare(owner, self) == 0) {
         if(owner)
             tangram_uct_addr_free(owner);
-        return tfs_read_lazy(tf, buf, size);
+        return tfs_read_local(tf, buf, size);
     }
 
     return size;
@@ -247,7 +251,7 @@ ssize_t tfs_read(tfs_file_t* tf, void* buf, size_t size) {
 /**
  * Read from local buffer or PFS directly
  */
-ssize_t read_local(tfs_file_t* tf, void* buf, size_t req_start, size_t req_end) {
+ssize_t read_local_or_pfs(tfs_file_t* tf, void* buf, size_t req_start, size_t req_end) {
 
     struct seg_tree *extents = &tf->seg_tree;
 
@@ -339,10 +343,10 @@ ssize_t read_local(tfs_file_t* tf, void* buf, size_t req_start, size_t req_end) 
     return req_end-req_start+1;
 }
 
-ssize_t tfs_read_lazy(tfs_file_t* tf, void* buf, size_t size) {
+ssize_t tfs_read_local(tfs_file_t* tf, void* buf, size_t size) {
     size_t req_start = tf->offset;
     size_t req_end   = tf->offset + size - 1;
-    ssize_t res = read_local(tf, buf, req_start, req_end);
+    ssize_t res = read_local_or_pfs(tf, buf, req_start, req_end);
     tf->offset += res;
     return res;
 }
@@ -456,16 +460,38 @@ void tfs_unpost_client() {
 int tfs_query(tfs_file_t* tf, size_t offset, size_t size, tangram_uct_addr_t** owner) {
     void* buf = NULL;
     tangram_issue_rpc(AM_ID_QUERY_REQUEST, tf->filename, &offset, &size, NULL, 1, &buf);
-    if(buf) {
+
+    bool found_owner;
+    memcpy(&found_owner, buf, sizeof(bool));
+    if(found_owner) {
         *owner = malloc(sizeof(tangram_uct_addr_t));
-        tangram_uct_addr_deserialize(buf, *owner);
-        free(buf);
-        return 0;
+        tangram_uct_addr_deserialize(buf+sizeof(bool), *owner);
     } else {
         *owner = NULL;
     }
 
-    return -1;
+    free(buf);
+    return found_owner;
+}
+
+int tfs_query_many(tfs_file_t* tf, size_t* offsets, size_t* sizes, int num, tangram_uct_addr_t** owners) {
+    void* buf = NULL;
+    tangram_issue_rpc(AM_ID_QUERY_REQUEST, tf->filename, offsets, sizes, NULL, num, &buf);
+
+    void* ptr = buf;
+    for(int i = 0; i < num; i++) {
+        bool found_owner;
+        memcpy(&found_owner, ptr, sizeof(bool));
+        ptr += sizeof(bool);
+        owners[i] = NULL;
+        if(found_owner) {
+            owners[i] = malloc(sizeof(tangram_uct_addr_t));
+            tangram_uct_addr_deserialize(ptr, owners[i]);
+            ptr += (sizeof(size_t)*2 + owners[i]->dev_len + owners[i]->iface_len);
+        }
+    }
+    free(buf);
+    return 0;
 }
 
 int tfs_close(tfs_file_t* tf) {
@@ -578,7 +604,7 @@ size_t tfs_fetch(const char* filename, void* buf, size_t size) {
         }
         // I have read it before - I have a copy in my buffer
         else {
-            tfs_read_lazy(tf, buf, size);
+            tfs_read_local(tf, buf, size);
         }
     }
 
@@ -588,7 +614,7 @@ size_t tfs_fetch(const char* filename, void* buf, size_t size) {
     if(res != 0) {
 
         tf->offset = 0;
-        tfs_read_lazy(tf, buf, size);
+        tfs_read_local(tf, buf, size);
 
         tf->offset = 0;
         tfs_write(tf, buf, size);
@@ -654,8 +680,8 @@ void* serve_rma_data_cb(void* in_arg, size_t* size) {
     size_t req_start = in->intervals[0].offset;
     size_t req_end = req_start + in->intervals[0].count - 1;
 
-    //ssize_t res = read_local(tf, data, req_start, req_end);
-    //assert(res == *size);
+    ssize_t res = read_local_or_pfs(tf, data, req_start, req_end);
+    assert(res == *size);
 
     rpc_in_free(in);
     return data;

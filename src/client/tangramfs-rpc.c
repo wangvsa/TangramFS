@@ -48,14 +48,14 @@ void tangram_issue_rpc(uint8_t id, char* filename, size_t *offsets, size_t *coun
     // does not exceed max am size
     // In case its too large, we split it into multiple AM
     size_t am_max_size = tangram_uct_am_short_max_size();
-    int num = rpc_in_intervals_per_am(filename, am_max_size);
+    int num_per_am = rpc_in_intervals_per_am(filename, am_max_size);
     int remain = num_intervals;
 
     int i = 0;
     while(remain > 0) {
         size_t data_size;
-        void* user_data = rpc_in_pack(filename, num < remain ? num : remain,
-                                      &offsets[i*num], &counts[i*num], types?&types[i*num]:NULL, &data_size);
+        void* user_data = rpc_in_pack(filename, num_per_am < remain ? num_per_am : remain,
+                                      &offsets[i*num_per_am], &counts[i*num_per_am], types?&types[i*num_per_am]:NULL, &data_size);
         if(g_tfs_info->use_delegator)
             tangram_ucx_sendrecv_delegator(id, user_data, data_size, respond_ptr);
         else
@@ -63,7 +63,7 @@ void tangram_issue_rpc(uint8_t id, char* filename, size_t *offsets, size_t *coun
 
         free(user_data);
 
-        remain -= num;
+        remain -= num_per_am;
         i++;
     }
 }

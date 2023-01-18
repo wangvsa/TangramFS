@@ -54,7 +54,8 @@ int tfs_close(tfs_file_t* tf);
 
 ssize_t tfs_write(tfs_file_t* tf, const void* buf, size_t size);
 ssize_t tfs_read(tfs_file_t* tf, void* buf, size_t size);
-ssize_t tfs_read_lazy(tfs_file_t* tf, void* buf, size_t size);
+ssize_t tfs_read_peer(tfs_file_t* tf, void* buf, size_t size, tangram_uct_addr_t* owner);
+ssize_t tfs_read_local(tfs_file_t* tf, void* buf, size_t size);
 size_t  tfs_seek(tfs_file_t* tf, size_t offset, int whence);
 size_t  tfs_tell(tfs_file_t* tf);
 void    tfs_stat(tfs_file_t* tf, struct stat* buf);
@@ -65,6 +66,7 @@ void    tfs_post_file(tfs_file_t* tf);
 void    tfs_unpost_file(tfs_file_t* tf);
 void    tfs_unpost_client();
 int     tfs_query(tfs_file_t* tf, size_t offset, size_t count, tangram_uct_addr_t** owner);
+int     tfs_query_many(tfs_file_t* tf, size_t* offsets, size_t* sizes, int num, tangram_uct_addr_t** owners);
 
 
 // Lock based API
