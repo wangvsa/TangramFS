@@ -194,9 +194,9 @@ void read_contiguous() {
     size_t offset = rank*access_size*num_reads;
     iobench_file_seek(tf, offset, SEEK_SET);
 
-    size_t* offsets = malloc(sizeof(size_t) * num_writes);
-    size_t* sizes   = malloc(sizeof(size_t) * num_writes);
-    for(int i = 0; i < num_writes; i++) {
+    size_t* offsets = malloc(sizeof(size_t) * num_reads);
+    size_t* sizes   = malloc(sizeof(size_t) * num_reads);
+    for(int i = 0; i < num_reads; i++) {
         offsets[i] = offset + i * access_size;
         sizes[i]   = access_size;
     }
@@ -333,7 +333,7 @@ int main(int argc, char* argv[]) {
         num_writers = mpi_size - num_readers;   // if not set, num_readers = 0, all prcocesses are writer.
         if(num_readers > 0)
             num_reads = num_writers * num_writes / num_readers;
-        printf("Consistency: %s, Write pattern: %s, Read pattern: %s, Access size: %ldKB, Num writes: %d, Readers: %d\n", consistency_model, write_pattern, read_pattern, access_size/KB, num_writes, num_readers);
+        printf("Consistency: %s, Write pattern: %s, Read pattern: %s, Access size: %ldKB, Num writes/reads: %d/%d, Readers: %d\n", consistency_model, write_pattern, read_pattern, access_size/KB, num_writes, num_reads, num_readers);
     }
     MPI_Bcast(&write_pattern,  20, MPI_BYTE, 0, MPI_COMM_WORLD);
     MPI_Bcast(&read_pattern,   20, MPI_BYTE, 0, MPI_COMM_WORLD);

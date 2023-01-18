@@ -439,7 +439,6 @@ void tfs_post_file(tfs_file_t* tf) {
     int* ack;
     tangram_issue_rpc(AM_ID_POST_REQUEST, tf->filename, offsets, counts, NULL, num, (void**)&ack);
     free(ack);
-    printf("%d post [%lu, %lu]\n", g_tfs_info.mpi_rank, offsets[0]/1024, counts[0]/1024);
 
     free(offsets);
     free(counts);
@@ -491,7 +490,11 @@ int tfs_query_many(tfs_file_t* tf, size_t* offsets, size_t* sizes, int num, tang
         if(found_owner) {
             owners[i] = malloc(sizeof(tangram_uct_addr_t));
             tangram_uct_addr_deserialize(ptr, owners[i]);
+            tangram_uct_addr_t* owner = owners[i];
             ptr += (sizeof(size_t)*2 + owners[i]->dev_len + owners[i]->iface_len);
+            //char *tmp = (char*)owner->dev;
+            //printf("query_many([%lu, %lu] %d/%d), owner: %02X:%02X:%02X:%02X:%02X:%02X\n", offsets[i]/1024, sizes[i]/1024,
+            //        i, num, tmp[0], tmp[1], tmp[2], tmp[3], tmp[4], tmp[5]);
         }
     }
     free(buf);

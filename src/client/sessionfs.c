@@ -46,12 +46,14 @@ ssize_t sessionfs_read(tfs_file_t* tf, void* buf, size_t size) {
     tangram_uct_addr_t *owner = NULL;
     bool found_owner = false;
 
-    size_t offset = tf->offset;
     for(int i = 0; i < g_session_book.num; i++) {
-        if(g_session_book.offsets[i] <= offset && g_session_book.sizes[i] >= size) {
+        size_t o_start = g_session_book.offsets[i];
+        size_t o_end   = o_start + g_session_book.sizes[i];
+        size_t t_start = tf->offset;
+        size_t t_end   = t_start + size;
+        if(o_start<=t_start && o_end>=t_end) {
             found_owner = true;
             owner = g_session_book.owners[i];
-            printf("found owner [%lu,%lu], [%lu,%lu]\n", g_session_book.offsets[i], g_session_book.sizes[i], offset, size);
             break;
         }
     }
@@ -69,7 +71,7 @@ ssize_t sessionfs_read(tfs_file_t* tf, void* buf, size_t size) {
     // 2. res = 0, but myself has the latest data
     // In both case, we read it locally
     if(!found_owner || tangram_uct_addr_compare(owner, self) == 0) {
-        printf("sessionfs_read() huh??? found owner: %d\n", found_owner);
+        //printf("sessionfs_read() huh??? found owner: %d\n", found_owner);
         return tfs_read_local(tf, buf, size);
     }
 
@@ -98,6 +100,7 @@ int sessionfs_session_open(tfs_file_t* tf, size_t* offsets, size_t* sizes, int n
         g_session_book.offsets[i] = offsets[i];
         g_session_book.sizes[i]   = sizes[i];
         g_session_book.owners[i]  = NULL;
+        //printf("sessionfs_session_open() %d/%d, [%lu,%lu]\n", i, num, offsets[i]/1024, sizes[i]/1024);
     }
 
     tfs_query_many(tf, offsets, sizes, num, g_session_book.owners);
