@@ -377,12 +377,13 @@ int main(int argc, char* argv[]) {
             }
 
             write_iops = num_writes * num_writers / (write_tend-write_tstart);
-            write_bandwidth = access_size / (access_size>=MB?MB:KB) * num_writes * num_writers / (write_tend-write_tstart);
+            write_bandwidth = access_size * num_writes / (double)MB * num_writers / (write_tend-write_tstart);
 
             read_iops = num_reads * num_readers / (read_tend-read_tstart);
-            read_bandwidth  = access_size / (access_size>=MB?MB:KB) * num_reads * num_readers / (read_tend-read_tstart);
+            read_bandwidth  = access_size * num_reads / (double)MB * num_readers / (read_tend-read_tstart);
 
-            printf("Write time: %3.3f, Write IOPS: %8d, Bandwidth: %.3f\t\tRead IOPS: %d, Bandwidth: %.3f\n", (write_tend-write_tstart), write_iops, write_bandwidth, read_iops, read_bandwidth);
+            printf("Write/Read time: %3.3f/%3.3f, Write IOPS: %8d, Bandwidth(MB/s): %.3f\t\tRead IOPS: %d, Bandwidth(MB/s): %.3f\n",
+                    (write_tend-write_tstart), (read_tend-read_tstart), write_iops, write_bandwidth, read_iops, read_bandwidth);
         } else {
             if(num_readers > 0) {
                 MPI_Send(&read_tstart, 1, MPI_DOUBLE, 0, 0, MPI_COMM_WORLD);
