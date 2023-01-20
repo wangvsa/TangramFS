@@ -211,8 +211,7 @@ ssize_t tfs_read_peer(tfs_file_t* tf, void* buf, size_t size, tangram_uct_addr_t
     tangram_issue_rma(AM_ID_RMA_REQUEST, tf->filename, owner, &offset, &size, 1, buf);
     tf->offset += size;
     double t2 = MPI_Wtime();
-    //tangram_debug("[tangramfs %d] rpc for read: %.6fseconds, %.3fMB/s\n", g_tfs_info.mpi_rank, (t2-t1), size/1024.0/1024.0/(t2-t1));
-    printf("[tangramfs %d] tfs_read_peer(): %.6fseconds, %.3fMB/s\n", g_tfs_info.mpi_rank, (t2-t1), size/1024.0/1024.0/(t2-t1));
+    tangram_debug("[tangramfs %d] tfs_read_peer(): %.6fseconds, %.3fMB/s\n", g_tfs_info.mpi_rank, (t2-t1), size/1024.0/1024.0/(t2-t1));
     return size;
 }
 

@@ -382,7 +382,7 @@ int main(int argc, char* argv[]) {
             read_iops = num_reads * num_readers / (read_tend-read_tstart);
             read_bandwidth  = access_size * num_reads / (double)MB * num_readers / (read_tend-read_tstart);
 
-            printf("Write/Read time: %3.3f/%3.3f, Write IOPS: %8d, Bandwidth(MB/s): %.3f\t\tRead IOPS: %d, Bandwidth(MB/s): %.3f\n",
+            printf("Write/Read time: %3.3f/%3.3f, Write IOPS: %8d, Bandwidth(MB/s): %.3f\t\tRead IOPS: %8d, Bandwidth(MB/s): %.3f\n",
                     (write_tend-write_tstart), (read_tend-read_tstart), write_iops, write_bandwidth, read_iops, read_bandwidth);
         } else {
             if(num_readers > 0) {
