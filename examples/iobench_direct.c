@@ -290,7 +290,7 @@ void init_args() {
 
 void parse_cmd_args(int argc, char* argv[]) {
     int opt;
-    while((opt = getopt(argc, argv, ":w:r:m:s:c:n:")) != -1) {
+    while((opt = getopt(argc, argv, ":w:r:m:s:p:c:n:")) != -1) {
         switch(opt) {
             case 'w':
                 strcpy(write_pattern, optarg);
