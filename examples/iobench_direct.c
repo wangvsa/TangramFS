@@ -47,9 +47,8 @@ static int    num_writers, num_readers;
 
 MPI_Comm io_comm;   // to store reader comm or writer comm
 int io_comm_rank;
-
-int mpi_size;
-int mpi_rank;
+int global_comm_size;
+int global_comm_rank;
 
 // Final output result
 static double write_tstart, write_tend;
@@ -104,7 +103,7 @@ void write_contiguous() {
     tfs_file_t* tf = iobench_file_open(FILENAME);
 
     char* data = malloc(sizeof(char)*access_size);
-    size_t offset = mpi_rank*access_size*num_writes;
+    size_t offset = global_comm_rank*access_size*num_writes;
     iobench_file_seek(tf, offset, SEEK_SET);
 
     size_t* offsets = malloc(sizeof(size_t) * num_writes);
@@ -139,7 +138,7 @@ void write_strided() {
     size_t* offsets = malloc(sizeof(size_t) * num_writes);
     size_t* sizes   = malloc(sizeof(size_t) * num_writes);
     for(int i = 0; i < num_writes; i++) {
-        offsets[i] = num_writers*access_size*i + mpi_rank*access_size;
+        offsets[i] = num_writers*access_size*i + global_comm_rank*access_size;
         sizes[i]   = access_size;
     }
 
@@ -163,7 +162,7 @@ void write_strided() {
 // file per process
 void write_fpp() {
     char fname[256];
-    sprintf(fname, "%s.%d", FILENAME, mpi_rank);
+    sprintf(fname, "%s.%d", FILENAME, global_comm_rank);
 
     tfs_file_t* tf = iobench_file_open(fname);
 
@@ -190,8 +189,7 @@ void read_contiguous() {
 
     char* data = malloc(sizeof(char)*access_size);
 
-    int rank = mpi_rank - num_writers;
-    size_t offset = rank*access_size*num_reads;
+    size_t offset = io_comm_rank*access_size*num_reads;
     iobench_file_seek(tf, offset, SEEK_SET);
 
     size_t* offsets = malloc(sizeof(size_t) * num_reads);
@@ -222,12 +220,10 @@ void read_strided() {
 
     char* data = malloc(sizeof(char)*access_size);
 
-    int rank = mpi_rank - num_writers;
-
     size_t* offsets = malloc(sizeof(size_t) * num_reads);
     size_t* sizes   = malloc(sizeof(size_t) * num_reads);
     for(int i = 0; i < num_reads; i++) {
-        offsets[i] = num_readers*access_size*i + rank*access_size;
+        offsets[i] = num_readers*access_size*i + io_comm_rank*access_size;
         sizes[i]   = access_size;
     }
 
@@ -288,6 +284,7 @@ void init_args() {
     strcpy(consistency_model, CONSISTENCY_MODEL_COMMIT);
     access_size  = 4*KB;
     num_writes  = 10;
+    num_writers = global_comm_size;
     num_readers = 0;
 }
 
@@ -307,6 +304,8 @@ void parse_cmd_args(int argc, char* argv[]) {
             case 's':
                 access_size = atol(optarg) * KB;
                 break;
+            case 'p':
+                num_writers = atoi(optarg);
             case 'c':
                 num_readers = atoi(optarg);
                 break;
@@ -323,14 +322,13 @@ void parse_cmd_args(int argc, char* argv[]) {
 int main(int argc, char* argv[]) {
     int provided;
     MPI_Init_thread(&argc, &argv, MPI_THREAD_MULTIPLE, &provided);
-    MPI_Comm_size(MPI_COMM_WORLD, &mpi_size);
-    MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
+    MPI_Comm_size(MPI_COMM_WORLD, &global_comm_size);
+    MPI_Comm_rank(MPI_COMM_WORLD, &global_comm_rank);
     tfs_init();
 
-    if(mpi_rank == 0) {
+    if(global_comm_rank == 0) {
         init_args();
         parse_cmd_args(argc, argv);
-        num_writers = mpi_size - num_readers;   // if not set, num_readers = 0, all prcocesses are writer.
         if(num_readers > 0)
             num_reads = num_writers * num_writes / num_readers;
         printf("Consistency: %s, Write pattern: %s, Read pattern: %s, Access size: %ldKB, Num writes/reads: %d/%d, Readers: %d\n", consistency_model, write_pattern, read_pattern, access_size/KB, num_writes, num_reads, num_readers);
@@ -343,12 +341,12 @@ int main(int argc, char* argv[]) {
     MPI_Bcast(&num_writers, 1, MPI_INT,  0, MPI_COMM_WORLD);
     MPI_Bcast(&num_readers, 1, MPI_INT,  0, MPI_COMM_WORLD);
     MPI_Bcast(&access_size,  1, MPI_LONG, 0, MPI_COMM_WORLD);
-    MPI_Comm_split(MPI_COMM_WORLD, mpi_rank<num_writers, 0, &io_comm);
+    MPI_Comm_split(MPI_COMM_WORLD, global_comm_rank<num_writers, 0, &io_comm);
     MPI_Comm_rank(io_comm, &io_comm_rank);
 
     // Write phase
     MPI_Barrier(MPI_COMM_WORLD);
-    if(mpi_rank < num_writers) {
+    if(global_comm_rank < num_writers) {
         if(strcmp(write_pattern, IO_PATTERN_CONTIGUOUS) == 0)
             write_contiguous();
         if(strcmp(write_pattern, IO_PATTERN_STRIDED) == 0)
@@ -359,7 +357,7 @@ int main(int argc, char* argv[]) {
 
     // Read phase
     MPI_Barrier(MPI_COMM_WORLD);
-    if(mpi_rank >= num_writers) {
+    if(global_comm_rank >= num_writers) {
         if(strcmp(read_pattern, IO_PATTERN_CONTIGUOUS) == 0)
             read_contiguous();
         if(strcmp(read_pattern, IO_PATTERN_STRIDED) == 0)
@@ -370,7 +368,7 @@ int main(int argc, char* argv[]) {
 
     MPI_Barrier(MPI_COMM_WORLD);
     if(io_comm_rank == 0) {
-        if(mpi_rank == 0) {
+        if(global_comm_rank == 0) {
             if(num_readers > 0) {
                 MPI_Recv(&read_tstart, 1, MPI_DOUBLE, num_writers, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
                 MPI_Recv(&read_tend, 1, MPI_DOUBLE, num_writers, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
