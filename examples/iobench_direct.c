@@ -306,6 +306,7 @@ void parse_cmd_args(int argc, char* argv[]) {
                 break;
             case 'p':
                 num_writers = atoi(optarg);
+                break;
             case 'c':
                 num_readers = atoi(optarg);
                 break;
