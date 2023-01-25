@@ -685,7 +685,7 @@ void* serve_rma_data_cb(void* in_arg, size_t* size) {
     size_t req_start = in->intervals[0].offset;
     size_t req_end = req_start + in->intervals[0].count - 1;
 
-    tangram_debug("[tangramfs client %d]Serve rma data [%luKB-%luKB]\n", g_tfs_info.mpi_rank, req_start/1024, req_end/1024);
+    tangram_debug("[tangramfs client %d]Serve rma data cb [%luKB-%luKB]\n", g_tfs_info.mpi_rank, req_start/1024, req_end/1024);
 
     ssize_t res = read_local_or_pfs(tf, data, req_start, req_end);
     assert(res == *size);

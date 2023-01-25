@@ -342,12 +342,19 @@ int main(int argc, char* argv[]) {
     MPI_Bcast(&num_writers, 1, MPI_INT,  0, MPI_COMM_WORLD);
     MPI_Bcast(&num_readers, 1, MPI_INT,  0, MPI_COMM_WORLD);
     MPI_Bcast(&access_size,  1, MPI_LONG, 0, MPI_COMM_WORLD);
+
+    // Split to two communicators, writer group and reader group
     MPI_Comm_split(MPI_COMM_WORLD, global_comm_rank<num_writers, 0, &io_comm);
     MPI_Comm_rank(io_comm, &io_comm_rank);
 
+    // We allow only two scenarios:
+    // 1. num_writers + num_readers = global_comm_size
+    // 2. num_writers = global_comm_size
+    int reader_start_rank = num_writers % global_comm_size;
+
     // Write phase
     MPI_Barrier(MPI_COMM_WORLD);
-    if(io_comm_rank < num_writers) {
+    if(global_comm_rank < num_writers) {
         if(strcmp(write_pattern, IO_PATTERN_CONTIGUOUS) == 0)
             write_contiguous();
         if(strcmp(write_pattern, IO_PATTERN_STRIDED) == 0)
@@ -358,7 +365,7 @@ int main(int argc, char* argv[]) {
 
     // Read phase
     MPI_Barrier(MPI_COMM_WORLD);
-    if(io_comm_rank < num_readers ) {
+    if(global_comm_rank >= reader_start_rank && io_comm_rank < num_readers) {
         if(strcmp(read_pattern, IO_PATTERN_CONTIGUOUS) == 0)
             read_contiguous();
         if(strcmp(read_pattern, IO_PATTERN_STRIDED) == 0)
@@ -368,27 +375,28 @@ int main(int argc, char* argv[]) {
     }
 
     MPI_Barrier(MPI_COMM_WORLD);
-    if(io_comm_rank == 0) {
+
+    // reader rank 0 sends read time to writer rank 0
+    if(reader_start_rank != 0) {
         if(global_comm_rank == 0) {
-            if(num_writers < global_comm_rank) {
-                MPI_Recv(&read_tstart, 1, MPI_DOUBLE, num_writers, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-                MPI_Recv(&read_tend, 1, MPI_DOUBLE, num_writers, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-            }
-
-            write_iops = num_writes * num_writers / (write_tend-write_tstart);
-            write_bandwidth = access_size * num_writes / (double)MB * num_writers / (write_tend-write_tstart);
-
-            read_iops = num_reads * num_readers / (read_tend-read_tstart);
-            read_bandwidth  = access_size * num_reads / (double)MB * num_readers / (read_tend-read_tstart);
-
-            printf("Write/Read time: %3.3f/%3.3f, Write IOPS: %8d, Bandwidth(MB/s): %.3f\t\tRead IOPS: %8d, Bandwidth(MB/s): %.3f\n",
-                    (write_tend-write_tstart), (read_tend-read_tstart), write_iops, write_bandwidth, read_iops, read_bandwidth);
-        } else {
-            if(num_writers < global_comm_rank) {
-                MPI_Send(&read_tstart, 1, MPI_DOUBLE, 0, 0, MPI_COMM_WORLD);
-                MPI_Send(&read_tend, 1, MPI_DOUBLE, 0, 0, MPI_COMM_WORLD);
-            }
+            MPI_Recv(&read_tstart, 1, MPI_DOUBLE, reader_start_rank, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+            MPI_Recv(&read_tend, 1, MPI_DOUBLE, reader_start_rank, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
         }
+        if(global_comm_rank == reader_start_rank ) {
+            MPI_Send(&read_tstart, 1, MPI_DOUBLE, 0, 0, MPI_COMM_WORLD);
+            MPI_Send(&read_tend, 1, MPI_DOUBLE, 0, 0, MPI_COMM_WORLD);
+        }
+    }
+
+    if(global_comm_rank == 0) {
+        write_iops = num_writes * num_writers / (write_tend-write_tstart);
+        write_bandwidth = access_size * num_writes / (double)MB * num_writers / (write_tend-write_tstart);
+
+        read_iops = num_reads * num_readers / (read_tend-read_tstart);
+        read_bandwidth  = access_size * num_reads / (double)MB * num_readers / (read_tend-read_tstart);
+
+        printf("Write/Read time: %3.3f/%3.3f, Write IOPS: %8d, Bandwidth(MB/s): %.3f\t\tRead IOPS: %8d, Bandwidth(MB/s): %.3f\n",
+                (write_tend-write_tstart), (read_tend-read_tstart), write_iops, write_bandwidth, read_iops, read_bandwidth);
     }
 
     tfs_finalize();
