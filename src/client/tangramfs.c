@@ -238,7 +238,7 @@ ssize_t tfs_read(tfs_file_t* tf, void* buf, size_t size) {
     // 2. res = 0, but myself has the latest data
     // In both case, we read it locally
     if(res != 0 || tangram_uct_addr_compare(owner, self) == 0) {
-        printf("tfs_read(). here?? res: %d, owner==NULL? %d\n", res, owner==NULL);
+        //printf("tfs_read(). not written by others, perform local or pfs read\n");
         if(owner)
             tangram_uct_addr_free(owner);
         return tfs_read_local(tf, buf, size);
