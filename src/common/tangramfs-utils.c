@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <sys/time.h>
 #include <assert.h>
+#include <mpi.h>
 
 #include "tangramfs.h"
 #include "tangramfs-utils.h"
@@ -75,5 +76,18 @@ double tangram_wtime() {
     struct timeval time;
     gettimeofday(&time, NULL);
     return (time.tv_sec + ((double)time.tv_usec / 1000000));
+}
+
+void tangram_assert(int expression) {
+    if(expression)
+        return;
+
+    printf("[tangramfs] Assert failed, Abort\n!");
+    int flag;
+    MPI_Initialized(&flag);
+    if(flag)
+        MPI_Abort(MPI_COMM_WORLD, -1);
+    else
+        abort();
 }
 

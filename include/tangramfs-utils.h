@@ -47,5 +47,6 @@ void tangram_info_init(tfs_info_t *tfs_info);
 void tangram_info_finalize(tfs_info_t *tfs_info);
 
 double tangram_wtime();
+void tangram_assert(int expression);
 
 #endif
