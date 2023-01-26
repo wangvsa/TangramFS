@@ -1,6 +1,5 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <assert.h>
 #include <string.h>
 #include <unistd.h>
 #include <stdbool.h>
@@ -77,6 +76,13 @@ static ucs_status_t am_rma_respond_listener(void *arg, void *data, size_t length
     return UCS_OK;
 }
 
+static ucs_status_t am_rma_respond_ack_listener(void *arg, void *data, size_t length, unsigned flags) {
+    g_ingoing_context.respond_flag = true;
+    *(g_ingoing_context.respond_ptr) = malloc(sizeof(int));
+    return UCS_OK;
+}
+
+
 // Assume the mutex is locked by the caller
 void rma_sendrecv_core(uint8_t id, tangram_uct_context_t* context, tangram_uct_addr_t* dest, void* data, size_t length, void** respond_ptr) {
     context->respond_ptr  = respond_ptr;
@@ -88,8 +94,8 @@ void rma_sendrecv_core(uint8_t id, tangram_uct_context_t* context, tangram_uct_a
     do_uct_am_short_progress(context->worker, ep, id, 0, &context->self_addr, data, length);
 
     // if need to wait for a respond
-    if(respond_ptr != NULL) {
-        while(!context->respond_flag) {
+    if(context->respond_ptr != NULL) {
+        while(!context->respond_flag || *(context->respond_ptr)==NULL) {
             uct_worker_progress(context->worker);
         }
     }
@@ -186,7 +192,7 @@ void ep_create_get_address(tangram_uct_context_t* info, uct_ep_h *ep, uct_ep_add
     ep_params.field_mask = UCT_EP_PARAM_FIELD_IFACE;
     ep_params.iface      = info->iface;
     ucs_status_t status = uct_ep_create(&ep_params, ep);
-    assert(status == UCS_OK);
+    tangram_assert(status == UCS_OK);
     uct_ep_get_address(*ep, ep_addr);
 }
 
@@ -223,39 +229,46 @@ void build_iov_and_zcopy_comp(uct_iov_t *iov, zcopy_comp_t *comp, tangram_uct_co
 }
 
 // Use am zcopy as qib0:1/rc_verbs does not support am short.
-void do_am_zcopy(uct_ep_h ep, tangram_uct_context_t* info, uint8_t id, void* data, size_t len) {
+void do_am_zcopy(uct_ep_h ep, tangram_uct_context_t* context, uint8_t id, void* data, size_t len, bool wait_ack) {
     uct_iov_t iov;
     zcopy_comp_t comp;
-    build_iov_and_zcopy_comp(&iov, &comp, info, data, len);
+    build_iov_and_zcopy_comp(&iov, &comp, context, data, len);
 
     ucs_status_t status = UCS_OK;
     do {
         status = uct_ep_am_zcopy(ep, id, NULL, 0, &iov, 1, 0,  (uct_completion_t *)&comp);
-        uct_worker_progress(info->worker);
+        uct_worker_progress(context->worker);
     } while (status == UCS_ERR_NO_RESOURCE);
 
     if (status == UCS_INPROGRESS) {
         while (!comp.done) {
-            uct_worker_progress(info->worker);
+            uct_worker_progress(context->worker);
+        }
+    }
+
+    if(wait_ack) {
+        while(!context->respond_flag) {
+            uct_worker_progress(context->worker);
         }
     }
 }
 
-void do_put_zcopy(uct_ep_h ep, tangram_uct_context_t* info, uint64_t remote_addr,
+void do_put_zcopy(uct_ep_h ep, tangram_uct_context_t* context, uint64_t remote_addr,
                     uct_rkey_t rkey, void* buf, size_t buf_len) {
     uct_iov_t iov;
     zcopy_comp_t comp;
-    build_iov_and_zcopy_comp(&iov, &comp, info, buf, buf_len);
+    build_iov_and_zcopy_comp(&iov, &comp, context, buf, buf_len);
 
     ucs_status_t status = UCS_OK;
+    context->respond_flag = false;
     do {
         status = uct_ep_put_zcopy(ep, &iov, 1, remote_addr, rkey, (uct_completion_t *)&comp);
-        uct_worker_progress(info->worker);
+        uct_worker_progress(context->worker);
     } while (status == UCS_ERR_NO_RESOURCE);
 
     if (status == UCS_INPROGRESS) {
         while (!comp.done) {
-            uct_worker_progress(info->worker);
+            uct_worker_progress(context->worker);
         }
     }
 }
@@ -279,21 +292,26 @@ void rma_respond(tangram_rma_req_t* in) {
     // Then connect to the request ep
     ucs_status_t status;
     status = uct_ep_connect_to_ep(ep, in->dev_addr, in->ep_addr);
-    assert(status == UCS_OK);
+    tangram_assert(status == UCS_OK);
 
     // Get rkey
     uct_rkey_bundle_t rkey_ob;
     status = uct_rkey_unpack(g_ingoing_context.component, in->rkey, &rkey_ob);
-    assert(status == UCS_OK);
+    tangram_assert(status == UCS_OK);
 
     // RMA
     size_t buf_len;
     void* buf = g_serve_rma_data_cb(in->user_arg, &buf_len);
     do_put_zcopy(ep, &g_ingoing_context, in->mem_addr, rkey_ob.rkey, buf, buf_len);
 
-    // Send ACK
-    int ack;
-    do_am_zcopy(ep, &g_ingoing_context, AM_ID_RMA_RESPOND, &ack, sizeof(ack));
+    // Send RMA_RESPOND to let the peer konw we
+    // have finished RMA put. Then wait for the ACK
+    // so we can safely destory the EP for RMA
+    //g_ingoing_context.respond_flag = false;
+    //do_am_zcopy(ep, &g_ingoing_context, AM_ID_RMA_RESPOND, NULL, 0, true);
+    void *ack = NULL;
+    rma_sendrecv_core(AM_ID_RMA_RESPOND, &g_ingoing_context, &in->src, NULL, 0, &ack);
+    if(ack) free(ack);
 
     uct_rkey_release(g_ingoing_context.component, &rkey_ob);
     uct_ep_destroy(ep);
@@ -348,7 +366,7 @@ void tangram_ucx_rma_request(tangram_uct_addr_t* dest, void* user_arg, size_t us
     uct_alloc_method_t methods[] = {UCT_ALLOC_METHOD_MD, UCT_ALLOC_METHOD_HEAP};
     uct_allocated_memory_t mem;
     status = uct_mem_alloc(recv_size, methods, 2, &params, &mem);
-    assert(mem.address && status == UCS_OK);
+    tangram_assert(mem.address && status == UCS_OK);
     req_in.mem_addr = (uint64_t) mem.address;
 
     uct_mem_h memh;
@@ -368,7 +386,7 @@ void tangram_ucx_rma_request(tangram_uct_addr_t* dest, void* user_arg, size_t us
     // will receive a RMA_EP_ADDR am.
     void* peer_ep_dev = NULL;
     rma_sendrecv_core(AM_ID_RMA_REQUEST, &g_outgoing_context, dest, sendbuf, sendbuf_size, &peer_ep_dev);
-    assert(peer_ep_dev != NULL);
+    tangram_assert(peer_ep_dev != NULL);
 
     size_t peer_ep_len, peer_dev_len;
     memcpy(&peer_ep_len, peer_ep_dev, sizeof(size_t));
@@ -379,7 +397,10 @@ void tangram_ucx_rma_request(tangram_uct_addr_t* dest, void* user_arg, size_t us
     memcpy(peer_dev_addr, peer_ep_dev+sizeof(size_t)*2+peer_ep_len, peer_dev_len);
 
     status = uct_ep_connect_to_ep(ep, peer_dev_addr, peer_ep_addr);
-    assert(status == UCS_OK);
+    if(status != UCS_OK) {
+        printf("!!!!HHHH:%s, %d, %d\n", ucs_status_string(status), peer_ep_len, peer_dev_len);
+    }
+    tangram_assert(status == UCS_OK);
     free(peer_ep_dev);
 
     // Once we made the connection with the dest client,
@@ -389,6 +410,12 @@ void tangram_ucx_rma_request(tangram_uct_addr_t* dest, void* user_arg, size_t us
     while(!g_outgoing_context.respond_flag)
         uct_worker_progress(g_outgoing_context.worker);
     memcpy(recv_buf, mem.address, recv_size);
+
+    // We send back a ACK after receiving RMA_RESPOND
+    // so the peer can safely destroy the EP
+    //do_am_zcopy(ep, &g_outgoing_context, AM_ID_RMA_RESPOND_ACK, NULL, 0, false);
+    int ack;
+    rma_sendrecv_core(AM_ID_RMA_RESPOND_ACK, &g_outgoing_context, dest, &ack, sizeof(int), NULL);
 
     uct_ep_destroy(ep);
 
@@ -430,7 +457,8 @@ void tangram_ucx_rma_service_start(tfs_info_t* tfs_info, void* (serve_rma_data_c
     tangram_uct_context_init(g_rma_async, gg_tfs_info, false, &g_ingoing_context);
 
     // Listen for incoming RMA request
-    uct_iface_set_am_handler(g_ingoing_context.iface,  AM_ID_RMA_REQUEST, am_rma_request_listener, NULL, 0);
+    uct_iface_set_am_handler(g_ingoing_context.iface, AM_ID_RMA_REQUEST, am_rma_request_listener, NULL, 0);
+    uct_iface_set_am_handler(g_ingoing_context.iface, AM_ID_RMA_RESPOND_ACK, am_rma_respond_ack_listener, NULL, 0);
 
     // Send out RMA request and wait for dest client's ep addr and rma respond
     uct_iface_set_am_handler(g_outgoing_context.iface, AM_ID_RMA_EP_ADDR, am_ep_addr_listener, NULL, 0);

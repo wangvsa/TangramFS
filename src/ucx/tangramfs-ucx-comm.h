@@ -14,15 +14,16 @@
 #define AM_ID_POST_RESPOND                  4
 #define AM_ID_RMA_REQUEST                   5
 #define AM_ID_RMA_RESPOND                   6
-#define AM_ID_RMA_EP_ADDR                   7
-#define AM_ID_STOP_REQUEST                  8
-#define AM_ID_STOP_RESPOND                  9
-#define AM_ID_STAT_REQUEST                  12
-#define AM_ID_STAT_RESPOND                  13
-#define AM_ID_UNPOST_FILE_REQUEST           14
-#define AM_ID_UNPOST_FILE_RESPOND           15
-#define AM_ID_UNPOST_CLIENT_REQUEST         16
-#define AM_ID_UNPOST_CLIENT_RESPOND         17
+#define AM_ID_RMA_RESPOND_ACK               7
+#define AM_ID_RMA_EP_ADDR                   8
+#define AM_ID_STOP_REQUEST                  9
+#define AM_ID_STOP_RESPOND                  10
+#define AM_ID_STAT_REQUEST                  11
+#define AM_ID_STAT_RESPOND                  12
+#define AM_ID_UNPOST_FILE_REQUEST           13
+#define AM_ID_UNPOST_FILE_RESPOND           14
+#define AM_ID_UNPOST_CLIENT_REQUEST         15
+#define AM_ID_UNPOST_CLIENT_RESPOND         16
 
 
 #define AM_ID_ACQUIRE_LOCK_REQUEST          20

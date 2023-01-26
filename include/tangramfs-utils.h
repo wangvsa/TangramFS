@@ -47,6 +47,8 @@ void tangram_info_init(tfs_info_t *tfs_info);
 void tangram_info_finalize(tfs_info_t *tfs_info);
 
 double tangram_wtime();
-void tangram_assert(int expression);
+void tangram_assert_core(int exp, const char* msg, const char* file, int line);
+
+#define tangram_assert(EX) tangram_assert_core(EX, #EX, __FILE__, __LINE__)
 
 #endif

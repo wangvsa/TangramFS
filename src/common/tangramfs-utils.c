@@ -78,11 +78,11 @@ double tangram_wtime() {
     return (time.tv_sec + ((double)time.tv_usec / 1000000));
 }
 
-void tangram_assert(int expression) {
-    if(expression)
+void tangram_assert_core(int exp, const char* msg, const char* file, int line) {
+    if(exp)
         return;
 
-    printf("[tangramfs] Assert failed, Abort\n!");
+    printf("[tangramfs] Assertion failed, %s, line %d: %s\n", file, line, msg);
     int flag;
     MPI_Initialized(&flag);
     if(flag)
