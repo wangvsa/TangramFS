@@ -3,7 +3,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <assert.h>
 #include <unistd.h>
 #include <mpi.h>
 #include "tangramfs-delegator.h"
@@ -24,7 +23,7 @@ void* delegator_rpc_handler(uint8_t id, tangram_uct_addr_t* client, void* data, 
 
     if(id == AM_ID_ACQUIRE_LOCK_REQUEST) {
         rpc_in_t* in = rpc_in_unpack(data);
-        assert(in->num_intervals == 1);
+        tangram_assert(in->num_intervals == 1);
         //tangram_debug("[tangramfs delegator %s] acquire lock start, filename: %s, ask [%ld-%ld]\n", hostname, in->filename, in->intervals[0].offset/LOCK_BLOCK_SIZE, (in->intervals[0].offset+in->intervals[0].count-1)/LOCK_BLOCK_SIZE);
         tangram_lockmgr_delegator_acquire_lock(&g_lt, client, in->filename, in->intervals[0].offset, in->intervals[0].count, in->intervals[0].type);
         tangram_debug("[tangramfs delegator %s] acquire lock done, filename: %s, ask [%ld-%ld]\n", hostname, in->filename, in->intervals[0].offset/LOCK_BLOCK_SIZE, (in->intervals[0].offset+in->intervals[0].count-1)/LOCK_BLOCK_SIZE);
@@ -34,7 +33,7 @@ void* delegator_rpc_handler(uint8_t id, tangram_uct_addr_t* client, void* data, 
         *respond_id = AM_ID_ACQUIRE_LOCK_RESPOND;
     } else if(id == AM_ID_RELEASE_LOCK_REQUEST) {
         rpc_in_t* in = rpc_in_unpack(data);
-        assert(in->num_intervals == 1);
+        tangram_assert(in->num_intervals == 1);
         tangram_debug("[tangramfs delegator] release lock, filename: %s, offset:%lu, count: %lu\n", in->filename, in->intervals[0].offset, in->intervals[0].count);
         tangram_lockmgr_server_release_lock(g_lt, client, in->filename, in->intervals[0].offset, in->intervals[0].count);
         //tangram_debug("[tangramfs] release lock success, filename: %s, offset:%lu, count: %lu\n", in->filename, in->intervals[0].offset, in->intervals[0].count);
@@ -58,7 +57,7 @@ void* delegator_rpc_handler(uint8_t id, tangram_uct_addr_t* client, void* data, 
         *respond_id = AM_ID_RELEASE_LOCK_CLIENT_RESPOND;
     } else if(id == AM_ID_SPLIT_LOCK_REQUEST) {
         rpc_in_t* in = rpc_in_unpack(data);
-        assert(in->num_intervals == 1);
+        tangram_assert(in->num_intervals == 1);
         tangram_debug("[tangramfs delegator %s] split lock start, filename: %s, offset:%lu, count: %lu\n", hostname, in->filename, in->intervals[0].offset, in->intervals[0].count);
         tangram_lockmgr_delegator_split_lock(g_lt, in->filename, in->intervals[0].offset, in->intervals[0].count, in->intervals[0].type);
         tangram_debug("[tangramfs delegator %s] split lock done, filename: %s, offset:%lu, count: %lu\n", hostname, in->filename, in->intervals[0].offset, in->intervals[0].count);

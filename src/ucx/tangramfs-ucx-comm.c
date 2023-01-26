@@ -3,7 +3,6 @@
 #define NI_MAXHOST      1025
 #include <stdio.h>
 #include <stdlib.h>
-#include <assert.h>
 #include <string.h>
 #include <unistd.h>
 #include <alloca.h>
@@ -146,7 +145,7 @@ void write_server_uct_addr(tfs_info_t* tfs_info, tangram_uct_addr_t* server_addr
     fill_addr_config_filename(tfs_info, cfg_path);
 
     FILE* f = TANGRAM_REAL_CALL(fopen)(cfg_path, "wb");
-    assert(f != NULL);
+    tangram_assert(f != NULL);
 
     size_t len;
     void* buf = tangram_uct_addr_serialize(server_addr, &len);
@@ -167,7 +166,7 @@ void read_server_uct_addr(tfs_info_t* tfs_info, tangram_uct_addr_t* server_addr)
     fill_addr_config_filename(tfs_info, cfg_path);
 
     FILE* f = TANGRAM_REAL_CALL(fopen)(cfg_path, "r");
-    assert(f != NULL);  // this assert does not work on Quartz/Catalyst
+    tangram_assert(f != NULL);  // this tangram_assert does not work on Quartz/Catalyst
 
     size_t len;
     void* buf;
@@ -235,7 +234,7 @@ void tangram_uct_context_destroy(tangram_uct_context_t *context) {
 
 // Create and connect to the remote iface
 void uct_ep_create_connect(uct_iface_h iface, tangram_uct_addr_t* addr, uct_ep_h* ep) {
-    //assert(context->iface_attr.cap.flags & UCT_IFACE_FLAG_CONNECT_TO_IFACE);
+    //tangram_assert(context->iface_attr.cap.flags & UCT_IFACE_FLAG_CONNECT_TO_IFACE);
     ucs_status_t status;
 
     uct_ep_params_t ep_params;
@@ -247,7 +246,7 @@ void uct_ep_create_connect(uct_iface_h iface, tangram_uct_addr_t* addr, uct_ep_h
     ep_params.iface_addr = addr->iface;
 
     status = uct_ep_create(&ep_params, ep);
-    assert(status == UCS_OK);
+    tangram_assert(status == UCS_OK);
     if(status != UCS_OK) {
         printf("CHEN create_and_connect ep failed!\n");
     }
@@ -330,7 +329,7 @@ void do_uct_am_short_lock(pthread_mutex_t *lock, uct_ep_h ep, uint8_t id, uint64
     } while (status == UCS_ERR_NO_RESOURCE);
 
     free(buf);
-    assert(status == UCS_OK);
+    tangram_assert(status == UCS_OK);
 }
 
 void do_uct_am_short_progress(uct_worker_h worker, uct_ep_h ep, uint8_t id, uint64_t seq_id, tangram_uct_addr_t* my_addr, void* data, size_t data_len) {
@@ -344,7 +343,7 @@ void do_uct_am_short_progress(uct_worker_h worker, uct_ep_h ep, uint8_t id, uint
     } while (status == UCS_ERR_NO_RESOURCE);
 
     free(buf);
-    assert(status == UCS_OK);
+    tangram_assert(status == UCS_OK);
 }
 
 

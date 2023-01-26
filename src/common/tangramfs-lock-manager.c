@@ -1,5 +1,4 @@
 #include <stdio.h>
-#include <assert.h>
 #include "utlist.h"
 #include "uthash.h"
 #include "lock-token.h"
@@ -167,7 +166,7 @@ lock_token_t* tangram_lockmgr_delegator_acquire_lock(lock_table_t** lt, tangram_
     }
 
     // Exit while loop indicates the token was successfully granted
-    assert(res->result == LOCK_ACQUIRE_SUCCESS);
+    tangram_assert(res->result == LOCK_ACQUIRE_SUCCESS);
     lock_token_add_direct(&entry->token_list, res->token);
 
     // only free res, res->owner should be NULL, res->token will be returned;

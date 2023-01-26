@@ -2,7 +2,6 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <sys/time.h>
-#include <assert.h>
 #include <mpi.h>
 
 #include "tangramfs.h"
@@ -82,7 +81,7 @@ void tangram_assert_core(int exp, const char* msg, const char* file, int line) {
     if(exp)
         return;
 
-    printf("[tangramfs] Assertion failed, %s, line %d: %s\n", file, line, msg);
+    printf("[tangramfs] tangram_assertion failed, %s, line %d: %s\n", file, line, msg);
     int flag;
     MPI_Initialized(&flag);
     if(flag)

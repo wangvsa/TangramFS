@@ -1,6 +1,5 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <assert.h>
 #include <string.h>
 #include <stdbool.h>
 #include <unistd.h>
@@ -90,7 +89,7 @@ void* worker_func(void* arg) {
 
         // FIFO manner
         task_t *task = me->tasks;
-        assert(task != NULL);
+        tangram_assert(task != NULL);
         DL_DELETE(me->tasks, task);
 
         pthread_mutex_unlock(&me->lock);

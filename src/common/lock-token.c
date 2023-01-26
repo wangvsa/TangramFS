@@ -1,5 +1,4 @@
 #include <stdio.h>
-#include <assert.h>
 #include <limits.h>
 #include "utlist.h"
 #include "uthash.h"

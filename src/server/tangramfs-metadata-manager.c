@@ -1,5 +1,4 @@
 #include <stdio.h>
-#include <assert.h>
 #include "uthash.h"
 #include "seg_tree.h"
 #include "tangramfs-utils.h"
@@ -45,7 +44,7 @@ void tangram_metamgr_handle_post(tangram_uct_addr_t* client, char* filename, siz
 
     // TODO should ask clients to post local offset as well
     int res = seg_tree_add(&entry->tree, offset, offset+count-1, 0, client, true);
-    assert(res == 0);
+    tangram_assert(res == 0);
 }
 
 void tangram_metamgr_handle_unpost_file(tangram_uct_addr_t* client, char* filename) {

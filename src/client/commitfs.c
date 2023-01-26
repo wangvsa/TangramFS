@@ -5,7 +5,6 @@
 #include <string.h>
 #include <unistd.h>
 #include <fcntl.h>
-#include <assert.h>
 #include <mpi.h>
 #include <errno.h>
 #include "uthash.h"

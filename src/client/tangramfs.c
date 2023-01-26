@@ -5,7 +5,6 @@
 #include <string.h>
 #include <unistd.h>
 #include <fcntl.h>
-#include <assert.h>
 #include <mpi.h>
 #include <errno.h>
 #include "uthash.h"
@@ -199,7 +198,7 @@ ssize_t tfs_write(tfs_file_t* tf, const void* buf, size_t size) {
     TANGRAM_REAL_CALL(fsync)(tf->local_fd);
 
     int rc = seg_tree_add(&tf->seg_tree, tf->offset, tf->offset+size-1, local_offset, tangram_rpc_client_inter_addr(), false);
-    assert(rc == 0);
+    tangram_assert(rc == 0);
 
     tf->offset += size;
     return res;
@@ -389,7 +388,7 @@ void tfs_post(tfs_file_t* tf, size_t offset, size_t count) {
     // Check if this is a valid range,
     // we only allow commiting an exact previous write(offset, count)
     struct seg_tree_node* node = seg_tree_find_exact(&tf->seg_tree, offset, offset+count-1);
-    assert(node != NULL);
+    tangram_assert(node != NULL);
 
     int* ack;
     tangram_issue_rpc(AM_ID_POST_REQUEST, tf->filename, &offset, &count, NULL, 1, (void**)&ack);
@@ -677,7 +676,7 @@ void* serve_rma_data_cb(void* in_arg, size_t* size) {
     tfs_file_t* tf = NULL;
     HASH_FIND_STR(g_tfs_files, in->filename, tf);
 
-    assert(tf != NULL);
+    tangram_assert(tf != NULL);
 
     *size = in->intervals[0].count;
     void* data = malloc(*size);
@@ -688,7 +687,7 @@ void* serve_rma_data_cb(void* in_arg, size_t* size) {
     tangram_debug("[tangramfs client %d]Serve rma data cb [%luKB-%luKB]\n", g_tfs_info.mpi_rank, req_start/1024, req_end/1024);
 
     ssize_t res = read_local_or_pfs(tf, data, req_start, req_end);
-    assert(res == *size);
+    tangram_assert(res == *size);
 
     rpc_in_free(in);
     return data;

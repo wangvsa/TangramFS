@@ -1,5 +1,4 @@
 #define _GNU_SOURCE
-#include <assert.h>
 #include <stdio.h>
 #include <unistd.h>
 #include <sys/stat.h>
@@ -48,7 +47,6 @@ pthread_rwlock_t uthash_lock = PTHREAD_RWLOCK_INITIALIZER;
     tfs_file_entry_t *entry = NULL;                             \
     HASH_FIND(hh, head, key, keylen, entry);                    \
     if(entry) {                                                 \
-        assert(entry);                                          \
         file = entry->tf;                                       \
     }                                                           \
     /* realse the lock only after we retrived found->tf */      \

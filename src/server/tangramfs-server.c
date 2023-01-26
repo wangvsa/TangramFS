@@ -3,7 +3,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <assert.h>
 #include <mpi.h>
 #include "tangramfs-server.h"
 #include "tangramfs-ucx-server.h"
@@ -93,11 +92,11 @@ void* server_rpc_handler(int8_t id, tangram_uct_addr_t* client, void* data, uint
         *respond_id = AM_ID_STAT_RESPOND;
     } else if(id == AM_ID_ACQUIRE_LOCK_REQUEST) {
         rpc_in_t* in = rpc_in_unpack(data);
-        assert(in->num_intervals == 1);
+        tangram_assert(in->num_intervals == 1);
         //tangram_debug("[tangramfs server] acquire lock, filename: %s, ask [%ld-%ld] start\n",
         //        in->filename, in->intervals[0].offset/LOCK_BLOCK_SIZE, (in->intervals[0].offset+in->intervals[0].count-1)/LOCK_BLOCK_SIZE);
         lock_acquire_result_t* res = tangram_lockmgr_server_acquire_lock(&g_lt, client, in->filename, in->intervals[0].offset, in->intervals[0].count, in->intervals[0].type, g_tfs_info.lock_algo);
-        assert(tangram_uct_addr_comp(token->owner, client) == 0);
+        tangram_assert( tangram_uct_addr_compare(res->token->owner, client) == 0);
 
         if(res->result == LOCK_ACQUIRE_SUCCESS) {
             tangram_debug("[tangramfs server] acquire lock, filename: %s, ask [%ld-%ld], grant [%d-%d]\n",
@@ -112,7 +111,7 @@ void* server_rpc_handler(int8_t id, tangram_uct_addr_t* client, void* data, uint
         respond = lock_acquire_result_serialize(res, respond_len);
     } else if(id == AM_ID_RELEASE_LOCK_REQUEST) {
         rpc_in_t* in = rpc_in_unpack(data);
-        assert(in->num_intervals == 1);
+        tangram_assert(in->num_intervals == 1);
         tangram_debug("[tangramfs server] release lock, filename: %s, offset:%lu, count: %lu\n", in->filename, in->intervals[0].offset, in->intervals[0].count);
         tangram_lockmgr_server_release_lock(g_lt, client, in->filename, in->intervals[0].offset, in->intervals[0].count);
         //tangram_debug("[tangramfs server] release lock success, filename: %s, offset:%lu, count: %lu\n", in->filename, in->intervals[0].offset, in->intervals[0].count);
@@ -156,7 +155,7 @@ void tangram_server_start() {
 }
 
 int main(int argc, char* argv[]) {
-    assert(argc == 2);
+    tangram_assert(argc == 2);
 
     MPI_Init(&argc, &argv);
 

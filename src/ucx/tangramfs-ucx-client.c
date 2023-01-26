@@ -2,7 +2,6 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <string.h>
-#include <assert.h>
 #include <sys/time.h>
 #include "tangramfs-ucx-rma.h"
 #include "tangramfs-ucx-client.h"
@@ -161,7 +160,7 @@ void tangram_ucx_client_start(tfs_info_t *tfs_info) {
 
 void tangram_ucx_client_stop() {
     ucs_status_t status = uct_iface_flush(g_client_intra_context.iface, UCT_FLUSH_FLAG_LOCAL, NULL);
-    assert(status == UCS_OK);
+    tangram_assert(status == UCS_OK);
 
     if(g_tfs_info->use_delegator)
         uct_ep_destroy(g_ep_delegator);

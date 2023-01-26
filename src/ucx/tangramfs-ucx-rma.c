@@ -398,7 +398,7 @@ void tangram_ucx_rma_request(tangram_uct_addr_t* dest, void* user_arg, size_t us
 
     status = uct_ep_connect_to_ep(ep, peer_dev_addr, peer_ep_addr);
     if(status != UCS_OK) {
-        printf("!!!!HHHH:%s, %d, %d\n", ucs_status_string(status), peer_ep_len, peer_dev_len);
+        printf("!!!!HHHH:%s, %lu, %lu\n", ucs_status_string(status), peer_ep_len, peer_dev_len);
     }
     tangram_assert(status == UCS_OK);
     free(peer_ep_dev);
