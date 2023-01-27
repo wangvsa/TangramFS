@@ -388,6 +388,7 @@ int main(int argc, char* argv[]) {
         }
     }
 
+
     if(global_comm_rank == 0) {
         write_iops = num_writes * num_writers / (write_tend-write_tstart);
         write_bandwidth = access_size * num_writes / (double)MB * num_writers / (write_tend-write_tstart);
@@ -397,6 +398,7 @@ int main(int argc, char* argv[]) {
 
         printf("Write/Read time: %3.3f/%3.3f, Write IOPS: %8d, Bandwidth(MB/s): %.3f\t\tRead IOPS: %8d, Bandwidth(MB/s): %.3f\n",
                 (write_tend-write_tstart), (read_tend-read_tstart), write_iops, write_bandwidth, read_iops, read_bandwidth);
+        fflush(stdout);
     }
 
     tfs_finalize();
