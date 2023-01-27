@@ -82,6 +82,7 @@ void tangram_assert_core(int exp, const char* msg, const char* file, int line) {
         return;
 
     printf("[tangramfs] tangram_assertion failed, %s, line %d: %s\n", file, line, msg);
+    fflush(stdout);
     int flag;
     MPI_Initialized(&flag);
     if(flag)

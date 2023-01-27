@@ -147,7 +147,7 @@ void tangram_server_start() {
     // Main thread will enther the progress loop
     // here. It will exit when the stop command
     // is received
-    tangram_ucx_server_start(false);
+    tangram_ucx_server_start();
     tangram_ucx_server_stop();
 
     tangram_metamgr_finalize();
