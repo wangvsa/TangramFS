@@ -31,7 +31,7 @@ static int rpc_in_intervals_per_am(char* filename, size_t am_max_size) {
 
     size_t interval_size = sizeof(size_t)*2+sizeof(int);
 
-    int num_intervals = (am_max_size - filelen - 32/*a safe guard, just in case*/) / interval_size;
+    int num_intervals = (am_max_size - filelen - 40/*a safe guard, just in case*/) / interval_size;
     return num_intervals;
 }
 
