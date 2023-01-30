@@ -22,6 +22,7 @@ void dev_tl_lookup(char* dev_name, char* tl_name, tangram_uct_context_t *context
     unsigned num_components;
     uct_query_components(&components, &num_components);
 
+    int found = 0;
     // Iterate through components
     for(int i = 0; i < num_components; i++) {
         uct_component_attr_t   component_attr;
@@ -48,23 +49,27 @@ void dev_tl_lookup(char* dev_name, char* tl_name, tangram_uct_context_t *context
             uct_md_query_tl_resources(md, &tl_resources, &num_tl_resources);
 
 
-            int found = 0;
             // Iterate through transport
             for(int k = 0; k < num_tl_resources; k++) {
                 char* tln = tl_resources[k].tl_name;
                 char* devn = tl_resources[k].dev_name;
+                //printf("i: %d/%d, j: %d/%d, k: %d/%d, %s %s\n", i, num_components, j, component_attr.md_resource_count, k,  num_tl_resources, tln, devn);
                 if(0==strcmp(tln, tl_name) && 0==strcmp(devn, dev_name)) {
                     found = 1;
                     context->md = md;
                     context->component = components[i];
                     uct_md_query(md, &context->md_attr);
+                    break;
                 }
             }
 
             uct_release_tl_resource_list(tl_resources);
-            if(!found)
+            if(found)
+                break;
+            else
                 uct_md_close(md);
         }
+        if(found) break;
     }
     uct_release_component_list(components);
 }
@@ -99,6 +104,14 @@ void init_iface(char* dev_name, char* tl_name, tangram_uct_context_t *context) {
 
     // get attr
     uct_iface_query(context->iface, &context->iface_attr);
+
+    /*
+    printf("Init iface %s %s\n", dev_name, tl_name);
+    printf("UCT_IFACE_FLAG_CONNECT_TO_IFACE: %d\n", ((bool) (context->iface_attr.cap.flags & UCT_IFACE_FLAG_CONNECT_TO_IFACE)));
+    printf("UCT_IFACE_FLAG_CONNECT_TO_EP: %d\n", ((bool) (context->iface_attr.cap.flags & UCT_IFACE_FLAG_CONNECT_TO_EP)));
+    printf("UCT_IFACE_FLAG_AM_SHORT: %d\n", ((bool) (context->iface_attr.cap.flags & UCT_IFACE_FLAG_AM_SHORT)));
+    fflush(stdout);
+    */
 }
 
 void exchange_dev_iface_addr(tangram_uct_context_t* context, tangram_uct_addr_t* peer_addrs) {
@@ -233,23 +246,27 @@ void tangram_uct_context_destroy(tangram_uct_context_t *context) {
 
 
 // Create and connect to the remote iface
+// TODO
+// Use iface_addr and dev_addr to connect to remote ep
+// requires the capbility of UCT_IFACE_FLAG_CONNECT_TO_IFACE
+// rc_verbs and rc_mlx5 seem do not that this capbility.
+// They can only connect to ep
+//tangram_assert(context->iface_attr.cap.flags & UCT_IFACE_FLAG_CONNECT_TO_IFACE);
 void uct_ep_create_connect(uct_iface_h iface, tangram_uct_addr_t* addr, uct_ep_h* ep) {
-    //tangram_assert(context->iface_attr.cap.flags & UCT_IFACE_FLAG_CONNECT_TO_IFACE);
     ucs_status_t status;
 
     uct_ep_params_t ep_params;
     ep_params.field_mask = UCT_EP_PARAM_FIELD_IFACE     |
                            UCT_EP_PARAM_FIELD_DEV_ADDR  |
                            UCT_EP_PARAM_FIELD_IFACE_ADDR;
-    ep_params.iface      = iface;
-    ep_params.dev_addr   = addr->dev;
-    ep_params.iface_addr = addr->iface;
+    ep_params.iface      = iface;           // my iface
+    ep_params.dev_addr   = addr->dev;       // remote dev addr
+    ep_params.iface_addr = addr->iface;     // remote iface addr
 
     status = uct_ep_create(&ep_params, ep);
-    tangram_assert(status == UCS_OK);
-    if(status != UCS_OK) {
+    if(status != UCS_OK)
         printf("CHEN create_and_connect ep failed!\n");
-    }
+    tangram_assert(status == UCS_OK);
 }
 
 void* pack_rpc_buffer(tangram_uct_addr_t* addr, void* data, size_t inlen, size_t* outlen) {
