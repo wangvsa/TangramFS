@@ -290,6 +290,8 @@ void rma_respond(tangram_rma_req_t* in) {
     rma_sendrecv_core(AM_ID_RMA_EP_ADDR, &g_ingoing_context, &in->src, dev_and_ep, dev_and_ep_len, NULL);
 
     // Then connect to the request ep
+    // Note uct_ep_connect_to_ep() requires UCT_IFACE_FLAG_CONNECT_TO_EP capability.
+    // dc_mlx5 doesn't have this ability, it only supports connecting to iface
     ucs_status_t status;
     status = uct_ep_connect_to_ep(ep, in->dev_addr, in->ep_addr);
     tangram_assert(status == UCS_OK);
