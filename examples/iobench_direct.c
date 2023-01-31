@@ -244,20 +244,62 @@ void read_strided() {
     iobench_file_close(tf);
 }
 
-void read_random() {
+
+void shuffle(unsigned int seed, int *array, size_t n)
+{
+    if (n > 1) {
+        size_t i;
+        for (i = 0; i < n - 1; i++) {
+            size_t j = i + rand() / (RAND_MAX / (n - i) + 1);
+            int t = array[j];
+            array[j] = array[i];
+            array[i] = t;
+        }
+    }
+}
+/**
+ * Simulate ML I/O pattern
+ * Deep neural networks are almost always trained with variants of
+ * mini-batch SGD. Training consists of many epochs; each epoch
+ * is a complete pass over the training dataset in a different, random
+ * order. The samples that make up a given mini-batch are randomly
+ * selected without replacement from the entire training dataset. This
+ * is typically implemented by assigning an index to each sample,
+ * randomly shuffling the indices each epoch, and then partitioning
+ * the shuffled indices into mini-batches.
+ * We assume a data-parallel regime, where a mini-batch
+ * is partitioned among workers. (Worker === MPI Rank === GPU)
+ */
+void read_random_ml() {
+
+    tangram_assert(num_writes  == num_reads);
+    tangram_assert(num_writers == num_readers);
+
+    // Each worker (MPI Rank) reads num_reads samples
+    int total_samples = num_reads * num_readers;
+    int* sample_indices = malloc(sizeof(int)*total_samples);
+    for(int i = 0; i < total_samples; i++)
+        sample_indices[i] = i;
+
+    // Pick a seed and broadcast to everyone
+    time_t t;
+    unsigned int seed;
+    if(global_comm_rank == 0) {
+        seed = time(&t);
+    }
+    MPI_Bcast(&seed, sizeof(seed), MPI_BYTE, 0, MPI_COMM_WORLD);
+
+    // Use the received seed to shuffle indices
+    shuffle(seed, sample_indices, total_samples);
+
     tfs_file_t* tf = iobench_file_open(FILENAME);
-    struct stat st;
 
     char* data = malloc(sizeof(char)*access_size);
 
-    time_t t;
-    srand((unsigned) time(&t));
-    int num_blocks = num_writes * num_writers;
-
-    size_t* offsets = malloc(sizeof(size_t) * num_writes);
-    size_t* sizes   = malloc(sizeof(size_t) * num_writes);
-    for(int i = 0; i < num_writes; i++) {
-        offsets[i] = (rand() % num_blocks) * access_size;
+    size_t* offsets = malloc(sizeof(size_t) * num_reads);
+    size_t* sizes   = malloc(sizeof(size_t) * num_reads);
+    for(int i = 0; i < num_reads; i++) {
+        offsets[i] = sample_indices[i] * access_size;
         sizes[i]   = access_size;
     }
 
@@ -275,6 +317,7 @@ void read_random() {
     free(offsets);
     free(sizes);
     free(data);
+    free(sample_indices);
     iobench_file_close(tf);
 }
 
@@ -371,7 +414,7 @@ int main(int argc, char* argv[]) {
         if(strcmp(read_pattern, IO_PATTERN_STRIDED) == 0)
             read_strided();
         if(strcmp(read_pattern, IO_PATTERN_RANDOM) == 0)
-            read_random();
+            read_random_ml();
     }
 
     MPI_Barrier(MPI_COMM_WORLD);
