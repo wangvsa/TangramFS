@@ -64,13 +64,13 @@ ssize_t sessionfs_read(tfs_file_t* tf, void* buf, size_t size) {
     }
 
     // Otherwise, two cases:
-    // 1. res != 0, server doesn't know, which means:
+    // 1. found_owner != true, server doesn't know, which means:
     //      (a) client (possibly myself) has not posted, or
     //      (b) the file already exists on PFS
-    // 2. res = 0, but myself has the latest data
+    // 2. found_owner = true, but myself has the latest data
     // In both case, we read it locally
     if(!found_owner || tangram_uct_addr_compare(owner, self) == 0) {
-        //printf("sessionfs_read() huh??? found owner: %d\n", found_owner);
+        //printf("sessionfs_read(), found owner: %d\n", found_owner);
         return tfs_read_local(tf, buf, size);
     }
 
