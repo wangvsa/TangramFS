@@ -16,7 +16,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include <time.h>
-#include "mpi.h"
+#include <mpi.h>
 #include "commitfs.h"
 #include "sessionfs.h"
 
@@ -24,6 +24,7 @@
 #define IO_PATTERN_CONTIGUOUS "contiguous"
 #define IO_PATTERN_FPP        "fpp"
 #define IO_PATTERN_RANDOM     "random"
+#define IO_PATTERN_SCR        "scr"
 
 #define CONSISTENCY_MODEL_SESSION   "session"
 #define CONSISTENCY_MODEL_COMMIT    "commit"
@@ -49,6 +50,8 @@ MPI_Comm io_comm;   // to store reader comm or writer comm
 int io_comm_rank;
 int global_comm_size;
 int global_comm_rank;
+int mpi_num_nodes;
+int mpi_ppn;        //  number of processes per node
 
 // Final output result
 static double write_tstart, write_tend;
@@ -99,11 +102,11 @@ void iobench_file_epilogue(tfs_file_t* tf) {
         commitfs_commit_file(tf);
 }
 
-void write_contiguous() {
-    tfs_file_t* tf = iobench_file_open(FILENAME);
+void write_contiguous_core(const char* filename, size_t start_offset, MPI_Comm comm) {
+    tfs_file_t* tf = iobench_file_open(filename);
 
     char* data = malloc(sizeof(char)*access_size);
-    size_t offset = global_comm_rank*access_size*num_writes;
+    size_t offset = start_offset;
     iobench_file_seek(tf, offset, SEEK_SET);
 
     size_t* offsets = malloc(sizeof(size_t) * num_writes);
@@ -113,20 +116,37 @@ void write_contiguous() {
         sizes[i]   = access_size;
     }
 
-    MPI_Barrier(io_comm);
+    MPI_Barrier(comm);
     write_tstart = MPI_Wtime();
     iobench_file_prologue(tf, offsets, sizes, num_writes);
     for(int i = 0; i < num_writes; i++) {
         iobench_file_write(tf, data, access_size);
     }
     iobench_file_epilogue(tf);
-    MPI_Barrier(io_comm);
+    MPI_Barrier(comm);
     write_tend = MPI_Wtime();
 
     free(offsets);
     free(sizes);
     free(data);
     iobench_file_close(tf);
+}
+
+void write_contiguous() {
+    size_t start_offset = global_comm_rank*access_size*num_writes;
+    write_contiguous_core(FILENAME, start_offset, io_comm);
+}
+
+/*
+ * file per process, same pattern as of contiguous
+ * just to different files
+ */
+void write_fpp() {
+    char fname[256];
+    sprintf(fname, "%s.%d", FILENAME, global_comm_rank);
+
+    size_t start_offset = 0;
+    write_contiguous_core(fname, start_offset, io_comm);
 }
 
 void write_strided() {
@@ -159,37 +179,217 @@ void write_strided() {
     iobench_file_close(tf);
 }
 
-// file per process
-void write_fpp() {
-    char fname[256];
-    sprintf(fname, "%s.%d", FILENAME, global_comm_rank);
 
-    tfs_file_t* tf = iobench_file_open(fname);
+/* Simulate SCR checkpoint I/O behavior
+ * Use Partner redundancy schema
+ * https://scr.readthedocs.io/en/latest/users/overview.html#redundancy-schemes
+ *
+ * Run jobs on n+1 nodes, where the extra one node is a spare node.
+ * The actual computation/checkpointing is done by n nodes.
+ * Each node i checkppoints its own data and the data from a partner node (e.g., node i-1).
+ * i.e., 2x space overhead.
+ * If one of the n nodes failed, we can recover thanks to the spare node.
+ */
+typedef struct haccio_data {
+    float*   xx;
+    float*   yy;
+    float*   zz;
+    float*   vx;
+    float*   vy;
+    float*   vz;
+    float*   phi;
+    int64_t* pid;
+    int16_t* mask;
+    int num_particles;
+} haccio_data_t;
 
-    char*  data = malloc(sizeof(char)*access_size);
-    size_t offset = 0;
-    iobench_file_seek(tf, offset, SEEK_SET);
+void haccio_init_data(haccio_data_t* data, int num_particles) {
+    data->xx   = malloc(sizeof(float) * num_particles);
+    data->yy   = malloc(sizeof(float) * num_particles);
+    data->zz   = malloc(sizeof(float) * num_particles);
+    data->vx   = malloc(sizeof(float) * num_particles);
+    data->vy   = malloc(sizeof(float) * num_particles);
+    data->vz   = malloc(sizeof(float) * num_particles);
+    data->phi  = malloc(sizeof(float) * num_particles);
+    data->pid  = malloc(sizeof(int64_t) * num_particles);
+    data->mask = malloc(sizeof(int16_t) * num_particles);
+    data->num_particles = num_particles;
+}
+void haccio_free_data(haccio_data_t* data) {
+    free(data->xx);
+    free(data->yy);
+    free(data->zz);
+    free(data->vx);
+    free(data->vy);
+    free(data->vz);
+    free(data->phi);
+    free(data->pid);
+    free(data->mask);
+}
 
-    MPI_Barrier(io_comm);
+void haccio_checkpoint(const char* filename, haccio_data_t* data, MPI_Comm comm) {
+    tfs_file_t* tf = iobench_file_open(filename);
+
+    // 9 variables in total
+    const int num_variables = 9;
+    const int num_particles = data->num_particles;
+
+    size_t* offsets = malloc(sizeof(size_t) * num_variables);
+    size_t* sizes   = malloc(sizeof(size_t) * num_variables);
+    for(int i = 0; i< 7; i++)
+        sizes[i] = sizeof(float) * num_particles;
+    sizes[7] = sizeof(int64_t) * num_particles;
+    sizes[8] = sizeof(int16_t) * num_particles;
+    offsets[0] = 0;
+    for(int i = 1; i < num_variables; i++)
+        offsets[i] = offsets[i-1] + sizes[i-1];
+
+    MPI_Barrier(comm);
     write_tstart = MPI_Wtime();
-    //iobench_file_prologue(tf);
-    for(int i = 0; i < num_writes; i++) {
-        iobench_file_write(tf, data, access_size);
-    }
+    iobench_file_seek(tf, 0, SEEK_SET);
+    iobench_file_prologue(tf, offsets, sizes, num_variables);
+
+    iobench_file_write(tf, data->xx, sizes[0]);
+    iobench_file_write(tf, data->yy, sizes[1]);
+    iobench_file_write(tf, data->zz, sizes[2]);
+    iobench_file_write(tf, data->vx, sizes[3]);
+    iobench_file_write(tf, data->vy, sizes[4]);
+    iobench_file_write(tf, data->vz, sizes[5]);
+    iobench_file_write(tf, data->phi, sizes[6]);
+    iobench_file_write(tf, data->pid, sizes[7]);
+    iobench_file_write(tf, data->mask, sizes[8]);
+
     iobench_file_epilogue(tf);
-    MPI_Barrier(io_comm);
+    MPI_Barrier(comm);
     write_tend = MPI_Wtime();
 
-    free(data);
+    free(offsets);
+    free(sizes);
     iobench_file_close(tf);
 }
 
-void read_contiguous() {
-    tfs_file_t* tf = iobench_file_open(FILENAME);
+void haccio_restart(const char* filename, haccio_data_t* data, MPI_Comm comm) {
+    tfs_file_t* tf = iobench_file_open(filename);
+
+    // 9 variables in total
+    const int num_variables = 9;
+    const int num_particles = data->num_particles;
+
+
+    size_t* offsets = malloc(sizeof(size_t) * num_variables);
+    size_t* sizes   = malloc(sizeof(size_t) * num_variables);
+    for(int i = 0; i< 7; i++)
+        sizes[i] = sizeof(float) * num_particles;
+    sizes[7] = sizeof(int64_t) * num_particles;
+    sizes[8] = sizeof(int16_t) * num_particles;
+    offsets[0] = 0;
+    for(int i = 1; i < num_variables; i++)
+        offsets[i] = offsets[i-1] + sizes[i-1];
+
+    MPI_Barrier(comm);
+    read_tstart = MPI_Wtime();
+    iobench_file_seek(tf, 0, SEEK_SET);
+    iobench_file_prologue(tf, offsets, sizes, num_variables);
+
+    iobench_file_read(tf, data->xx, sizes[0]);
+    iobench_file_read(tf, data->yy, sizes[1]);
+    iobench_file_read(tf, data->zz, sizes[2]);
+    iobench_file_read(tf, data->vx, sizes[3]);
+    iobench_file_read(tf, data->vy, sizes[4]);
+    iobench_file_read(tf, data->vz, sizes[5]);
+    iobench_file_read(tf, data->phi, sizes[6]);
+    iobench_file_read(tf, data->pid, sizes[7]);
+    iobench_file_read(tf, data->mask, sizes[8]);
+
+    iobench_file_epilogue(tf);
+    MPI_Barrier(comm);
+    read_tend = MPI_Wtime();
+
+    free(offsets);
+    free(sizes);
+    iobench_file_close(tf);
+}
+
+void write_haccio_scr(int num_particles) {
+    double t1, t2, t3, t4;
+
+    MPI_Comm scr_comm;
+    int spare_node = 0;
+    if(global_comm_rank >= (global_comm_size-mpi_ppn))
+        spare_node = 1;
+    MPI_Comm_split(MPI_COMM_WORLD, spare_node, 0, &scr_comm);
+
+    // Checkpoint myself's data
+    char fname[256];
+    if(!spare_node) {
+        sprintf(fname, "%s.%d.self", FILENAME, global_comm_rank);
+        haccio_data_t self_data;
+        haccio_init_data(&self_data, num_particles);
+        haccio_checkpoint(fname, &self_data, scr_comm);
+        haccio_free_data(&self_data);
+        t1 = write_tstart;
+        t2 = write_tend;
+    }
+
+    MPI_Barrier(MPI_COMM_WORLD);
+
+    // Recv partner's data
+    //char* data = malloc(sizeof(char)*access_size*num_writes);
+    //MPI_Sendrecv();
+    //free(data);
+
+    // Checkpoint partner's data
+    if(!spare_node) {
+        sprintf(fname, "%s.%d.partner", FILENAME, global_comm_rank);
+        haccio_data_t partner_data;
+        haccio_init_data(&partner_data, num_particles);
+        haccio_checkpoint(fname, &partner_data, scr_comm);
+        haccio_free_data(&partner_data);
+        t3 = write_tstart;
+        t4 = write_tend;
+        write_tstart = t3 - (t2 - t1);
+    }
+    MPI_Comm_free(&scr_comm);
+    MPI_Barrier(MPI_COMM_WORLD);
+}
+
+void read_haccio_scr(int num_particles) {
+    // Assume node 1 failed
+    int failed_or_spare = 0;
+    if((global_comm_rank >= mpi_ppn) && (global_comm_rank < 2*mpi_ppn))
+        failed_or_spare = 1;
+    if(global_comm_rank >= (global_comm_size-mpi_ppn))
+        failed_or_spare = 1;
+    
+    MPI_Comm scr_comm;
+    MPI_Comm_split(MPI_COMM_WORLD, failed_or_spare, 0, &scr_comm);
+
+    // Recover
+    if(!failed_or_spare) {
+        char fname[256];
+        sprintf(fname, "%s.%d.partner", FILENAME, global_comm_rank);
+        printf("read %s, %d %d\n", fname, global_comm_rank, mpi_ppn);
+
+        haccio_data_t data;
+        haccio_init_data(&data, num_particles);
+        haccio_restart(fname, &data, scr_comm);
+        haccio_free_data(&data);
+    }
+
+    // Node n sends data to node n+1
+    //MPI_Sendrecv();
+    MPI_Comm_free(&scr_comm);
+    MPI_Barrier(MPI_COMM_WORLD);
+}
+
+
+
+void read_contiguous_core(const char* filename, size_t start_offset, MPI_Comm comm) {
+    tfs_file_t* tf = iobench_file_open(filename);
 
     char* data = malloc(sizeof(char)*access_size);
 
-    size_t offset = io_comm_rank*access_size*num_reads;
+    size_t offset = start_offset;
     iobench_file_seek(tf, offset, SEEK_SET);
 
     size_t* offsets = malloc(sizeof(size_t) * num_reads);
@@ -199,20 +399,33 @@ void read_contiguous() {
         sizes[i]   = access_size;
     }
 
-    MPI_Barrier(io_comm);
+    MPI_Barrier(comm);
     read_tstart = MPI_Wtime();
     iobench_file_prologue(tf, offsets, sizes, num_reads);
     for(int i = 0; i < num_reads; i++) {
         iobench_file_read(tf, data, access_size);
     }
     iobench_file_epilogue(tf);
-    MPI_Barrier(io_comm);
+    MPI_Barrier(comm);
     read_tend = MPI_Wtime();
 
     free(offsets);
     free(sizes);
     free(data);
     iobench_file_close(tf);
+}
+
+void read_contiguous() {
+    size_t start_offset = io_comm_rank*access_size*num_reads;
+    read_contiguous_core(FILENAME, start_offset, io_comm);
+}
+
+
+void read_fpp() {
+    char fname[256];
+    sprintf(fname, "%s.%d", FILENAME, global_comm_rank);
+    size_t start_offset = 0;
+    read_contiguous_core(fname, start_offset, io_comm);
 }
 
 void read_strided() {
@@ -257,6 +470,7 @@ void shuffle(unsigned int seed, int *array, size_t n)
         }
     }
 }
+
 /**
  * Simulate ML I/O pattern
  * Deep neural networks are almost always trained with variants of
@@ -386,9 +600,23 @@ int main(int argc, char* argv[]) {
     MPI_Bcast(&num_readers, 1, MPI_INT,  0, MPI_COMM_WORLD);
     MPI_Bcast(&access_size,  1, MPI_LONG, 0, MPI_COMM_WORLD);
 
+    // Calculate number of nodes and processes per node
+    int tmp_rank, is_rank0;
+    MPI_Comm shmcomm;
+    MPI_Comm_split_type(MPI_COMM_WORLD, MPI_COMM_TYPE_SHARED, 0, MPI_INFO_NULL, &shmcomm);
+    MPI_Comm_rank(shmcomm, &tmp_rank);
+    is_rank0 = (tmp_rank == 0) ? 1 : 0;
+    MPI_Allreduce(&is_rank0, &mpi_num_nodes, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
+    MPI_Comm_free(&shmcomm);
+    mpi_ppn = global_comm_size / mpi_num_nodes;
+    if(global_comm_rank == 0)
+        printf("\nnum nodes: %d, ppn: %d\n", mpi_num_nodes, mpi_ppn);
+
     // Split to two communicators, writer group and reader group
     MPI_Comm_split(MPI_COMM_WORLD, global_comm_rank<num_writers, 0, &io_comm);
     MPI_Comm_rank(io_comm, &io_comm_rank);
+
+
 
     // We allow only two scenarios:
     // 1. num_writers + num_readers = global_comm_size
@@ -404,6 +632,8 @@ int main(int argc, char* argv[]) {
             write_strided();
         if(strcmp(write_pattern, IO_PATTERN_FPP) == 0)
             write_fpp();
+        if(strcmp(write_pattern, IO_PATTERN_SCR) == 0)
+            write_haccio_scr(num_writes);
     }
 
     // Read phase
@@ -415,6 +645,8 @@ int main(int argc, char* argv[]) {
             read_strided();
         if(strcmp(read_pattern, IO_PATTERN_RANDOM) == 0)
             read_random_ml();
+        if(strcmp(read_pattern, IO_PATTERN_SCR) == 0)
+            read_haccio_scr(num_writes);
     }
 
     MPI_Barrier(MPI_COMM_WORLD);
@@ -433,18 +665,29 @@ int main(int argc, char* argv[]) {
 
 
     if(global_comm_rank == 0) {
-        write_iops = num_writes * num_writers / (write_tend-write_tstart);
-        write_bandwidth = access_size * num_writes / (double)MB * num_writers / (write_tend-write_tstart);
 
-        read_iops = num_reads * num_readers / (read_tend-read_tstart);
-        read_bandwidth  = access_size * num_reads / (double)MB * num_readers / (read_tend-read_tstart);
+        if(strcmp(write_pattern, IO_PATTERN_SCR) == 0) {
+            int num_particles = num_writes;
+            write_bandwidth = 2*num_particles*(mpi_num_nodes-1)*mpi_ppn/(double)MB*38/(write_tend-write_tstart);
+            read_bandwidth  = 1*num_particles*(mpi_num_nodes-2)*mpi_ppn/(double)MB*38/(read_tend-read_tstart);
+            printf("SCR Aggregated write time: %.4f, %.3f \tMB/s\t\t read time: %.4f, %.3f \tMB/s\n", (write_tend-write_tstart), write_bandwidth, (read_tend-read_tstart), read_bandwidth);
 
-        printf("Write/Read time: %3.3f/%3.3f, Write IOPS: %8d, Bandwidth(MB/s): %.3f\t\tRead IOPS: %8d, Bandwidth(MB/s): %.3f\n",
-                (write_tend-write_tstart), (read_tend-read_tstart), write_iops, write_bandwidth, read_iops, read_bandwidth);
+        } else {
+
+            write_iops = num_writes * num_writers / (write_tend-write_tstart);
+            write_bandwidth = access_size * num_writes / (double)MB * num_writers / (write_tend-write_tstart);
+
+            read_iops = num_reads * num_readers / (read_tend-read_tstart);
+            read_bandwidth  = access_size * num_reads / (double)MB * num_readers / (read_tend-read_tstart);
+
+            printf("Write/Read time: %3.3f/%3.3f, Write IOPS: %8d, Bandwidth(MB/s): %.3f\t\tRead IOPS: %8d, Bandwidth(MB/s): %.3f\n",
+                    (write_tend-write_tstart), (read_tend-read_tstart), write_iops, write_bandwidth, read_iops, read_bandwidth);
+        }
         fflush(stdout);
     }
 
     tfs_finalize();
+    MPI_Comm_free(&io_comm);
     MPI_Finalize();
     return 0;
 }
