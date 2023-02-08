@@ -117,7 +117,7 @@ tfs_file_t* tfs_open(const char* pathname) {
         strcpy(tf->filename, shortname);
 
         #ifndef TANGRAMFS_PRELOAD
-        tf->fd = TANGRAM_REAL_CALL(open)(pathname, O_CREAT|O_RDWR, S_IRWXU);
+        tf->fd = TANGRAM_REAL_CALL(open)(pathname, O_CREAT|O_RDWR|O_DIRECT, S_IRWXU);
         // TANGRAMFS_PRELOAD=ON, the file will be opened by the real POSIX call
         // See posix-wrapper.c
         #endif
@@ -329,6 +329,7 @@ ssize_t read_local_or_pfs(tfs_file_t* tf, void* buf, size_t req_start, size_t re
         size_t this_pos = ext_pos + (req_start - ext_start);
         size_t this_length = (next->end < req_end) ? (next->end-req_start+1) : (req_end-req_start+1);
         TANGRAM_REAL_CALL(pread)(tf->local_fd, buf+off, this_length, this_pos);
+        //printf("%d read from local file %d: %lu %lu\n", g_tfs_info.mpi_rank, tf->local_fd, this_pos, this_length);
 
         off += this_length;
         expected_start = next->end + 1;
