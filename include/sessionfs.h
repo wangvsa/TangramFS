@@ -6,7 +6,7 @@
 
 /** Implement session consistency using TangramFS primitives **/
 
-tfs_file_t* sessionfs_open(const char* pathname);
+tfs_file_t* sessionfs_open(const char* pathname, int flag);
 int     sessionfs_close(tfs_file_t* tf);
 ssize_t sessionfs_write(tfs_file_t* tf, const void* buf, size_t size);
 ssize_t sessionfs_read(tfs_file_t* tf, void* buf, size_t size);

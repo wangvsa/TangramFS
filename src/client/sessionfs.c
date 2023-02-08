@@ -12,6 +12,7 @@
 #include "tangramfs-utils.h"
 
 typedef struct session_book {
+    int flag;
     int num;
     size_t* offsets;
     size_t* sizes;
@@ -20,11 +21,12 @@ typedef struct session_book {
 
 static session_book_t g_session_book;
 
-tfs_file_t* sessionfs_open(const char* pathname) {
+tfs_file_t* sessionfs_open(const char* pathname, int flag) {
     g_session_book.num = 0;
     g_session_book.offsets = NULL;
     g_session_book.sizes  = NULL;
     g_session_book.owners = NULL;
+    g_session_book.flag = flag;
     return tfs_open(pathname);
 }
 
@@ -102,7 +104,9 @@ int sessionfs_session_open(tfs_file_t* tf, size_t* offsets, size_t* sizes, int n
         //printf("sessionfs_session_open() %d/%d, [%lu,%lu]\n", i, num, offsets[i]/1024, sizes[i]/1024);
     }
 
-    tfs_query_many(tf, offsets, sizes, num, g_session_book.owners);
+    // Creat (or open an empty) file does not need to perform queries
+    if(!(g_session_book.flag & O_CREAT) )
+        tfs_query_many(tf, offsets, sizes, num, g_session_book.owners);
     return 0;
 }
 
