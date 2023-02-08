@@ -17,6 +17,7 @@
 #include <unistd.h>
 #include <time.h>
 #include <mpi.h>
+#include <fcntl.h>
 #include "commitfs.h"
 #include "sessionfs.h"
 
@@ -59,10 +60,10 @@ static double read_tstart, read_tend;
 static int    write_iops, read_iops;
 static double write_bandwidth, read_bandwidth;
 
-tfs_file_t* iobench_file_open(const char* filename) {
+tfs_file_t* iobench_file_open(const char* filename, int flag) {
     tfs_file_t* tf;
     if(strcmp(consistency_model, CONSISTENCY_MODEL_SESSION) == 0)
-        tf = sessionfs_open(filename);
+        tf = sessionfs_open(filename, flag);
     else if(strcmp(consistency_model, CONSISTENCY_MODEL_COMMIT) == 0)
         tf =  commitfs_open(filename);
     return tf;
@@ -103,7 +104,7 @@ void iobench_file_epilogue(tfs_file_t* tf) {
 }
 
 void write_contiguous_core(const char* filename, size_t start_offset, MPI_Comm comm) {
-    tfs_file_t* tf = iobench_file_open(filename);
+    tfs_file_t* tf = iobench_file_open(filename, O_CREAT|O_WRONLY);
 
     char* data = malloc(sizeof(char)*access_size);
     size_t offset = start_offset;
@@ -150,7 +151,7 @@ void write_fpp() {
 }
 
 void write_strided() {
-    tfs_file_t* tf = iobench_file_open(FILENAME);
+    tfs_file_t* tf = iobench_file_open(FILENAME, O_CREAT|O_WRONLY);
 
     size_t offset;
     char* data = malloc(sizeof(char)*access_size);
@@ -228,7 +229,7 @@ void haccio_free_data(haccio_data_t* data) {
 }
 
 void haccio_checkpoint(const char* filename, haccio_data_t* data, MPI_Comm comm) {
-    tfs_file_t* tf = iobench_file_open(filename);
+    tfs_file_t* tf = iobench_file_open(filename, O_CREAT|O_WRONLY);
 
     // 9 variables in total
     const int num_variables = 9;
@@ -269,7 +270,7 @@ void haccio_checkpoint(const char* filename, haccio_data_t* data, MPI_Comm comm)
 }
 
 void haccio_restart(const char* filename, haccio_data_t* data, MPI_Comm comm) {
-    tfs_file_t* tf = iobench_file_open(filename);
+    tfs_file_t* tf = iobench_file_open(filename, O_RDONLY);
 
     // 9 variables in total
     const int num_variables = 9;
@@ -347,7 +348,7 @@ void write_haccio_scr(int num_particles) {
         haccio_free_data(&partner_data);
         t3 = write_tstart;
         t4 = write_tend;
-        write_tstart = t3 - (t2 - t1);
+        //write_tstart = t3 - (t2 - t1);
     }
     MPI_Comm_free(&scr_comm);
     MPI_Barrier(MPI_COMM_WORLD);
@@ -368,7 +369,6 @@ void read_haccio_scr(int num_particles) {
     if(!failed_or_spare) {
         char fname[256];
         sprintf(fname, "%s.%d.partner", FILENAME, global_comm_rank);
-        printf("read %s, %d %d\n", fname, global_comm_rank, mpi_ppn);
 
         haccio_data_t data;
         haccio_init_data(&data, num_particles);
@@ -385,7 +385,7 @@ void read_haccio_scr(int num_particles) {
 
 
 void read_contiguous_core(const char* filename, size_t start_offset, MPI_Comm comm) {
-    tfs_file_t* tf = iobench_file_open(filename);
+    tfs_file_t* tf = iobench_file_open(filename, O_RDONLY);
 
     char* data = malloc(sizeof(char)*access_size);
 
@@ -429,7 +429,7 @@ void read_fpp() {
 }
 
 void read_strided() {
-    tfs_file_t* tf = iobench_file_open(FILENAME);
+    tfs_file_t* tf = iobench_file_open(FILENAME, O_RDONLY);
 
     char* data = malloc(sizeof(char)*access_size);
 
@@ -499,14 +499,15 @@ void read_random_ml() {
     time_t t;
     unsigned int seed;
     if(global_comm_rank == 0) {
-        seed = time(&t);
+        //seed = time(&t);
+        seed = (unsigned int) mpi_num_nodes;
     }
     MPI_Bcast(&seed, sizeof(seed), MPI_BYTE, 0, MPI_COMM_WORLD);
 
     // Use the received seed to shuffle indices
     shuffle(seed, sample_indices, total_samples);
 
-    tfs_file_t* tf = iobench_file_open(FILENAME);
+    tfs_file_t* tf = iobench_file_open(FILENAME, O_RDONLY);
 
     char* data = malloc(sizeof(char)*access_size);
 
@@ -668,8 +669,8 @@ int main(int argc, char* argv[]) {
 
         if(strcmp(write_pattern, IO_PATTERN_SCR) == 0) {
             int num_particles = num_writes;
-            write_bandwidth = 2*num_particles*(mpi_num_nodes-1)*mpi_ppn/(double)MB*38/(write_tend-write_tstart);
-            read_bandwidth  = 1*num_particles*(mpi_num_nodes-2)*mpi_ppn/(double)MB*38/(read_tend-read_tstart);
+            write_bandwidth = 1*num_particles*(mpi_num_nodes-1)/(double)MB*mpi_ppn*38/(write_tend-write_tstart);
+            read_bandwidth  = 1*num_particles*(mpi_num_nodes-2)/(double)MB*mpi_ppn*38/(read_tend-read_tstart);
             printf("SCR Aggregated write time: %.4f, %.3f \tMB/s\t\t read time: %.4f, %.3f \tMB/s\n", (write_tend-write_tstart), write_bandwidth, (read_tend-read_tstart), read_bandwidth);
 
         } else {
