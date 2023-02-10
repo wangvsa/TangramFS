@@ -92,7 +92,7 @@ void tfs_finalize() {
 
 tfs_file_t* tfs_open(const char* pathname) {
 
-    char abs_filename[PATH_MAX+64];
+    char bb_filename[PATH_MAX+64];
 
     int i;
     for(i = strlen(pathname); i >= 0; i--) {
@@ -101,8 +101,7 @@ tfs_file_t* tfs_open(const char* pathname) {
     }
     const char* shortname = &(pathname[i+1]);
 
-
-    sprintf(abs_filename, "%s/tfs_tmp.%s.%d", g_tfs_info.tfs_dir, shortname, g_tfs_info.mpi_rank);
+    sprintf(bb_filename, "%s/tfs_tmp.%s.%d", g_tfs_info.tfs_dir, shortname, g_tfs_info.mpi_rank);
 
     tfs_file_t *tf = NULL;
     HASH_FIND_STR(g_tfs_files, shortname, tf);
@@ -117,7 +116,7 @@ tfs_file_t* tfs_open(const char* pathname) {
         strcpy(tf->filename, shortname);
 
         #ifndef TANGRAMFS_PRELOAD
-        tf->fd = TANGRAM_REAL_CALL(open)(pathname, O_CREAT|O_RDWR|O_DIRECT, S_IRWXU);
+        tf->fd = TANGRAM_REAL_CALL(open)(pathname, O_CREAT|O_RDWR|O_SYNC, S_IRWXU);
         // TANGRAMFS_PRELOAD=ON, the file will be opened by the real POSIX call
         // See posix-wrapper.c
         #endif
@@ -125,13 +124,13 @@ tfs_file_t* tfs_open(const char* pathname) {
         seg_tree_init(&tf->seg_tree);
 
                                 // TODO remove() call is not intercepted
-        remove(abs_filename);   // delete the local file first
+        remove(bb_filename);   // delete the local file first
         HASH_ADD_STR(g_tfs_files, filename, tf);
     }
 
+    // We didn't use O_DIRECT as it requires buffer to be blok aligned
     // open node-local buffer file
-    tf->local_fd = TANGRAM_REAL_CALL(open)(abs_filename, O_CREAT|O_RDWR, S_IRWXU);
-
+    tf->local_fd = TANGRAM_REAL_CALL(open)(bb_filename, O_CREAT|O_RDWR|O_SYNC, S_IRWXU);
 
     return tf;
 }
@@ -195,7 +194,9 @@ void tfs_flush(tfs_file_t *tf) {
 ssize_t tfs_write(tfs_file_t* tf, const void* buf, size_t size) {
     size_t local_offset = TANGRAM_REAL_CALL(lseek)(tf->local_fd, 0, SEEK_END);
     ssize_t res = TANGRAM_REAL_CALL(pwrite)(tf->local_fd, buf, size, local_offset);
-    TANGRAM_REAL_CALL(fsync)(tf->local_fd);
+    tangram_assert(res == size);
+    // BB file opened with O_SYNC, no need to use fsync()
+    //TANGRAM_REAL_CALL(fsync)(tf->local_fd);
 
     int rc = seg_tree_add(&tf->seg_tree, tf->offset, tf->offset+size-1, local_offset, tangram_rpc_client_inter_addr(), false);
     tangram_assert(rc == 0);
