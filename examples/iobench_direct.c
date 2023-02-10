@@ -490,7 +490,8 @@ void read_dl() {
     tangram_assert(num_writes  == num_reads);
     tangram_assert(num_writers == num_readers);
     // Make sure we use all processes to read
-    tangram_assert(num_readers == global_comm_rank);
+    // because we use MPI_Bcast later on MPI_COMM_WORLD
+    tangram_assert(num_readers == global_comm_size);
 
     // Each worker (MPI Rank) reads num_reads samples
     int total_samples = num_reads * num_readers;
@@ -525,7 +526,6 @@ void read_dl() {
     read_tstart = MPI_Wtime();
     iobench_file_prologue(tf, offsets, sizes, num_reads);
     for(int i = 0; i < num_reads; i++) {
-        printf("read %lu\n", offsets[i]);
         iobench_file_seek(tf, offsets[i], SEEK_SET);
         iobench_file_read(tf, data, access_size);
     }
