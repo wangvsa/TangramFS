@@ -24,7 +24,7 @@
 #define IO_PATTERN_STRIDED    "strided"
 #define IO_PATTERN_CONTIGUOUS "contiguous"
 #define IO_PATTERN_FPP        "fpp"
-#define IO_PATTERN_RANDOM     "random"
+#define IO_PATTERN_DL         "dl"
 #define IO_PATTERN_SCR        "scr"
 
 #define CONSISTENCY_MODEL_SESSION   "session"
@@ -144,7 +144,7 @@ void write_contiguous() {
  */
 void write_fpp() {
     char fname[256];
-    sprintf(fname, "%s.%d", FILENAME, global_comm_rank);
+    sprintf(fname, "%s.%d", FILENAME, io_comm_rank);
 
     size_t start_offset = 0;
     write_contiguous_core(fname, start_offset, io_comm);
@@ -422,8 +422,9 @@ void read_contiguous() {
 
 
 void read_fpp() {
+    tangram_assert(num_writers == num_readers);
     char fname[256];
-    sprintf(fname, "%s.%d", FILENAME, global_comm_rank);
+    sprintf(fname, "%s.%d", FILENAME, io_comm_rank);
     size_t start_offset = 0;
     read_contiguous_core(fname, start_offset, io_comm);
 }
@@ -484,10 +485,12 @@ void shuffle(unsigned int seed, int *array, size_t n)
  * We assume a data-parallel regime, where a mini-batch
  * is partitioned among workers. (Worker === MPI Rank === GPU)
  */
-void read_random_ml() {
+void read_dl() {
 
     tangram_assert(num_writes  == num_reads);
     tangram_assert(num_writers == num_readers);
+    // Make sure we use all processes to read
+    tangram_assert(num_readers == global_comm_rank);
 
     // Each worker (MPI Rank) reads num_reads samples
     int total_samples = num_reads * num_readers;
@@ -522,6 +525,7 @@ void read_random_ml() {
     read_tstart = MPI_Wtime();
     iobench_file_prologue(tf, offsets, sizes, num_reads);
     for(int i = 0; i < num_reads; i++) {
+        printf("read %lu\n", offsets[i]);
         iobench_file_seek(tf, offsets[i], SEEK_SET);
         iobench_file_read(tf, data, access_size);
     }
@@ -644,8 +648,10 @@ int main(int argc, char* argv[]) {
             read_contiguous();
         if(strcmp(read_pattern, IO_PATTERN_STRIDED) == 0)
             read_strided();
-        if(strcmp(read_pattern, IO_PATTERN_RANDOM) == 0)
-            read_random_ml();
+        if(strcmp(read_pattern, IO_PATTERN_FPP) == 0)
+            read_fpp();
+        if(strcmp(read_pattern, IO_PATTERN_DL) == 0)
+            read_dl();
         if(strcmp(read_pattern, IO_PATTERN_SCR) == 0)
             read_haccio_scr(num_writes);
     }
