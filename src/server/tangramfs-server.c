@@ -96,7 +96,9 @@ void* server_rpc_handler(int8_t id, tangram_uct_addr_t* client, void* data, uint
         //tangram_debug("[tangramfs server] acquire lock, filename: %s, ask [%ld-%ld] start\n",
         //        in->filename, in->intervals[0].offset/LOCK_BLOCK_SIZE, (in->intervals[0].offset+in->intervals[0].count-1)/LOCK_BLOCK_SIZE);
         lock_acquire_result_t* res = tangram_lockmgr_server_acquire_lock(&g_lt, client, in->filename, in->intervals[0].offset, in->intervals[0].count, in->intervals[0].type, g_tfs_info.lock_algo);
-        tangram_assert( tangram_uct_addr_compare(res->token->owner, client) == 0);
+        if(res->token) {
+            tangram_assert( tangram_uct_addr_compare(res->token->owner, client) == 0);
+         }
 
         if(res->result == LOCK_ACQUIRE_SUCCESS) {
             tangram_debug("[tangramfs server] acquire lock, filename: %s, ask [%ld-%ld], grant [%d-%d]\n",
